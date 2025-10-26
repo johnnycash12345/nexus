@@ -178,8 +178,9 @@ const App: React.FC = () => {
       const visionContext = detectedObjects.length > 0 ? `Contexto Visual: Eu vejo os seguintes objetos por perto: ${detectedObjects.join(', ')}.` : '';
       const response = await getGeminiResponse(prompt, messages, visionContext, userProfile);
       let finalResponseText = response.text;
+      const hasFunctionCalls = response.functionCalls && response.functionCalls.length > 0;
 
-      if (response.functionCalls && response.functionCalls.length > 0) {
+      if (hasFunctionCalls) {
         setStatus(AssistantStatus.SUCCESS);
         const callResults = response.functionCalls.map(fc => handleFunctionCall(fc, prompt));
         const actionResults = callResults.filter(r => r.isActionResult);
@@ -187,9 +188,12 @@ const App: React.FC = () => {
             finalResponseText = actionResults.map(r => r.text).join('\n');
         }
       }
+      
+      if (!finalResponseText && !hasFunctionCalls) {
+        finalResponseText = "Hmm, não tenho certeza de como responder a isso. Podemos falar sobre outra coisa?";
+      }
 
-      const hasFunctionCall = response.functionCalls && response.functionCalls.length > 0;
-      const delay = hasFunctionCall ? 1200 : 0;
+      const delay = hasFunctionCalls ? 1200 : 0;
 
       if (finalResponseText) {
         setTimeout(() => {
@@ -280,7 +284,7 @@ const App: React.FC = () => {
 
       {isVisionActive && (
           <div className="absolute top-4 left-4 z-30 p-2 bg-gray-700/50 rounded-full text-cyan-300 animate-pulse" aria-label="Modo Visão ativo">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
+              <svg xmlns="http://www.w.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
           </div>
       )}
       

@@ -130,9 +130,19 @@ const enrichPromptWithContext = (prompt: string, visionContext: string, userProf
 export const getGeminiResponse = async (prompt: string, history: ChatMessage[], visionContext: string, userProfile: UserProfile | null): Promise<{ text: string, functionCalls?: {name: string, args: any}[]}> => {
   const enrichedPrompt = enrichPromptWithContext(prompt, visionContext, userProfile);
 
+  const formattedHistory = history
+    .filter(msg => msg.type === 'message' || !msg.type) // Only include actual conversation messages
+    .map(msg => ({
+      role: msg.role,
+      parts: [{ text: msg.text }],
+    }));
+
   const response: GenerateContentResponse = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: enrichedPrompt,
+    contents: [
+      ...formattedHistory,
+      { role: 'user', parts: [{ text: enrichedPrompt }] }
+    ],
     config: {
       systemInstruction: persona,
       tools: [{ functionDeclarations: tools }],
