@@ -1,33 +1,59 @@
-import { Concept, DiaryEntry, AppSettings } from '../types';
+import { Concept, DiaryEntry, AppSettings, UserProfile } from '../types';
 
 const ACTIONS_KEY = 'nexus_actions';
 const CONCEPTS_KEY = 'nexus_concepts';
 const DIARY_KEY = 'nexus_diary';
 const SETTINGS_KEY = 'nexus_settings';
+const USER_PROFILE_KEY = 'nexus_user_profile';
 const MAX_ACTIONS = 20;
+
+// --- User Profile Management ---
+export const getUserProfile = (): UserProfile | null => {
+    try {
+        const stored = localStorage.getItem(USER_PROFILE_KEY);
+        return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+        return null;
+    }
+};
+
+export const saveUserProfile = (profile: UserProfile): void => {
+    localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+};
+
 
 // --- Settings Management ---
 export const getSettings = (): AppSettings => {
+    const defaultSettings: AppSettings = {
+        voice: { voiceURI: null, rate: 1, pitch: 1 },
+        behavior: { enableDiary: true, enableCuriosity: true, enableVision: false },
+        profile: getUserProfile(),
+    };
     try {
         const stored = localStorage.getItem(SETTINGS_KEY);
-        const defaultSettings: AppSettings = {
-            voice: { voiceURI: null, rate: 1, pitch: 1 },
-            behavior: { enableDiary: true, enableCuriosity: true },
-        };
-        return stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Merge stored settings with defaults to ensure all keys are present
+            return {
+                ...defaultSettings,
+                ...parsed,
+                behavior: { ...defaultSettings.behavior, ...parsed.behavior },
+                profile: getUserProfile(), // Always get the latest profile
+            };
+        }
+        return defaultSettings;
     } catch (e) {
-        return {
-            voice: { voiceURI: null, rate: 1, pitch: 1 },
-            behavior: { enableDiary: true, enableCuriosity: true },
-        };
+        return defaultSettings;
     }
 };
 
 export const saveSettings = (settings: AppSettings): void => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    // Don't save profile in the settings object itself
+    const { profile, ...settingsToSave } = settings;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToSave));
 };
 
-// --- Action Logging ---
+// --- Action Logging (deprecated but kept for potential future use) ---
 export const logAction = (name: string, args: any): void => {
   try {
     const stored = localStorage.getItem(ACTIONS_KEY);
@@ -59,7 +85,7 @@ export const getAllConcepts = (): Concept[] => {
 
 export const deleteConcept = (name: string): void => {
     const concepts = getConcepts();
-    delete concepts[name];
+    delete concepts[name.toLowerCase()];
     saveConcepts(concepts);
 };
 
@@ -69,7 +95,8 @@ export const learnConcept = (
   evidence: string
 ): void => {
   const concepts = getConcepts();
-  const existing = concepts[name] || {
+  const key = name.toLowerCase();
+  const existing = concepts[key] || {
     name,
     confidence: 0.3,
     related: [],
@@ -79,19 +106,21 @@ export const learnConcept = (
 
   const updatedConcept: Concept = {
     ...existing,
+    name: name, // Preserve original casing for display
     definition: metadata.definition || existing.definition,
     confidence: Math.min(1.0, existing.confidence + 0.15),
-    related: [...new Set([...existing.related, ...(metadata.related || [])])], // Avoid duplicates
-    evidence: [evidence, ...existing.evidence].slice(0, 5), // Prepend new evidence
+    related: [...new Set([...existing.related, ...(metadata.related || [])])],
+    evidence: [evidence, ...existing.evidence].slice(0, 5),
     updatedAt: Date.now(),
   };
-  concepts[name] = updatedConcept;
+  concepts[key] = updatedConcept;
   saveConcepts(concepts);
 };
 
 export const strengthenConcept = (name: string, evidence: string): void => {
     const concepts = getConcepts();
-    const concept = concepts[name];
+    const key = name.toLowerCase();
+    const concept = concepts[key];
     if (concept) {
         concept.confidence = Math.min(1.0, concept.confidence + 0.1);
         concept.evidence = [evidence, ...concept.evidence].slice(0, 5);
@@ -129,9 +158,15 @@ export const saveDiaryEntry = (entry: string): void => {
 };
 
 // --- Context for Prompt ---
-export const getContextForPrompt = (): string => {
+export const getContextForPrompt = (userProfile: UserProfile | null): string => {
   const currentTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   let context = `Contexto Atual: São ${currentTime}.`;
+
+  if (userProfile?.name) {
+      context += `\nMeu usuário se chama ${userProfile.name}.`;
+  } else {
+      context += `\nEu ainda não sei o nome do meu usuário.`;
+  }
 
   const concepts = getConcepts();
   const importantConcepts = Object.values(concepts).sort((a,b) => b.confidence - a.confidence).slice(0, 3);

@@ -29,6 +29,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
     
     setConcepts(getAllConcepts());
   }, []);
+  
+  const handleTabChange = (tab: Tab) => {
+    if (tab === 'memory') {
+      setConcepts(getAllConcepts());
+    }
+    setActiveTab(tab);
+  }
 
   const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onSettingsChange({
@@ -129,6 +136,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
                         </div>
                         <input type="checkbox" name="enableCuriosity" checked={settings.behavior.enableCuriosity} onChange={handleBehaviorChange} className="toggle-checkbox" />
                     </label>
+                     <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
+                        <div>
+                            <p className="font-medium text-white">Modo Visão</p>
+                            <p className="text-sm text-gray-400">Permitir que o Nexus "veja" o ambiente.</p>
+                        </div>
+                        <input type="checkbox" name="enableVision" checked={settings.behavior.enableVision} onChange={handleBehaviorChange} className="toggle-checkbox" />
+                    </label>
                 </div>
                  <style>{`
                     .toggle-checkbox {
@@ -175,9 +189,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
         </header>
         
         <nav className="flex-shrink-0 flex border-b border-gray-700">
-          <button onClick={() => setActiveTab('voice')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'voice' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Voz</button>
-          <button onClick={() => setActiveTab('memory')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'memory' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Memória</button>
-          <button onClick={() => setActiveTab('behavior')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'behavior' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Comportamento</button>
+          <button onClick={() => handleTabChange('voice')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'voice' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Voz</button>
+          <button onClick={() => handleTabChange('memory')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'memory' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Memória</button>
+          <button onClick={() => handleTabChange('behavior')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'behavior' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Comportamento</button>
         </nav>
 
         <main className="p-4 flex-grow">

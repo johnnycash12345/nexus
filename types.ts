@@ -31,6 +31,10 @@ export interface DiaryEntry {
     createdAt: number;
 }
 
+export interface UserProfile {
+    name: string;
+}
+
 export interface VoiceSettings {
     voiceURI: string | null;
     rate: number;
@@ -40,9 +44,11 @@ export interface VoiceSettings {
 export interface BehaviorSettings {
     enableDiary: boolean;
     enableCuriosity: boolean;
+    enableVision: boolean;
 }
 
 export interface AppSettings {
     voice: VoiceSettings;
     behavior: BehaviorSettings;
+    profile: UserProfile | null;
 }

@@ -1,29 +1,30 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AssistantStatus, ChatMessage, AppSettings } from './types';
+import { AssistantStatus, ChatMessage, AppSettings, UserProfile } from './types';
 import { useSpeech } from './hooks/useSpeech';
 import { getGeminiResponse, generateCuriosityQuestion, generateDiaryEntry } from './services/geminiService';
-import { logAction, learnConcept, strengthenConcept, saveDiaryEntry, getDiary, getSettings, saveSettings } from './services/memoryService';
+import { learnConcept, strengthenConcept, saveDiaryEntry, getDiary, getSettings, saveSettings, getUserProfile, saveUserProfile } from './services/memoryService';
+import { visionService } from './services/visionService';
 import { Avatar } from './components/Avatar';
 import { Message } from './components/Message';
 import { SettingsPanel } from './components/SettingsPanel';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AssistantStatus>(AssistantStatus.IDLE);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'model',
-      text: "Olá! Eu sou o Nexus. O que vamos descobrir hoje?",
-      type: 'message',
-    }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [expectingAnswerTo, setExpectingAnswerTo] = useState<string | null>(null);
   const [isChatVisible, setIsChatVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getSettings());
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(getUserProfile());
+  const [isAwaitingName, setIsAwaitingName] = useState(!getUserProfile()?.name);
+  const [detectedObjects, setDetectedObjects] = useState<string[]>([]);
+  const [isVisionActive, setIsVisionActive] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const isChatVisibleRef = useRef(isChatVisible);
 
   useEffect(() => {
@@ -34,6 +35,63 @@ const App: React.FC = () => {
     (text: string) => handleUserInput(text),
     settings.voice
   );
+  
+  // Onboarding flow
+  useEffect(() => {
+    if (isAwaitingName) {
+      const welcomeMessage: ChatMessage = { role: 'model', text: 'Olá! Eu sou o Nexus. Para começarmos, como posso te chamar?', type: 'message' };
+      setMessages([welcomeMessage]);
+      setTimeout(() => speak(welcomeMessage.text), 500);
+    } else if (messages.length === 0) {
+      setMessages([{ role: 'model', text: `Olá, ${userProfile?.name}! O que vamos descobrir hoje?`, type: 'message' }]);
+    }
+  }, [isAwaitingName]);
+
+
+  // Vision Mode Effect
+  useEffect(() => {
+    const startVision = async () => {
+      if (settings.behavior.enableVision && videoRef.current) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          videoRef.current.srcObject = stream;
+          streamRef.current = stream;
+          await visionService.init();
+          visionService.start(videoRef.current, (labels) => {
+            setDetectedObjects(labels);
+          });
+          setIsVisionActive(true);
+        } catch (err) {
+          console.error("Error accessing camera for Vision Mode:", err);
+          // Revert setting if permission is denied
+          onSettingsChange({ ...settings, behavior: { ...settings.behavior, enableVision: false } });
+        }
+      }
+    };
+
+    const stopVision = () => {
+      visionService.stop();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setIsVisionActive(false);
+      setDetectedObjects([]);
+    };
+
+    if (settings.behavior.enableVision) {
+      startVision();
+    } else {
+      stopVision();
+    }
+
+    return () => {
+      stopVision();
+    };
+  }, [settings.behavior.enableVision]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -51,6 +109,8 @@ const App: React.FC = () => {
   // Proactive behaviors (diary, curiosity)
   useEffect(() => {
     const runProactiveChecks = async () => {
+      if(isAwaitingName) return;
+
       // Daily Diary
       if (settings.behavior.enableDiary) {
         const diary = getDiary();
@@ -81,17 +141,27 @@ const App: React.FC = () => {
           }
       }
     };
-    // Run after a short delay on startup
-    const timer = setTimeout(runProactiveChecks, 3000);
+    const timer = setTimeout(runProactiveChecks, 5000);
     return () => clearTimeout(timer);
-  }, [settings.behavior.enableDiary, settings.behavior.enableCuriosity]);
+  }, [settings.behavior.enableDiary, settings.behavior.enableCuriosity, isAwaitingName]);
 
   const handleUserInput = useCallback(async (prompt: string) => {
     if (!prompt.trim() || status === AssistantStatus.THINKING || status === AssistantStatus.SPEAKING) return;
     
     stopListening();
-    
+
     const userMessage: ChatMessage = { role: 'user', text: prompt, type: 'message' };
+
+    if (isAwaitingName) {
+      const profile = { name: prompt };
+      saveUserProfile(profile);
+      setUserProfile(profile);
+      setIsAwaitingName(false);
+      const greeting = `Prazer em te conhecer, ${prompt}! Como posso te ajudar hoje?`;
+      setMessages(prev => [...prev, userMessage, { role: 'model', text: greeting }]);
+      speak(greeting);
+      return;
+    }
     
     if (expectingAnswerTo) {
         strengthenConcept(expectingAnswerTo, prompt);
@@ -105,7 +175,8 @@ const App: React.FC = () => {
     setStatus(AssistantStatus.THINKING);
 
     try {
-      const response = await getGeminiResponse(prompt, messages);
+      const visionContext = detectedObjects.length > 0 ? `Contexto Visual: Eu vejo os seguintes objetos por perto: ${detectedObjects.join(', ')}.` : '';
+      const response = await getGeminiResponse(prompt, messages, visionContext, userProfile);
       let finalResponseText = response.text;
 
       if (response.functionCalls && response.functionCalls.length > 0) {
@@ -147,13 +218,11 @@ const App: React.FC = () => {
           setStatus(AssistantStatus.IDLE);
       }, 1500);
     }
-  }, [messages, speak, status, stopListening, expectingAnswerTo, isChatVisible]);
+  }, [messages, speak, status, stopListening, expectingAnswerTo, isChatVisible, isAwaitingName, detectedObjects, userProfile]);
 
   const handleFunctionCall = (fc: { name: string, args: any }, evidence: string): { text: string, isActionResult: boolean } => {
     let resultText = '';
     let isActionResult = true;
-
-    if (fc.name !== 'learn_concept') logAction(fc.name, fc.args);
 
     switch (fc.name) {
       case 'open_app':
@@ -174,6 +243,13 @@ const App: React.FC = () => {
         learnConcept(fc.args.concept, fc.args.metadata || {}, evidence);
         resultText = `Aprendi sobre: ${fc.args.concept}.`;
         isActionResult = false;
+        break;
+      case 'save_user_profile':
+        const profile = { name: fc.args.name };
+        saveUserProfile(profile);
+        setUserProfile(profile);
+        setIsAwaitingName(false);
+        resultText = `Ok, vou te chamar de ${fc.args.name} de agora em diante.`;
         break;
       default:
         resultText = `Não consegui executar a ação: ${fc.name}`;
@@ -200,6 +276,13 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen w-screen bg-gray-900 flex flex-col overflow-hidden relative">
+      <video ref={videoRef} autoPlay playsInline muted className="absolute w-px h-px opacity-0 -z-10" />
+
+      {isVisionActive && (
+          <div className="absolute top-4 left-4 z-30 p-2 bg-gray-700/50 rounded-full text-cyan-300 animate-pulse" aria-label="Modo Visão ativo">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
+          </div>
+      )}
       
       <button 
         onClick={() => setIsSettingsVisible(true)}
@@ -220,7 +303,7 @@ const App: React.FC = () => {
         <div className="absolute bottom-0 left-0 right-0 p-4 flex flex-col items-center">
           <button 
             onClick={() => { setIsChatVisible(true); setHasUnreadMessages(false); }}
-            className="flex items-center gap-2 mb-4 px-4 py-2 bg-gray-700/90 backdrop-blur-sm rounded-full text-sm text-cyan-300 shadow-lg border border-gray-600/50"
+            className="flex items-center gap-2 mb-4 px-4 py-2 bg-gray-700/90 backdrop-blur-sm rounded-full text-sm text-cyan-300 shadow-lg border border-gray-600/50 relative"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule="evenodd" /></svg>
             Mostrar Chat
