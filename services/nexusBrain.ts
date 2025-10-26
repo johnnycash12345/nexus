@@ -1,8 +1,10 @@
 
+
 import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Mood, Personality } from '../types';
 import { db } from './indexedDBService';
 import { LlmResponseType } from './geminiService';
 import { neuralMemory } from './neuralMemory';
+import { fetchNews } from './newsService';
 
 export type SpeakFn = (text: string, onend?: () => void) => void;
 export type AddMessageFn = (m: ChatMessage) => void;
@@ -377,6 +379,49 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
         return;
       }
     }
+
+    const newsRegex = /\b(notícias|novidades|manchetes)\b/i;
+    if (newsRegex.test(userText) && !imageUrl) {
+        const settings = await getSettings();
+        const newsApiKey = settings.apiKeys?.newsApiKey;
+
+        if (!newsApiKey) {
+            const msg = "Para buscar notícias, preciso que você configure a chave da API da NewsAPI nas configurações, na aba 'Integrações'.";
+            addMessage({ role: 'model', text: msg });
+            speak(msg);
+            return;
+        }
+
+        setStatus(AssistantStatus.THINKING);
+        const topic = userText.replace(newsRegex, '').replace(/sobre|de|a respeito/g, '').trim();
+        if (!topic) {
+            const msg = "Sobre qual tópico você gostaria de saber as notícias?";
+            addMessage({ role: 'model', text: msg });
+            speak(msg);
+            setStatus(AssistantStatus.IDLE);
+            return;
+        }
+        
+        const articles = await fetchNews(newsApiKey, topic);
+
+        if (articles && articles.length > 0) {
+            addMessage({
+                role: 'model',
+                text: `Aqui estão as principais notícias que encontrei sobre "${topic}":`,
+                type: 'news_summary',
+                articles: articles
+            });
+            speak(`Encontrei algumas notícias sobre ${topic}.`);
+        } else {
+            const msg = `Não encontrei nenhuma notícia recente sobre "${topic}". Quer tentar outro assunto?`;
+            addMessage({ role: 'model', text: msg });
+            speak(msg);
+        }
+        setStatus(AssistantStatus.IDLE);
+        await updateUserMemory(userText, `Busquei notícias sobre ${topic}`);
+        return;
+    }
+
 
     if (imageUrl) {
         setStatus(AssistantStatus.THINKING);

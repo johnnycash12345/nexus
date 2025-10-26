@@ -1,4 +1,5 @@
 
+
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Mood, Personality } from '../types';
 
@@ -169,7 +170,7 @@ class IndexedDBService {
       const defaultSettings: AppSettings = {
           voice: { voiceURI: null, rate: 1, pitch: 1 },
           behavior: { enableProactive: true, enableCuriosity: true, enableDiary: true },
-          apiKeys: { deepseekApiKey: '' },
+          apiKeys: { deepseekApiKey: '', newsApiKey: '' },
           llmProvider: 'gemini',
           cognitive: {
               emotionalIntensity: 1.0,

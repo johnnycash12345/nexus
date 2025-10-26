@@ -4,7 +4,7 @@ import { AssistantStatus, ChatMessage, AppSettings } from './types';
 import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
 import { useLlm } from './hooks/useLlm';
 import { db } from './services/indexedDBService';
-import { Avatar } from './components/Avatar';
+import { AvatarLayer } from './components/AvatarLayer';
 import { Message } from './components/Message';
 import { SettingsPanel } from './components/SettingsPanel';
 import { createNexusBrain, NexusBrain } from './services/nexusBrain';
@@ -295,16 +295,17 @@ const App: React.FC = () => {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           </button>
 
-          <main className="flex-grow flex items-center justify-center transition-all duration-500 ease-in-out">
-            <div className={`transition-transform duration-500 ease-in-out relative ${isChatVisible ? 'scale-100' : 'scale-125'}`}>
-               {thought && (
-                <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 z-30 p-3 bg-gray-700/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-out max-w-xs text-center border border-gray-600">
-                    <p className="text-sm text-gray-300 italic">💭 {thought}</p>
-                </div>
-              )}
-              <Avatar status={status} appearance={settings?.appearance} />
+          <AvatarLayer 
+            isChatOpen={isChatVisible} 
+            appearance={settings?.appearance ?? 'neutral'}
+            status={status}
+          />
+          
+          {thought && !isChatVisible && (
+            <div className="absolute top-1/2 -translate-y-[12rem] left-1/2 -translate-x-1/2 z-30 p-3 bg-gray-700/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-out max-w-xs text-center border border-gray-600">
+                <p className="text-sm text-gray-300 italic">💭 {thought}</p>
             </div>
-          </main>
+          )}
           
           {!isChatVisible && (
             <button
@@ -319,7 +320,7 @@ const App: React.FC = () => {
             </button>
           )}
 
-          <div className={`absolute bottom-0 left-0 right-0 h-[70vh] max-h-[600px] bg-gray-800/90 backdrop-blur-md rounded-t-2xl flex flex-col z-20 transition-transform duration-500 ease-in-out ${isChatVisible ? 'translate-y-0' : 'translate-y-full'}`}>
+          <div className={`absolute bottom-0 left-0 right-0 h-[70vh] max-h-[600px] bg-gray-800/80 backdrop-blur-md rounded-t-2xl flex flex-col z-20 transition-transform duration-500 ease-in-out ${isChatVisible ? 'translate-y-0' : 'translate-y-full'}`}>
             <header className="flex-shrink-0 p-2 border-b border-gray-700/50 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-300 pl-2">Nexus</h3>
                 <button

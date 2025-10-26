@@ -1,4 +1,5 @@
 
+
 export enum AssistantStatus {
   IDLE = 'IDLE',
   LISTENING = 'LISTENING',
@@ -19,11 +20,18 @@ export enum Mood {
   IRRITATED = 'IRRITATED',
 }
 
+export interface NewsArticle {
+  title: string;
+  description: string;
+  url: string;
+  sourceName: string;
+}
+
 export interface ChatMessage {
   id?: number; // Optional ID from IndexedDB
   role: 'user' | 'model';
   text: string;
-  type?: 'message' | 'status' | 'proactive_question' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt';
+  type?: 'message' | 'status' | 'proactive_question' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary';
   timestamp?: number; // Optional timestamp from IndexedDB
   imageUrl?: string; // Base64 encoded image URL for vision
   consolidationOptions?: {
@@ -31,6 +39,7 @@ export interface ChatMessage {
     sourceConceptNames: string[];
   };
   sources?: { uri: string; title: string }[];
+  articles?: NewsArticle[];
 }
 
 // --- Personality Traits ---
@@ -117,6 +126,7 @@ export interface CognitiveSettings {
 
 export interface ApiKeySettings {
     deepseekApiKey?: string;
+    newsApiKey?: string;
 }
 
 export interface AppSettings {

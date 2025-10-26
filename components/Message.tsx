@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { ChatMessage, Concept } from '../types';
+import { ChatMessage, Concept, NewsArticle } from '../types';
 
 interface MessageProps extends ChatMessage {
   onAction?: (action: string, payload: any) => void;
@@ -24,7 +25,7 @@ const MessageStyles: React.FC = () => (
   `}</style>
 );
 
-export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources }) => {
+export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources, articles }) => {
   const isUser = role === 'user';
   
   if (type === 'status') {
@@ -77,6 +78,25 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
                   </button>
               </div>
           </div>
+      </div>
+    );
+  }
+
+  if (type === 'news_summary') {
+    return (
+      <div className="flex justify-start animate-fade-in-slide-up my-2">
+        <div className="w-full max-w-md bg-gray-700/80 border border-gray-600/50 rounded-lg p-4 shadow-lg backdrop-blur-sm">
+          <p className="text-gray-300 mb-4">{text}</p>
+          <div className="space-y-3">
+            {articles?.map((article, index) => (
+              <a key={index} href={article.url} target="_blank" rel="noopener noreferrer" className="block p-3 bg-gray-800/60 rounded-lg hover:bg-gray-800 transition-colors">
+                <h4 className="font-bold text-cyan-400 mb-1">{article.title}</h4>
+                <p className="text-xs text-gray-400 mb-2 font-medium">{article.sourceName}</p>
+                <p className="text-sm text-gray-300 leading-snug">{article.description}</p>
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
