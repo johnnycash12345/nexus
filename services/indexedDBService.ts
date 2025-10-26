@@ -73,13 +73,12 @@ class IndexedDBService {
   }
   
   // --- System Memory (Nexus Core Identity) ---
-  async getSystemMemory(): Promise<SystemMemory | null> {
+  getSystemMemory = async (): Promise<SystemMemory | null> => {
       return (await this.database).get('systemMemory', 1).then(mem => mem || null);
   }
   
-  async saveSystemMemory(memory: Partial<SystemMemory>): Promise<void> {
+  saveSystemMemory = async (memory: Partial<SystemMemory>): Promise<void> => {
       const db = await this.database;
-      // FIX: Provide a complete default object to ensure the final object conforms to the SystemMemory type.
       const existing = await db.get('systemMemory', 1) ?? {
           born: false,
           birthTime: '',
@@ -90,7 +89,7 @@ class IndexedDBService {
       await db.put('systemMemory', { ...existing, ...memory, id: 1 });
   }
 
-  async addSystemReflection(reflection: string): Promise<void> {
+  addSystemReflection = async (reflection: string): Promise<void> => {
       const db = await this.database;
       const memory = await this.getSystemMemory();
       if (memory) {
@@ -101,7 +100,7 @@ class IndexedDBService {
   }
 
   // --- Diary ---
-  async getDiary(): Promise<Record<string, DiaryEntry>> {
+  getDiary = async (): Promise<Record<string, DiaryEntry>> => {
       const db = await this.database;
       const entries = await db.getAllFromIndex('diary', 'createdAt');
       return entries.reduce((acc, entry) => {
@@ -110,7 +109,7 @@ class IndexedDBService {
       }, {} as Record<string, DiaryEntry>);
   }
 
-  async saveDiaryEntry(entry: DiaryEntry): Promise<void> {
+  saveDiaryEntry = async (entry: DiaryEntry): Promise<void> => {
       const db = await this.database;
       const tx = db.transaction('diary', 'readwrite');
       const existing = await tx.store.get(entry.dayKey);
@@ -125,12 +124,12 @@ class IndexedDBService {
 
 
   // --- Chat History ---
-  async addChatMessage(message: ChatMessage): Promise<void> {
+  addChatMessage = async (message: ChatMessage): Promise<void> => {
     const db = await this.database;
     await db.add('chatHistory', { ...message, timestamp: Date.now() });
   }
 
-  async getChatHistory(limit: number = 50): Promise<ChatMessage[]> {
+  getChatHistory = async (limit: number = 50): Promise<ChatMessage[]> => {
     const db = await this.database;
     if (!(await db.objectStoreNames.contains('chatHistory'))) return [];
     const allMessages = await db.getAllFromIndex('chatHistory', 'timestamp');
@@ -139,18 +138,18 @@ class IndexedDBService {
 
 
   // User Profile
-  async getUserProfile(): Promise<UserProfile | null> {
+  getUserProfile = async (): Promise<UserProfile | null> => {
     return (await this.database).get('userProfile', 1).then(profile => profile || null);
   }
 
-  async saveUserProfile(profile: Partial<UserProfile>): Promise<void> {
+  saveUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
     const db = await this.database;
     const existing = await db.get('userProfile', 1) ?? { name: '' };
     await db.put('userProfile', { ...existing, ...profile, id: 1 });
   }
   
   // Settings
-  async getSettings(): Promise<AppSettings> {
+  getSettings = async (): Promise<AppSettings> => {
       const defaultSettings: AppSettings = {
           voice: { voiceURI: null, rate: 1, pitch: 1 },
           behavior: { enableProactive: true, enableCuriosity: true, enableDiary: true },
@@ -166,13 +165,13 @@ class IndexedDBService {
       return defaultSettings;
   }
   
-  async saveSettings(settings: AppSettings): Promise<void> {
+  saveSettings = async (settings: AppSettings): Promise<void> => {
       const db = await this.database;
       await db.put('settings', { ...settings, id: 1 });
   }
 
   // Concepts
-  async learnConcept(name: string, metadata: any, evidence: string): Promise<void> {
+  learnConcept = async (name: string, metadata: any, evidence: string): Promise<void> => {
     const db = await this.database;
     const key = name.toLowerCase().trim();
     if (!key) return;
@@ -191,25 +190,25 @@ class IndexedDBService {
     await db.put('concepts', updatedConcept);
   }
 
-  async getAllConcepts(): Promise<Concept[]> {
+  getAllConcepts = async (): Promise<Concept[]> => {
       return (await this.database).getAll('concepts');
   }
   
-  async getWeakestConcepts(limit: number = 5): Promise<Concept[]> {
+  getWeakestConcepts = async (limit: number = 5): Promise<Concept[]> => {
       const db = await this.database;
       return db.getAllFromIndex('concepts', 'confidence', IDBKeyRange.bound(0, 0.8), limit);
   }
   
-  async deleteConcept(name: string): Promise<void> {
+  deleteConcept = async (name: string): Promise<void> => {
       await (await this.database).delete('concepts', name.toLowerCase());
   }
 
   // RLHF Data
-  async addRlhfData(data: RlhfData): Promise<void> {
+  addRlhfData = async (data: RlhfData): Promise<void> => {
       await (await this.database).add('rlhfFeedback', data);
   }
   
-  async getRlhfData(limit: number = 50): Promise<RlhfData[]> {
+  getRlhfData = async (limit: number = 50): Promise<RlhfData[]> => {
       const db = await this.database;
       const tx = db.transaction('rlhfFeedback', 'readonly');
       const index = tx.store.index('timestamp');
