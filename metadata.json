@@ -1,0 +1,7 @@
+{
+  "name": "Nexus Personal Assistant",
+  "description": "An intelligent virtual assistant with a friendly personality, designed to learn your routine and facilitate daily tasks, all within your browser.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
