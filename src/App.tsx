@@ -7,7 +7,7 @@ import { db } from './services/indexedDBService';
 import { Avatar } from './components/Avatar';
 import { Message } from './components/Message';
 import { SettingsPanel } from './components/SettingsPanel';
-import { initGoogleClient } from './services/syncService';
+import { initGoogleClient, startAutoSync } from './services/syncService';
 import { createNexusBrain, NexusBrain } from './services/nexusBrain';
 import { CameraView } from './components/CameraView';
 import { StartScreen } from './components/StartScreen';
@@ -60,6 +60,7 @@ const App: React.FC = () => {
       const loadedSettings = await db.getSettings();
       setSettings(loadedSettings);
       initGoogleClient();
+      startAutoSync();
       setIsInitializing(false);
     };
     initializeApp();
