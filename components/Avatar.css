@@ -2,6 +2,9 @@
 @keyframes motion-idle-keyframes { 0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);} }
 .motion-idle { animation: motion-idle-keyframes 4s ease-in-out infinite; }
 
+@keyframes motion-listening-keyframes { 0%,100%{transform:scale(1);}50%{transform:scale(1.02);} }
+.motion-listening { animation: motion-listening-keyframes 2.5s ease-in-out infinite; }
+
 @keyframes motion-curious-keyframes { 0%,100%{transform:rotate(0);}50%{transform:rotate(8deg);} }
 .motion-curious { animation: motion-curious-keyframes 3s ease-in-out infinite; }
 
@@ -23,17 +26,14 @@
 
 
 /* --- Thinking / Speaking Indicators --- */
-@keyframes think-rotate-keyframes { from{transform:rotate(0);}to{transform:rotate(360deg);} }
-.think-rotate { animation: think-rotate-keyframes 2s linear infinite; transform-origin: center; }
-
 @keyframes think-pulse-keyframes { 0%,100%{r:6;opacity:.8;}50%{r:10;opacity:.4;} }
 .think-pulse { animation: think-pulse-keyframes 1.2s ease-in-out infinite; }
 
 @keyframes speak-mouth-keyframes { 0%,100%{transform:scaleY(.4);}25%{transform:scaleY(1);}75%{transform:scaleY(.6);} }
 .speak-mouth { animation: speak-mouth-keyframes .5s ease-in-out infinite; transform-origin: center; }
 
-@keyframes motion-speaking-keyframes { 0%,100%{filter:drop-shadow(0 0 5px #22d3ee);}50%{filter:drop-shadow(0 0 15px #22d3ee);} }
-.motion-speaking { animation: motion-speaking-keyframes 1.5s ease-in-out infinite; }
+@keyframes motion-speaking-keyframes { 0%,100%{filter:drop-shadow(0 0 5px #22d3ee);}50%{filter:drop-shadow(0 0 20px #22d3ee);} }
+.motion-speaking { animation: motion-speaking-keyframes 1s ease-in-out infinite; }
 
 
 /* --- Eyes --- */
@@ -42,6 +42,31 @@
 
 @keyframes listen-pulse-keyframes { 0%,100%{r:5;opacity:1;}50%{r:8;opacity:.5;} }
 .listen-pulse { animation: listen-pulse-keyframes 1.5s ease-in-out infinite; }
+
+/* --- New Thinking Waves Animation --- */
+@keyframes thinking-wave-keyframes {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+.thinking-wave {
+  transform-origin: center;
+  animation: thinking-wave-keyframes 2.5s ease-out infinite;
+}
+
+.wave-2 {
+  animation-delay: 0.8s;
+}
+
+.wave-3 {
+  animation-delay: 1.6s;
+}
 
 
 /* --- Antenna --- */

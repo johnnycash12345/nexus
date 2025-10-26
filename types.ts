@@ -126,4 +126,5 @@ export interface AppSettings {
     apiKeys?: ApiKeySettings;
     llmProvider?: 'gemini' | 'deepseek';
     cognitive?: CognitiveSettings;
+    appearance?: 'neutral' | 'feminine' | 'masculine';
 }

@@ -14,22 +14,46 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let activeStream: MediaStream | null = null;
     const startCamera = async () => {
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setError('A API de mídia não é suportada neste navegador.');
+          return;
+        }
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputDevices = devices.filter(device => device.kind === 'videoinput');
+        if (videoInputDevices.length === 0) {
+          setError('Nenhuma câmera encontrada. Verifique se o dispositivo está conectado e habilitado.');
+          return;
+        }
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        activeStream = mediaStream;
         setStream(mediaStream);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error accessing camera:", err);
-        setError('Não foi possível acessar a câmera. Verifique as permissões.');
+        let errorMessage = 'Ocorreu um erro desconhecido ao acessar a câmera.';
+        if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            errorMessage = 'Nenhuma câmera foi encontrada. Verifique se está conectada e habilitada.';
+        } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            errorMessage = 'Acesso à câmera negado. Por favor, habilite a permissão nas configurações do seu navegador.';
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            errorMessage = 'Sua câmera já está em uso por outro aplicativo.';
+        }
+        setError(errorMessage);
       }
     };
     startCamera();
 
     return () => {
-      stream?.getTracks().forEach(track => track.stop());
+      if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+      }
     };
   }, []);
 
@@ -92,7 +116,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
         </header>
         
         <main className="p-4 flex-grow flex flex-col items-center justify-center">
-          {error && <p className="text-red-400 mb-4">{error}</p>}
+          {error && <div className="w-full bg-red-900/50 border border-red-500 text-red-300 p-3 rounded-md mb-4 text-center">{error}</div>}
           <div className="w-full aspect-video bg-black rounded-md overflow-hidden mb-4 relative">
             {capturedImage ? (
                 <img src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
@@ -123,7 +147,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
                 <button onClick={handleSend} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-md transition-colors">Enviar para Nexus</button>
               </>
           ) : (
-              <button onClick={handleCapture} disabled={!stream} className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-full transition-colors disabled:bg-gray-500 text-lg font-bold">Capturar</button>
+              <button onClick={handleCapture} disabled={!stream || !!error} className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-full transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-lg font-bold">Capturar</button>
           )}
         </footer>
       </div>

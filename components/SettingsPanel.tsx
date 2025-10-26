@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, Concept } from '../types';
 import { db } from '../services/indexedDBService';
+import { AppearanceSelector } from './AppearanceSelector';
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -166,7 +167,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
       case 'geral':
         return (
           <div>
-            <h3 className="text-lg font-semibold text-cyan-300 mb-4">Configurações de Voz</h3>
+            <h3 className="text-lg font-semibold text-cyan-300 mb-4">Aparência do Nexus</h3>
+            <AppearanceSelector
+              current={localSettings.appearance ?? 'neutral'}
+              onChange={(newAppearance) => handleSettingChange('appearance', newAppearance)}
+            />
+            <h3 className="text-lg font-semibold text-cyan-300 my-4">Configurações de Voz</h3>
             <div className="space-y-4">
               <div>
                 <label htmlFor="voice-select" className="block text-sm font-medium text-gray-300 mb-1">Voz</label>

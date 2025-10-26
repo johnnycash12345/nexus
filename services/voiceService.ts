@@ -1,4 +1,5 @@
-import { GoogleGenAI, LiveSession, LiveServerMessage, Modality, Blob } from '@google/genai';
+// FIX: Removed `LiveSession` as it is not an exported member of `@google/genai`.
+import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
 
 function encode(bytes: Uint8Array): string {
     let binary = '';
@@ -53,7 +54,9 @@ function createBlob(data: Float32Array): Blob {
 
 export class VoiceService {
     private ai: GoogleGenAI;
-    private sessionPromise: Promise<LiveSession> | null = null;
+    // FIX: Replaced `Promise<LiveSession>` with an inferred type using `ReturnType`
+    // because `LiveSession` is not exported from the SDK. This maintains type safety.
+    private sessionPromise: ReturnType<GoogleGenAI['live']['connect']> | null = null;
     
     private stream: MediaStream | null = null;
     private inputAudioContext: AudioContext | null = null;

@@ -25,7 +25,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStart, onOpenSetting
             .animate-fade-in { animation: fade-in 0.8s ease-out forwards; }
         `}</style>
       <div className="mb-8">
-        <Avatar status={AssistantStatus.SLEEPY} className="w-48 h-48" />
+        <Avatar status={AssistantStatus.SLEEPY} className="w-48 h-48" appearance="neutral" />
       </div>
       <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Nexus</h1>
       <p className="text-lg text-gray-400 mb-10">Seu assistente pessoal inteligente.</p>

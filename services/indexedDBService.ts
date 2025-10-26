@@ -176,6 +176,7 @@ class IndexedDBService {
               learningRate: 1.0,
               consolidationFrequency: 60,
           },
+          appearance: 'neutral',
       };
       const stored = await (await this.database).get('settings', 1);
       if (stored) {
