@@ -1,3 +1,4 @@
+
 export enum AssistantStatus {
   IDLE = 'IDLE',
   LISTENING = 'LISTENING',
@@ -22,9 +23,14 @@ export interface ChatMessage {
   id?: number; // Optional ID from IndexedDB
   role: 'user' | 'model';
   text: string;
-  type?: 'message' | 'status' | 'proactive_question' | 'diary_entry' | 'curiosity_prompt';
+  type?: 'message' | 'status' | 'proactive_question' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt';
   timestamp?: number; // Optional timestamp from IndexedDB
   imageUrl?: string; // Base64 encoded image URL for vision
+  consolidationOptions?: {
+    targetConceptName: string;
+    sourceConceptNames: string[];
+  };
+  sources?: { uri: string; title: string }[];
 }
 
 // --- IndexedDB Schemas ---
@@ -90,8 +96,5 @@ export interface AppSettings {
     id?: number;
     voice: VoiceSettings;
     behavior: BehaviorSettings;
-    apiKeys?: {
-        newsApiKey?: string;
-        deepseekApiKey?: string;
-    };
+    apiKeys?: Record<string, never>; // API keys are now handled by environment variables
 }

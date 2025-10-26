@@ -1,31 +1,16 @@
+
 import { useCallback } from 'react';
 import { ChatMessage } from '../types';
-import { generateDeepSeekResponse, generateDeepSeekVisionResponse } from '../services/deepseekService';
+import { generateGeminiResponse, generateGeminiVisionResponse } from '../services/geminiService';
 
-type LlmResponse = {
-    text: string;
-    functionCalls?: { name: string, args: any }[];
-};
+export const useLlm = () => {
+  const generateResponse = useCallback(async (prompt: string, history: ChatMessage[]) => {
+    return generateGeminiResponse(prompt, history);
+  }, []);
 
-export const useLlmOffline = (apiKey?: string) => {
-
-  const generateResponse = useCallback(async (prompt: string, history: ChatMessage[]): Promise<LlmResponse> => {
-    if (!apiKey) {
-      return {
-        text: 'Por favor, configure sua chave de API da DeepSeek na aba "Integrações" das configurações para que eu possa funcionar.'
-      };
-    }
-    return generateDeepSeekResponse(apiKey, prompt, history);
-  }, [apiKey]);
-
-  const generateVisionResponse = useCallback(async (prompt: string, imageUrl: string): Promise<LlmResponse> => {
-    if (!apiKey) {
-      return {
-        text: 'A chave de API da DeepSeek é necessária para analisar imagens. Por favor, configure-a nas configurações.'
-      };
-    }
-    return generateDeepSeekVisionResponse(apiKey, prompt, imageUrl);
-  }, [apiKey]);
+  const generateVisionResponse = useCallback(async (prompt: string, imageUrl: string) => {
+    return generateGeminiVisionResponse(prompt, imageUrl);
+  }, []);
 
 
   return { generateResponse, generateVisionResponse };

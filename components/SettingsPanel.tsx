@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { AppSettings, Concept } from '../types';
 import { db } from '../services/indexedDBService';
-import { syncDataToDrive, signIn, isSignedIn } from '../services/syncService';
+import { signIn, signOut, isSignedIn, backupToGoogleDrive, restoreFromGoogleDrive } from '../services/syncService';
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -9,7 +10,7 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-type Tab = 'geral' | 'comportamento' | 'integrações' | 'dados';
+type Tab = 'geral' | 'comportamento' | 'dados';
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChange, onClose }) => {
   const [activeTab, setActiveTab] = useState<Tab>('geral');
@@ -26,7 +27,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
   }, [settings]);
   
   useEffect(() => {
-    setIsUserSignedIn(isSignedIn());
+    const checkSignInStatus = () => setIsUserSignedIn(isSignedIn());
+    checkSignInStatus();
 
     const fetchVoices = () => {
       const availableVoices = window.speechSynthesis.getVoices();
@@ -79,30 +81,60 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
       }
   };
 
-  const handleSyncClick = async () => {
+  const handleAuthClick = async () => {
     setIsSyncing(true);
-    setSyncMessage('Iniciando sincronização...');
+    setSyncMessage('Aguardando autenticação...');
     try {
-        if (!isUserSignedIn) {
-            setSyncMessage('Por favor, faça login com o Google...');
+        if (isUserSignedIn) {
+            await signOut();
+            setIsUserSignedIn(false);
+            setSyncMessage('Você foi desconectado.');
+        } else {
             await signIn();
             setIsUserSignedIn(true);
-        }
-        setSyncMessage('Sincronizando dados...');
-        const fileId = await syncDataToDrive();
-        if (fileId) {
-            setSyncMessage(`Sincronização concluída! (ID: ${fileId.slice(0,10)}...)`);
-        } else {
-            throw new Error('Falha ao obter ID do arquivo.');
+            setSyncMessage('Login realizado com sucesso!');
         }
     } catch (error) {
-        console.error(error);
-        setSyncMessage('Erro na sincronização.');
+        console.error("Auth Error", error);
+        setSyncMessage('Erro na autenticação.');
     } finally {
         setIsSyncing(false);
         setTimeout(() => setSyncMessage(''), 3000);
     }
-  }
+  };
+
+  const handleBackup = async () => {
+    setIsSyncing(true);
+    setSyncMessage('Fazendo backup da memória...');
+    try {
+        const fileId = await backupToGoogleDrive();
+        setSyncMessage(`Backup concluído! (ID: ${fileId.slice(0,10)}...)`);
+    } catch (error) {
+        console.error(error);
+        setSyncMessage('Erro no backup.');
+    } finally {
+        setIsSyncing(false);
+        setTimeout(() => setSyncMessage(''), 3000);
+    }
+  };
+
+  const handleRestore = async () => {
+      if (!window.confirm('Restaurar um backup substituirá TODA a memória local atual do Nexus. Deseja continuar?')) {
+          return;
+      }
+      setIsSyncing(true);
+      setSyncMessage('Restaurando memória do Google Drive...');
+      try {
+        await restoreFromGoogleDrive();
+        setSyncMessage('Memória restaurada com sucesso! A aplicação será recarregada.');
+        setTimeout(() => window.location.reload(), 2500);
+      } catch (error: any) {
+        console.error(error);
+        setSyncMessage(`Erro ao restaurar: ${error.message}`);
+        setIsSyncing(false);
+        setTimeout(() => setSyncMessage(''), 3000);
+      }
+  };
   
   const handleClearHistory = async () => {
       if (window.confirm('Tem certeza que deseja apagar todo o histórico de conversas? Esta ação não pode ser desfeita.')) {
@@ -174,45 +206,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
                 </div>
             </div>
         );
-      case 'integrações':
-        return (
-            <div>
-                <h3 className="text-lg font-semibold text-cyan-300 mb-4">Integrações e Chaves de API</h3>
-                <div className="space-y-6">
-                    <div>
-                        <label htmlFor="deepseek-api-key" className="block text-sm font-medium text-gray-300 mb-1">DeepSeek API Key</label>
-                        <input 
-                          type="password" 
-                          id="deepseek-api-key" 
-                          name="deepseekApiKey"
-                          value={localSettings.apiKeys?.deepseekApiKey || ''} 
-                          onChange={(e) => handleNestedSettingChange('apiKeys', 'deepseekApiKey', e.target.value)}
-                          placeholder="Cole sua chave aqui"
-                          className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500" />
-                        <p className="text-xs text-gray-400 mt-1">
-                            Necessária para a função de chat principal. Obtenha uma chave em <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">platform.deepseek.com</a>.
-                        </p>
-                    </div>
-                    <div>
-                        <label htmlFor="news-api-key" className="block text-sm font-medium text-gray-300 mb-1">NewsAPI Key</label>
-                        <input 
-                          type="password" 
-                          id="news-api-key" 
-                          name="newsApiKey"
-                          value={localSettings.apiKeys?.newsApiKey || ''} 
-                          onChange={(e) => handleNestedSettingChange('apiKeys', 'newsApiKey', e.target.value)}
-                          placeholder="Cole sua chave aqui"
-                          className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500" />
-                        <p className="text-xs text-gray-400 mt-1">
-                            Necessária para buscar notícias. Obtenha uma chave gratuita em <a href="https://newsapi.org" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">newsapi.org</a>.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        );
       case 'dados':
         return (
           <div>
+            <div className="p-3 bg-gray-700 rounded-md mb-4">
+                <p className="font-medium text-white">Sincronização com Google Drive</p>
+                <p className="text-sm text-gray-400 mb-3">Status: {isUserSignedIn ? 'Conectado' : 'Desconectado'}</p>
+                <button onClick={handleAuthClick} disabled={isSyncing} className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-500 rounded-md transition-colors mb-2">
+                    {isSyncing ? 'Processando...' : (isUserSignedIn ? 'Logout do Google' : 'Login com Google')}
+                </button>
+                {isUserSignedIn && (
+                    <div className="flex gap-2">
+                        <button onClick={handleBackup} disabled={isSyncing} className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-500 rounded-md transition-colors">
+                            Fazer Backup Agora
+                        </button>
+                        <button onClick={handleRestore} disabled={isSyncing} className="w-full px-4 py-2 bg-cyan-700 hover:bg-cyan-600 disabled:bg-gray-500 rounded-md transition-colors">
+                           Restaurar Backup
+                        </button>
+                    </div>
+                )}
+                {syncMessage && <p className="text-xs text-center text-gray-300 mt-2">{syncMessage}</p>}
+            </div>
+
             <h3 className="text-lg font-semibold text-cyan-300 mb-2">Memória do Nexus (Conceitos)</h3>
             <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-gray-700 pb-4">
                 {concepts.length > 0 ? concepts.map(c => (
@@ -227,27 +242,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
                     </div>
                 )) : <p className="text-gray-400">O Nexus ainda não aprendeu nenhum conceito.</p>}
             </div>
-             <div className="space-y-4">
-                 <div className="p-3 bg-gray-700 rounded-md">
-                    <p className="font-medium text-white">Sincronização de Dados</p>
-                    <p className="text-sm text-gray-400 mb-2">Faça backup da memória do Nexus no Google Drive.</p>
-                    <button onClick={handleSyncClick} disabled={isSyncing} className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-500 rounded-md transition-colors">
-                        {isSyncing ? 'Sincronizando...' : 'Sincronizar Agora'}
+            
+            <div>
+                <h4 className="text-md font-semibold text-red-400 mb-2">Ações Destrutivas</h4>
+                <div className="p-3 bg-gray-700/50 border border-red-500/30 rounded-md space-y-3">
+                    <button onClick={handleClearHistory} className="w-full px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-500 rounded-md transition-colors text-sm">
+                        Limpar Histórico de Conversas
                     </button>
-                    {syncMessage && <p className="text-xs text-center text-gray-300 mt-2">{syncMessage}</p>}
+                    <button onClick={handleResetMemory} className="w-full px-4 py-2 bg-red-800 hover:bg-red-700 disabled:bg-gray-500 rounded-md transition-colors text-sm">
+                        Resetar Memória do Nexus
+                    </button>
                 </div>
-                <div>
-                    <h4 className="text-md font-semibold text-red-400 mb-2">Ações Destrutivas</h4>
-                    <div className="p-3 bg-gray-700/50 border border-red-500/30 rounded-md space-y-3">
-                        <button onClick={handleClearHistory} className="w-full px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-500 rounded-md transition-colors text-sm">
-                            Limpar Histórico de Conversas
-                        </button>
-                        <button onClick={handleResetMemory} className="w-full px-4 py-2 bg-red-800 hover:bg-red-700 disabled:bg-gray-500 rounded-md transition-colors text-sm">
-                            Resetar Memória do Nexus
-                        </button>
-                    </div>
-                </div>
-             </div>
+            </div>
           </div>
         );
     }
@@ -279,7 +285,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
         <nav className="flex-shrink-0 flex border-b border-gray-700">
           <button onClick={() => handleTabChange('geral')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'geral' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Geral</button>
           <button onClick={() => handleTabChange('comportamento')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'comportamento' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Comportamento</button>
-          <button onClick={() => handleTabChange('integrações')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'integrações' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Integrações</button>
           <button onClick={() => handleTabChange('dados')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'dados' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Dados</button>
         </nav>
 

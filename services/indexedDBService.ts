@@ -1,3 +1,4 @@
+
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Mood } from '../types';
 
@@ -158,7 +159,7 @@ class IndexedDBService {
       const defaultSettings: AppSettings = {
           voice: { voiceURI: null, rate: 1, pitch: 1 },
           behavior: { enableProactive: true, enableCuriosity: true, enableDiary: true },
-          apiKeys: { newsApiKey: '', deepseekApiKey: '' },
+          apiKeys: {},
       };
       const stored = await (await this.database).get('settings', 1);
       if (stored) {
@@ -211,6 +212,54 @@ class IndexedDBService {
   
   deleteConcept = async (name: string): Promise<void> => {
       await (await this.database).delete('concepts', name.toLowerCase());
+  }
+
+  mergeConcepts = async (targetConceptName: string, sourceConceptNames: string[]): Promise<void> => {
+    const db = await this.database;
+    const tx = db.transaction('concepts', 'readwrite');
+    const store = tx.objectStore('concepts');
+
+    const targetConcept = await store.get(targetConceptName.toLowerCase().trim());
+    const sourceConcepts: (Concept | undefined)[] = await Promise.all(
+        sourceConceptNames.map(name => store.get(name.toLowerCase().trim()))
+    );
+
+    if (!targetConcept) {
+        console.error("Target concept not found for merge:", targetConceptName);
+        await tx.done;
+        return;
+    }
+    
+    const validSourceConcepts = sourceConcepts.filter(c => c !== undefined) as Concept[];
+
+    const allEvidence = new Set([...targetConcept.evidence, ...validSourceConcepts.flatMap(c => c.evidence)]);
+    const allRelated = new Map<string, { type: string; target: string }>();
+
+    for (const rel of [...targetConcept.related, ...validSourceConcepts.flatMap(c => c.related)]) {
+        if (!allRelated.has(rel.target)) {
+            allRelated.set(rel.target, rel);
+        }
+    }
+    
+    const highestConfidence = Math.max(targetConcept.confidence || 0, ...validSourceConcepts.map(c => c.confidence || 0));
+
+    const consolidatedConcept: Concept = {
+        ...targetConcept,
+        confidence: Math.min(1.0, highestConfidence + 0.1), // Boost confidence
+        related: Array.from(allRelated.values()),
+        evidence: Array.from(allEvidence).slice(0, 10), // Limit evidence
+        updatedAt: Date.now(),
+    };
+    
+    // Delete old concepts, including the target, to be replaced by the new merged one
+    for (const name of [targetConceptName, ...sourceConceptNames]) {
+        await store.delete(name.toLowerCase().trim());
+    }
+    
+    // Put the new one with the target name
+    await store.put(consolidatedConcept);
+
+    await tx.done;
   }
 
   resetNexusMemory = async (): Promise<void> => {

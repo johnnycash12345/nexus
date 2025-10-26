@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AssistantStatus, ChatMessage, AppSettings } from './types';
 import { useSpeech } from './hooks/useSpeech';
-import { useLlmOffline } from './hooks/useLlmOffline';
+import { useLlm } from './hooks/useLlmOffline';
 import { db } from './services/indexedDBService';
 import { Avatar } from './components/Avatar';
 import { Message } from './components/Message';
 import { SettingsPanel } from './components/SettingsPanel';
-import { initGoogleClient } from './services/syncService';
+import { initGoogleClient, startAutoSync } from './services/syncService';
 import { createNexusBrain, NexusBrain } from './services/nexusBrain';
 import { CameraView } from './components/CameraView';
 import { StartScreen } from './components/StartScreen';
@@ -50,7 +50,7 @@ const App: React.FC = () => {
     settings?.voice
   );
   
-  const { generateResponse, generateVisionResponse } = useLlmOffline(settings?.apiKeys?.deepseekApiKey);
+  const { generateResponse, generateVisionResponse } = useLlm();
   
   // App Initialization
   useEffect(() => {
@@ -60,6 +60,7 @@ const App: React.FC = () => {
       const loadedSettings = await db.getSettings();
       setSettings(loadedSettings);
       initGoogleClient();
+      startAutoSync();
       setIsInitializing(false);
     };
     initializeApp();
@@ -79,7 +80,6 @@ const App: React.FC = () => {
         getUserProfile: db.getUserProfile,
         setUserProfile: db.saveUserProfile,
         behavior: settings.behavior,
-        webEnabled: true,
       });
       brainRef.current = brain;
       
@@ -165,6 +165,16 @@ const App: React.FC = () => {
     await db.saveSettings(newSettings);
   };
 
+  const handleMessageAction = async (action: string, payload: any) => {
+    if (action === 'merge_concepts' && payload) {
+        await brainRef.current?.performConceptMerge(payload);
+        setMessages(prev => prev.filter(m => m.type !== 'concept_consolidation_prompt'));
+    }
+    if (action === 'ignore_consolidation') {
+        setMessages(prev => prev.filter(m => m.type !== 'concept_consolidation_prompt'));
+    }
+  };
+
   if (isInitializing || !settings) {
     return <div className="h-screen w-screen bg-gray-900 flex items-center justify-center"><p>Despertando Nexus...</p></div>
   }
@@ -206,7 +216,7 @@ const App: React.FC = () => {
             <div ref={chatContainerRef} className="flex-grow p-4 overflow-y-auto">
               <div className="flex flex-col space-y-4">
                 {messages.map((msg, index) => (
-                  <Message key={msg.id || index} role={msg.role} text={msg.text} type={msg.type} imageUrl={msg.imageUrl} />
+                  <Message key={msg.id || index} {...msg} onAction={handleMessageAction} />
                 ))}
               </div>
             </div>

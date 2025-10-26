@@ -1,8 +1,10 @@
+
 // nexusBrain.ts
 // Núcleo cognitivo do Nexus: nascimento, contexto, web-aware, curiosidade e reflexão.
 
 import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Mood } from '../types';
 import { db } from './indexedDBService';
+import { LlmResponseType } from './geminiService';
 
 // ===========================
 // Tipos e contrato de integração
@@ -15,17 +17,12 @@ export type SetStatusFn = (s: AssistantStatus) => void;
 export type GenerateResponseFn = (
   prompt: string,
   history: ChatMessage[]
-) => Promise<{
-  text: string;
-  functionCalls?: { name: string; args: any }[];
-}>;
+) => Promise<LlmResponseType>;
 
 export type GenerateVisionResponseFn = (
   prompt: string,
   imageUrl: string
-) => Promise<{
-  text: string;
-}>;
+) => Promise<LlmResponseType>;
 
 export interface NexusBrainOptions {
   speak: SpeakFn;
@@ -36,15 +33,15 @@ export interface NexusBrainOptions {
   getSettings: () => Promise<AppSettings>;
   getUserProfile: () => Promise<UserProfile | null>;
   setUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
-  behavior?: AppSettings['behavior']; // { enableDiary?: boolean; enableCuriosity?: boolean }
-  webEnabled?: boolean; // habilita chamadas de rede para intenções (F1, clima, notícias)
+  behavior?: AppSettings['behavior'];
 }
 
 export interface NexusBrain {
   handleUserTurn: (userText: string, history: ChatMessage[], imageUrl?: string) => Promise<void>;
   ensureDailyReflection: () => Promise<void>;
-  touchHeartbeat: () => void; // atualizar "last interaction" (ex.: ao abrir app)
-  dispose: () => void; // limpa timers
+  touchHeartbeat: () => void;
+  dispose: () => void;
+  performConceptMerge: (options: { targetConceptName: string, sourceConceptNames: string[] }) => Promise<void>;
 }
 
 // ===========================
@@ -58,7 +55,6 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
   const system = await db.getSystemMemory();
   const concepts = await db.getAllConcepts();
 
-  // FIX: Added type assertion to DiaryEntry to correctly access the 'entry' property.
   const lastDiary = (Object.values(diary).pop() as DiaryEntry)?.entry || 'sem reflexões recentes';
   const lastEmotion = system?.emotion || 'neutro';
   const reflections = system?.reflections?.slice(-2).join('\n') || 'sem autoavaliações';
@@ -81,7 +77,7 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
 💬 Usuário disse: "${userPrompt}"
 
 Responda como Nexus — um ser curioso, empático e evolutivo.
-Mostre curiosidade genuína, raciocine, conecte com o que já sabe e evite redundâncias.
+Mostre curiosidade genuína, raciocine, conecte com o que já sabe e evite redundâncias. Se a pergunta exigir informações atuais ou específicas, use a busca na web para encontrar a resposta mais precisa e cite suas fontes.
 `;
 }
 
@@ -96,7 +92,6 @@ async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promis
       born: true,
       birthTime,
       personality: 'curioso, empático e em constante evolução',
-// FIX: Changed string "curiosidade" to the correct enum value Mood.CURIOUS.
       emotion: Mood.CURIOUS,
       reflections: [firstThought],
       lastReflectionAt: Date.now(),
@@ -108,70 +103,9 @@ async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promis
 
     addMessage({ role: 'model', text: birthMessage, type: 'message' });
     speak(birthMessage);
-    return true; // primeira fala do Nexus concluída
+    return true;
   }
   return false;
-}
-
-// ===========================
-// Intenções web-aware (dinâmicas)
-// ===========================
-
-async function handleWebIntents(prompt: string): Promise<string | null> {
-  const lower = prompt.toLowerCase();
-
-  // F1 — classificação de pilotos
-  if ((lower.includes('f1') || lower.includes('fórmula 1') || lower.includes('formula 1')) &&
-      (lower.includes('classificação') || lower.includes('tabela') || lower.includes('ranking'))) {
-    try {
-        const res = await fetch('https://ergast.com/api/f1/current/driverStandings.json');
-        const data = await res.json();
-        const list = data?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
-        if (!list.length) return 'Não consegui obter a classificação agora. Quer tentar mais tarde?';
-
-        const top = list.slice(0, 10).map((d: any, i: number) =>
-          `${i + 1}. ${d.Driver.givenName} ${d.Driver.familyName} – ${d.points} pts`
-        ).join('\n');
-
-        return `🏎️ Classificação atual do campeonato de pilotos da F1:\n${top}\n\nQuer que eu mostre as equipes também?`;
-    } catch(e) {
-        return 'Tive um problema ao acessar os dados da F1. A API pode estar offline.'
-    }
-  }
-
-  // Clima simples
-  if (lower.includes('tempo') || lower.includes('clima') || lower.includes('previsão')) {
-    const txt = await fetch('https://wttr.in/?format=3').then(r => r.text()).catch(() => null);
-    if (!txt) return 'Não consegui consultar o clima agora.';
-    return `🌦️ Clima: ${txt}`;
-  }
-
-  // Notícias (precisa de API key sua)
-  if (lower.includes('notícias') || lower.includes('novidades') || lower.includes('headlines')) {
-    const settings = await db.getSettings();
-    const KEY = settings.apiKeys?.newsApiKey;
-    if (!KEY) {
-      return 'Posso buscar notícias se você configurar a sua chave da News API nas configurações.';
-    }
-    const url = `https://newsapi.org/v2/top-headlines?country=br&pageSize=5&apiKey=${KEY}`;
-    try {
-        const data = await fetch(url).then(r => r.json()).catch(() => null);
-        if (data?.status === 'error') {
-            console.error("NewsAPI Error:", data.message);
-            return 'Tive um problema ao buscar as notícias. Verifique sua chave de API.';
-        }
-        const items = data?.articles?.slice(0, 3) || [];
-        if (!items.length) return 'Não encontrei notícias agora. Quer tentar depois?';
-
-        const news = items.map((n: any) => `• ${n.title}`).join('\n');
-        return `📰 Manchetes principais:\n${news}\n\nQuer um resumo de alguma delas?`;
-    } catch (e) {
-        console.error("News Fetch Error:", e);
-        return 'Tive um problema ao buscar as notícias. Verifique sua chave de API ou a conexão.'
-    }
-  }
-
-  return null;
 }
 
 // ===========================
@@ -185,7 +119,6 @@ async function updateUserMemory(userText: string, nexusResponse: string) {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Pequena reflexão automática do Nexus sobre a interação
   const reflection =
     `Conversei com ${profile?.name ?? 'o usuário'} sobre: "${userText.slice(0, 120)}". ` +
     `Minha resposta: "${nexusResponse.slice(0, 120)}..."`;
@@ -196,7 +129,6 @@ async function updateUserMemory(userText: string, nexusResponse: string) {
     createdAt: Date.now(),
   });
 
-  // Aprender conceitos (rasa): usa as primeiras palavras do usuário como "tópico"
   const topic = (userText || '').split(/\s+/).slice(0, 3).join(' ').trim();
   if (topic) {
     await db.learnConcept(topic, { related: [] }, `User said: "${userText.slice(0, 120)}"`);
@@ -211,11 +143,9 @@ async function ensureDailyReflection() {
   const last = system?.lastReflectionAt ?? 0;
   const elapsed = Date.now() - last;
 
-  // 1x a cada 18h (ajuste livre)
   if (elapsed < 18 * 60 * 60 * 1000) return;
 
   const diary = await db.getDiary();
-  // FIX: Added type assertion to DiaryEntry to correctly access the 'entry' property.
   const entries = Object.values(diary).slice(-5).map((e) => (e as DiaryEntry).entry).join('\n');
   const note =
     `Reflexão: Estou buscando ser mais claro e atento.\n` +
@@ -230,12 +160,14 @@ async function ensureDailyReflection() {
 // ===========================
 
 export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
-  const { speak, addMessage, setStatus, generateResponse, generateVisionResponse, getSettings, getUserProfile, setUserProfile, webEnabled } = opts;
+  const { speak, addMessage, setStatus, generateResponse, generateVisionResponse, getSettings, getUserProfile, setUserProfile } = opts;
 
   let curiosityTimer: number | null = null;
+  let consolidationTimer: number | null = null;
   let lastInteractionAt = Date.now();
+  let lastConsolidationPromptAt = 0;
 
-  // Curiosidade autônoma: checa silêncio e sugere algo
+
   async function startCuriosityLoop() {
     if (curiosityTimer) window.clearInterval(curiosityTimer);
     
@@ -245,10 +177,10 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
       if (!enabled) return;
         
       const idleMs = Date.now() - lastInteractionAt;
-      if (idleMs < 120_000) return; // 2min
+      if (idleMs < 120_000) return;
 
       const suggestions = [
-        'Quer que eu verifique as últimas da F1?',
+        'Quer que eu verifique as últimas notícias?',
         'Posso te contar uma curiosidade de ciência agora.',
         'Quer que eu anote algo importante do seu dia?',
         'Se quiser, busco o clima atual rapidinho.',
@@ -261,45 +193,87 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     }, 30_000);
   }
 
-  startCuriosityLoop().catch(console.error);
+  async function reviewAndConsolidateConcepts() {
+    const idleMs = Date.now() - lastInteractionAt;
+    const sinceLastPromptMs = Date.now() - lastConsolidationPromptAt;
+
+    if (idleMs < 30_000 || sinceLastPromptMs < 10 * 60 * 1000) {
+        return;
+    }
+    
+    const allConcepts = await db.getAllConcepts();
+    if (allConcepts.length < 5) return;
+
+    const potentialMerges = new Map<string, Concept[]>();
+    const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9\s]/gi, '').trim();
+
+    allConcepts.forEach(concept => {
+        const key = normalize(concept.name);
+        if (key) {
+            if (!potentialMerges.has(key)) potentialMerges.set(key, []);
+            potentialMerges.get(key)!.push(concept);
+        }
+    });
+    
+    let mergeCandidate: { target: Concept, sources: Concept[] } | null = null;
+    
+    for (const group of potentialMerges.values()) {
+        if (group.length > 1) {
+            group.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+            mergeCandidate = { target: group[0], sources: group.slice(1) };
+            break;
+        }
+    }
+    
+    if (mergeCandidate) {
+        lastConsolidationPromptAt = Date.now();
+        touchHeartbeat();
+        
+        const { target, sources } = mergeCandidate;
+        const sourceNames = sources.map(c => c.name).join('", "');
+
+        const promptText = `Notei que aprendi sobre "${target.name}" e "${sourceNames}" separadamente, mas parecem ser a mesma coisa. Posso unificar meu conhecimento sobre eles?`;
+        
+        addMessage({
+            role: 'model',
+            text: promptText,
+            type: 'concept_consolidation_prompt',
+            consolidationOptions: {
+                targetConceptName: target.name,
+                sourceConceptNames: sources.map(c => c.name)
+            }
+        });
+    }
+  }
+  
+  async function startCognitiveLoops() {
+    startCuriosityLoop().catch(console.error);
+    if (consolidationTimer) window.clearInterval(consolidationTimer);
+    consolidationTimer = window.setInterval(() => {
+        reviewAndConsolidateConcepts().catch(console.error);
+    }, 60_000);
+  }
+
+  startCognitiveLoops();
 
   function touchHeartbeat() {
     lastInteractionAt = Date.now();
   }
 
-  async function routeFunctionCalls(calls?: { name: string; args: any }[]) {
-    if (!calls || !calls.length) return;
-    for (const fc of calls) {
-      try {
-        switch (fc.name) {
-          case 'learn_concept': {
-            const { concept, metadata } = fc.args || {};
-            if (concept) await db.learnConcept(concept, metadata || {}, 'LLM suggested learn_concept');
-            break;
-          }
-          case 'open_app': {
-            await db.addRlhfData({ action: 'open_app', args: fc.args, success: true, timestamp: Date.now() });
-            break;
-          }
-          case 'set_reminder': {
-            await db.addRlhfData({ action: 'set_reminder', args: fc.args, success: true, timestamp: Date.now() });
-            break;
-          }
-          case 'search_web': {
-            const q = fc.args?.query || '';
-            const webText = webEnabled ? await handleWebIntents(String(q)) : null;
-            if (webText) {
-              addMessage({ role: 'model', text: webText, type: 'message' });
-              speak(webText);
-            }
-            break;
-          }
-          default:
-            await db.addRlhfData({ action: fc.name, args: fc.args, success: true, timestamp: Date.now() });
-        }
-      } catch {
-        await db.addRlhfData({ action: fc.name, args: fc.args, success: false, timestamp: Date.now() });
-      }
+  async function performConceptMerge(options: { targetConceptName: string, sourceConceptNames: string[] }) {
+    touchHeartbeat();
+    setStatus(AssistantStatus.THINKING);
+    try {
+        await db.mergeConcepts(options.targetConceptName, options.sourceConceptNames);
+        const confirmationText = `Entendido. Unifiquei meu conhecimento sobre "${options.targetConceptName}". Agradeço a ajuda!`;
+        addMessage({ role: 'model', text: confirmationText });
+        speak(confirmationText, () => setStatus(AssistantStatus.IDLE));
+    } catch (error) {
+        console.error("Failed to merge concepts:", error);
+        const errorText = "Ocorreu um erro ao tentar unificar os conceitos.";
+        addMessage({ role: 'model', text: errorText });
+        speak(errorText, () => setStatus(AssistantStatus.IDLE));
+        setStatus(AssistantStatus.ERROR);
     }
   }
 
@@ -339,31 +313,18 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
         return;
     }
 
-    if (webEnabled) {
-      const webResult = await handleWebIntents(userText);
-      if (webResult) {
-        setStatus(AssistantStatus.THINKING);
-        addMessage({ role: 'model', text: webResult, type: 'message' });
-        speak(webResult, () => setStatus(AssistantStatus.IDLE));
-        await updateUserMemory(userText, webResult);
-        return;
-      }
-    }
-
     setStatus(AssistantStatus.THINKING);
     const context = await buildContextPrompt(userText);
-    const { text, functionCalls } = await generateResponse(context, [
+    const { text, sources } = await generateResponse(context, [
       ...history,
       { role: 'user', text: userText, type: 'message' },
     ]);
-
-    await routeFunctionCalls(functionCalls);
 
     const finalText =
       text?.trim() ||
       'Eu processei sua mensagem, mas ainda estou organizando meus pensamentos. Pode me dizer mais um detalhe?';
 
-    addMessage({ role: 'model', text: finalText, type: 'message' });
+    addMessage({ role: 'model', text: finalText, type: 'message', sources });
     speak(finalText, () => setStatus(AssistantStatus.IDLE));
 
     await updateUserMemory(userText, finalText);
@@ -372,6 +333,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
 
   function dispose() {
     if (curiosityTimer) window.clearInterval(curiosityTimer);
+    if (consolidationTimer) window.clearInterval(consolidationTimer);
   }
 
   return {
@@ -379,5 +341,6 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     ensureDailyReflection,
     touchHeartbeat,
     dispose,
+    performConceptMerge,
   };
 }
