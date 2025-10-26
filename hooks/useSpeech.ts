@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { VoiceSettings } from '../types';
 
 // Polyfill for webkitSpeechRecognition
-// FIX: Cast window to `any` to access non-standard SpeechRecognition properties.
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-export const useSpeech = (onResult: (text: string) => void) => {
+export const useSpeech = (onResult: (text: string) => void, voiceSettings?: VoiceSettings) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
-  // FIX: Use `any` for the ref type because the `SpeechRecognition` constant
-  // on line 5 shadows the global type definition, causing a conflict.
   const recognitionRef = useRef<any | null>(null);
 
   useEffect(() => {
@@ -22,20 +20,12 @@ export const useSpeech = (onResult: (text: string) => void) => {
     recognition.lang = 'pt-BR';
     recognition.interimResults = false;
 
-    recognition.onstart = () => {
-      setIsListening(true);
-      setTranscript('');
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
       setIsListening(false);
     };
-
     recognition.onresult = (event: any) => {
       const currentTranscript = event.results[0][0].transcript;
       setTranscript(currentTranscript);
@@ -51,6 +41,7 @@ export const useSpeech = (onResult: (text: string) => void) => {
       try {
         recognitionRef.current.start();
       } catch (e) {
+        // This can happen if the user denies permission after the component mounts
         console.error("Error starting recognition:", e);
       }
     }
@@ -71,26 +62,34 @@ export const useSpeech = (onResult: (text: string) => void) => {
 
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
-    const ptBRVoice = voices.find(voice => voice.lang === 'pt-BR' && voice.name.includes('Google') && voice.name.includes('Masculino')) 
+    let voiceToUse = null;
+
+    if (voiceSettings?.voiceURI) {
+        voiceToUse = voices.find(v => v.voiceURI === voiceSettings.voiceURI);
+    } else {
+        voiceToUse = voices.find(voice => voice.lang === 'pt-BR' && voice.name.includes('Google') && voice.name.includes('Masculino')) 
                       || voices.find(voice => voice.lang === 'pt-BR' && voice.name.includes('Male')) 
                       || voices.find(voice => voice.lang === 'pt-BR');
+    }
 
-    if (ptBRVoice) {
-      utterance.voice = ptBRVoice;
+    if (voiceToUse) {
+      utterance.voice = voiceToUse;
     } else {
-        console.warn("Voz masculina em PT-BR não encontrada, usando padrão.")
+      console.warn("Voz PT-BR não encontrada ou configurada, usando padrão.")
     }
     
     utterance.lang = 'pt-BR';
-    utterance.rate = 1;
-    utterance.pitch = 1;
+    utterance.rate = voiceSettings?.rate ?? 1;
+    utterance.pitch = voiceSettings?.pitch ?? 1;
     
     utterance.onend = () => {
         onEnd?.();
     };
-
+    
+    // Cancel any previous speech to prevent overlap
+    window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [voiceSettings]);
 
   return {
     isListening,
