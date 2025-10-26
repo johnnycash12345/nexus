@@ -1,97 +1,99 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AssistantStatus, ChatMessage, AppSettings, UserProfile } from './types';
 import { useSpeech } from './hooks/useSpeech';
-import { getGeminiResponse, generateCuriosityQuestion, generateDiaryEntry } from './services/geminiService';
-import { learnConcept, strengthenConcept, saveDiaryEntry, getDiary, getSettings, saveSettings, getUserProfile, saveUserProfile } from './services/memoryService';
-import { visionService } from './services/visionService';
+import { useLlmOffline } from './hooks/useLlmOffline';
+import { db } from './services/indexedDBService';
 import { Avatar } from './components/Avatar';
 import { Message } from './components/Message';
 import { SettingsPanel } from './components/SettingsPanel';
+import { initGoogleClient } from './services/syncService';
+import { createNexusBrain, NexusBrain } from './services/nexusBrain';
+
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AssistantStatus>(AssistantStatus.IDLE);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [expectingAnswerTo, setExpectingAnswerTo] = useState<string | null>(null);
   const [isChatVisible, setIsChatVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>(getSettings());
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(getUserProfile());
-  const [isAwaitingName, setIsAwaitingName] = useState(!getUserProfile()?.name);
-  const [detectedObjects, setDetectedObjects] = useState<string[]>([]);
-  const [isVisionActive, setIsVisionActive] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const brainRef = useRef<NexusBrain | null>(null);
   const isChatVisibleRef = useRef(isChatVisible);
 
   useEffect(() => {
     isChatVisibleRef.current = isChatVisible;
   }, [isChatVisible]);
 
+
+  const addMessage = useCallback(async (message: ChatMessage) => {
+    const messageWithTimestamp = { ...message, timestamp: Date.now() };
+    setMessages(prev => {
+        const newMessages = [...prev.filter(m => m.type !== 'status'), messageWithTimestamp];
+        db.addChatMessage(messageWithTimestamp);
+        return newMessages;
+    });
+     if (!isChatVisibleRef.current && message.role === 'model') {
+       setHasUnreadMessages(true);
+     }
+  }, []);
+
   const { isListening, startListening, stopListening, speak } = useSpeech(
-    (text: string) => handleUserInput(text),
-    settings.voice
+    (text: string) => brainRef.current?.handleUserTurn(text, messages),
+    settings?.voice
   );
   
-  // Onboarding flow
+  const { generateResponse } = useLlmOffline();
+  
+  // App Initialization
   useEffect(() => {
-    if (isAwaitingName) {
-      const welcomeMessage: ChatMessage = { role: 'model', text: 'Olá! Eu sou o Nexus. Para começarmos, como posso te chamar?', type: 'message' };
-      setMessages([welcomeMessage]);
-      setTimeout(() => speak(welcomeMessage.text), 500);
-    } else if (messages.length === 0) {
-      setMessages([{ role: 'model', text: `Olá, ${userProfile?.name}! O que vamos descobrir hoje?`, type: 'message' }]);
-    }
-  }, [isAwaitingName]);
-
-
-  // Vision Mode Effect
+    const initializeApp = async () => {
+      const history = await db.getChatHistory();
+      setMessages(history);
+      const loadedSettings = await db.getSettings();
+      setSettings(loadedSettings);
+      initGoogleClient();
+      setIsInitializing(false);
+    };
+    initializeApp();
+  }, []);
+  
+  // Brain Initialization
   useEffect(() => {
-    const startVision = async () => {
-      if (settings.behavior.enableVision && videoRef.current) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          videoRef.current.srcObject = stream;
-          streamRef.current = stream;
-          await visionService.init();
-          visionService.start(videoRef.current, (labels) => {
-            setDetectedObjects(labels);
-          });
-          setIsVisionActive(true);
-        } catch (err) {
-          console.error("Error accessing camera for Vision Mode:", err);
-          // Revert setting if permission is denied
-          onSettingsChange({ ...settings, behavior: { ...settings.behavior, enableVision: false } });
-        }
-      }
-    };
+      if (isInitializing || !settings) return;
 
-    const stopVision = () => {
-      visionService.stop();
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
+      const brain = createNexusBrain({
+        speak,
+        addMessage,
+        setStatus,
+        generateResponse,
+        getSettings: db.getSettings,
+        getUserProfile: db.getUserProfile,
+        setUserProfile: db.saveUserProfile,
+        behavior: settings.behavior,
+        webEnabled: true,
+      });
+      brainRef.current = brain;
+      
+      // Initial heartbeat
+      brain.touchHeartbeat();
+      
+      // Check for daily reflection on startup
+      brain.ensureDailyReflection();
+      
+      // Trigger birth sequence on first interaction if needed
+      if (messages.length === 0) {
+          brain.handleUserTurn("", []);
       }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      setIsVisionActive(false);
-      setDetectedObjects([]);
-    };
 
-    if (settings.behavior.enableVision) {
-      startVision();
-    } else {
-      stopVision();
-    }
+      return () => {
+        brain.dispose();
+      };
+  }, [isInitializing, settings, speak, addMessage, generateResponse, messages.length]);
 
-    return () => {
-      stopVision();
-    };
-  }, [settings.behavior.enableVision]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -100,194 +102,55 @@ const App: React.FC = () => {
   }, [messages]);
 
   useEffect(() => {
-    const transientStates = [AssistantStatus.THINKING, AssistantStatus.SPEAKING, AssistantStatus.SUCCESS, AssistantStatus.ERROR];
-    if (!transientStates.includes(status)) {
-      setStatus(isListening ? AssistantStatus.LISTENING : AssistantStatus.IDLE);
+    if (status !== AssistantStatus.IDLE && status !== AssistantStatus.SLEEPY) {
+      brainRef.current?.touchHeartbeat();
+    }
+    if(llmStatus !== 'working') {
+       setStatus(isListening ? AssistantStatus.LISTENING : status === AssistantStatus.SLEEPY ? AssistantStatus.SLEEPY : AssistantStatus.IDLE);
     }
   }, [isListening, status]);
+  
+  const llmStatus = status === AssistantStatus.THINKING ? 'working' : 'idle';
 
-  // Proactive behaviors (diary, curiosity)
-  useEffect(() => {
-    const runProactiveChecks = async () => {
-      if(isAwaitingName) return;
 
-      // Daily Diary
-      if (settings.behavior.enableDiary) {
-        const diary = getDiary();
-        const todayKey = new Date().toISOString().split('T')[0];
-        if (!diary[todayKey]) {
-          const diaryEntryText = await generateDiaryEntry();
-          if (diaryEntryText) {
-            saveDiaryEntry(diaryEntryText);
-            const diaryMessage: ChatMessage = { role: 'model', text: diaryEntryText, type: 'diary_entry' };
-            setMessages(prev => [...prev, diaryMessage]);
-            if (!isChatVisibleRef.current) setHasUnreadMessages(true);
-          }
-        }
-      }
-
-      // Curiosity Questions
-      if (settings.behavior.enableCuriosity && Math.random() < 0.2) {
-          const question = await generateCuriosityQuestion();
-          if (question) {
-              const conceptInQuestion = question.match(/o que é um?a? ([^\?]+)\??/i)?.[1] ||
-                                    question.match(/sobre ([^\?]+)\??/i)?.[1];
-
-              if (conceptInQuestion) setExpectingAnswerTo(conceptInQuestion.trim().replace(/\.$/, ''));
-              
-              const curiosityMessage: ChatMessage = { role: 'model', text: question, type: 'curiosity_prompt' };
-              setMessages(prev => [...prev, curiosityMessage]);
-              if (!isChatVisibleRef.current) setHasUnreadMessages(true);
-          }
-      }
-    };
-    const timer = setTimeout(runProactiveChecks, 5000);
-    return () => clearTimeout(timer);
-  }, [settings.behavior.enableDiary, settings.behavior.enableCuriosity, isAwaitingName]);
-
-  const handleUserInput = useCallback(async (prompt: string) => {
-    if (!prompt.trim() || status === AssistantStatus.THINKING || status === AssistantStatus.SPEAKING) return;
+  const handleMicClick = () => {
+    brainRef.current?.touchHeartbeat();
+    if (status === AssistantStatus.SLEEPY) setStatus(AssistantStatus.IDLE);
+    if (!isChatVisible) setIsChatVisible(true);
+    if (isListening) {
+        stopListening();
+    } else {
+        startListening();
+    }
+  };
+  
+  const handleTextSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = inputValue.trim();
+    if (!text) return;
     
     stopListening();
-
-    const userMessage: ChatMessage = { role: 'user', text: prompt, type: 'message' };
-
-    if (isAwaitingName) {
-      const profile = { name: prompt };
-      saveUserProfile(profile);
-      setUserProfile(profile);
-      setIsAwaitingName(false);
-      const greeting = `Prazer em te conhecer, ${prompt}! Como posso te ajudar hoje?`;
-      setMessages(prev => [...prev, userMessage, { role: 'model', text: greeting }]);
-      speak(greeting);
-      return;
-    }
-    
-    if (expectingAnswerTo) {
-        strengthenConcept(expectingAnswerTo, prompt);
-        setExpectingAnswerTo(null);
-    }
-    
-    if(!isChatVisible) setIsChatVisible(true);
-
-    const thinkingMessage: ChatMessage = { role: 'model', text: 'Nexus está pensando...', type: 'status' };
-    setMessages(prev => [...prev, userMessage, thinkingMessage]);
-    setStatus(AssistantStatus.THINKING);
-
-    try {
-      const visionContext = detectedObjects.length > 0 ? `Contexto Visual: Eu vejo os seguintes objetos por perto: ${detectedObjects.join(', ')}.` : '';
-      const response = await getGeminiResponse(prompt, messages, visionContext, userProfile);
-      let finalResponseText = response.text;
-      const hasFunctionCalls = response.functionCalls && response.functionCalls.length > 0;
-
-      if (hasFunctionCalls) {
-        setStatus(AssistantStatus.SUCCESS);
-        const callResults = response.functionCalls.map(fc => handleFunctionCall(fc, prompt));
-        const actionResults = callResults.filter(r => r.isActionResult);
-        if (actionResults.length > 0) {
-            finalResponseText = actionResults.map(r => r.text).join('\n');
-        }
-      }
-      
-      if (!finalResponseText && !hasFunctionCalls) {
-        finalResponseText = "Hmm, não tenho certeza de como responder a isso. Podemos falar sobre outra coisa?";
-      }
-
-      const delay = hasFunctionCalls ? 1200 : 0;
-
-      if (finalResponseText) {
-        setTimeout(() => {
-            const finalModelMessage: ChatMessage = { role: 'model', text: finalResponseText, type: 'message' };
-            setMessages(prev => [...prev.filter(m => m.type !== 'status'), finalModelMessage]);
-            if (!isChatVisibleRef.current) setHasUnreadMessages(true);
-            setStatus(AssistantStatus.SPEAKING);
-            speak(finalResponseText, () => setStatus(AssistantStatus.IDLE));
-        }, delay);
-      } else {
-        setTimeout(() => {
-          setMessages(prev => prev.filter(m => m.type !== 'status'));
-          setStatus(AssistantStatus.IDLE);
-        }, delay);
-      }
-
-    } catch (error) {
-      console.error("Error getting response from Gemini:", error);
-      setMessages(prev => prev.filter(m => m.type !== 'status'));
-      setStatus(AssistantStatus.ERROR);
-      
-      setTimeout(() => {
-          const errorMessage: ChatMessage = { role: 'model', text: "Desculpe, ocorreu um erro.", type: 'message' };
-          setMessages(prev => [...prev, errorMessage]);
-          if (!isChatVisibleRef.current) setHasUnreadMessages(true);
-          setStatus(AssistantStatus.IDLE);
-      }, 1500);
-    }
-  }, [messages, speak, status, stopListening, expectingAnswerTo, isChatVisible, isAwaitingName, detectedObjects, userProfile]);
-
-  const handleFunctionCall = (fc: { name: string, args: any }, evidence: string): { text: string, isActionResult: boolean } => {
-    let resultText = '';
-    let isActionResult = true;
-
-    switch (fc.name) {
-      case 'open_app':
-        const appName = fc.args.package_name || 'website';
-        const url = `https://www.${appName.toLowerCase().replace(/\s+/g, '')}.com`;
-        window.open(url, '_blank');
-        resultText = `Abrindo ${appName}...`;
-        break;
-      case 'set_reminder':
-        resultText = `Ok, lembrete definido para ${fc.args.time}: ${fc.args.message}`;
-        break;
-      case 'search_web':
-        const query = encodeURIComponent(fc.args.query);
-        window.open(`https://www.google.com/search?q=${query}`, '_blank');
-        resultText = `Buscando por "${fc.args.query}" na web.`;
-        break;
-      case 'learn_concept':
-        learnConcept(fc.args.concept, fc.args.metadata || {}, evidence);
-        resultText = `Aprendi sobre: ${fc.args.concept}.`;
-        isActionResult = false;
-        break;
-      case 'save_user_profile':
-        const profile = { name: fc.args.name };
-        saveUserProfile(profile);
-        setUserProfile(profile);
-        setIsAwaitingName(false);
-        resultText = `Ok, vou te chamar de ${fc.args.name} de agora em diante.`;
-        break;
-      default:
-        resultText = `Não consegui executar a ação: ${fc.name}`;
-    }
-    return { text: resultText, isActionResult };
-  };
-  
-  const handleMicClick = () => {
-    if (!isChatVisible) setIsChatVisible(true);
-    if (isListening) stopListening();
-    else startListening();
-  };
-  
-  const handleTextSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    handleUserInput(inputValue);
     setInputValue('');
+    
+    const userMessage: ChatMessage = { role: 'user', text, type: 'message' };
+    await addMessage(userMessage);
+    
+    const currentHistory = [...messages, userMessage];
+    
+    await brainRef.current?.handleUserTurn(text, currentHistory);
   };
 
-  const onSettingsChange = (newSettings: AppSettings) => {
+  const onSettingsChange = async (newSettings: AppSettings) => {
     setSettings(newSettings);
-    saveSettings(newSettings);
+    await db.saveSettings(newSettings);
   };
+
+  if (isInitializing || !settings) {
+    return <div className="h-screen w-screen bg-gray-900 flex items-center justify-center"><p>Despertando Nexus...</p></div>
+  }
 
   return (
     <div className="h-screen w-screen bg-gray-900 flex flex-col overflow-hidden relative">
-      <video ref={videoRef} autoPlay playsInline muted className="absolute w-px h-px opacity-0 -z-10" />
-
-      {isVisionActive && (
-          <div className="absolute top-4 left-4 z-30 p-2 bg-gray-700/50 rounded-full text-cyan-300 animate-pulse" aria-label="Modo Visão ativo">
-              <svg xmlns="http://www.w.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
-          </div>
-      )}
-      
       <button 
         onClick={() => setIsSettingsVisible(true)}
         aria-label="Abrir configurações"
@@ -296,11 +159,10 @@ const App: React.FC = () => {
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
       </button>
 
-      <main className={`flex-grow flex items-center justify-center transition-all duration-500 ease-in-out ${isChatVisible ? 'flex-grow-0 h-[33%]' : 'flex-grow h-full'}`}>
-        <Avatar 
-          status={status} 
-          className={`transition-all duration-500 ease-in-out ${isChatVisible ? 'w-28 h-28 md:w-32 md:h-32' : 'w-48 h-48 md:w-56 md:h-56'}`}
-        />
+      <main className={`flex-grow flex items-center justify-center transition-all duration-500 ease-in-out h-full`}>
+        <div className="w-64 h-64">
+          <Avatar status={status} />
+        </div>
       </main>
       
       {!isChatVisible && (
@@ -342,7 +204,7 @@ const App: React.FC = () => {
         <div ref={chatContainerRef} className="flex-grow p-4 overflow-y-auto">
           <div className="flex flex-col space-y-4">
             {messages.map((msg, index) => (
-              <Message key={index} role={msg.role} text={msg.text} type={msg.type} />
+              <Message key={msg.id || index} role={msg.role} text={msg.text} type={msg.type} />
             ))}
           </div>
         </div>
