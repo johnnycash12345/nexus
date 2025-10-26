@@ -7,10 +7,10 @@ import { db } from './services/indexedDBService';
 import { Avatar } from './components/Avatar';
 import { Message } from './components/Message';
 import { SettingsPanel } from './components/SettingsPanel';
-import { initGoogleClient, isSignedIn, restoreFromGoogleDrive } from './services/syncService';
 import { createNexusBrain, NexusBrain } from './services/nexusBrain';
 import { CameraView } from './components/CameraView';
 import { StartScreen } from './components/StartScreen';
+import { useGoogleSync } from './hooks/useGoogleSync';
 
 
 const App: React.FC = () => {
@@ -25,6 +25,8 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isStarted, setIsStarted] = useState(false);
   const [thought, setThought] = useState<string | null>(null);
+
+  const { token, status: syncStatus, login, logout } = useGoogleSync();
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const brainRef = useRef<NexusBrain | null>(null);
@@ -51,6 +53,14 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Auto-start app after successful sync
+  useEffect(() => {
+      if (token && (syncStatus.includes('sucesso') || syncStatus.includes('salvo'))) {
+          const timer = setTimeout(() => setIsStarted(true), 2000); // Give user time to read status
+          return () => clearTimeout(timer);
+      }
+  }, [token, syncStatus]);
+
   const addMessage = useCallback(async (message: ChatMessage) => {
     const messageWithTimestamp = { ...message, timestamp: Date.now() };
     setMessages(prev => {
@@ -73,27 +83,15 @@ const App: React.FC = () => {
   // App Initialization
   useEffect(() => {
     const initializeApp = async () => {
+      // Restore from Google Drive might have already happened, so load latest data.
       const history = await db.getChatHistory();
       setMessages(history);
       const loadedSettings = await db.getSettings();
       setSettings(loadedSettings);
-      
-      try {
-        await initGoogleClient();
-        if (isSignedIn()) {
-          console.log("User already signed in. Attempting to restore memory from Drive...");
-          await restoreFromGoogleDrive();
-          // Refresh messages from DB after potential restore
-          setMessages(await db.getChatHistory());
-        }
-      } catch (error) {
-          console.error("Failed to initialize or restore from Google services on startup:", error);
-      }
-      
       setIsInitializing(false);
     };
     initializeApp();
-  }, []);
+  }, [syncStatus]); // Rerun init after sync completes
   
   // Brain Initialization
   useEffect(() => {
@@ -219,7 +217,13 @@ const App: React.FC = () => {
         }
       `}</style>
       {!isStarted ? (
-          <StartScreen onStart={() => setIsStarted(true)} onOpenSettings={() => setIsSettingsVisible(true)} />
+          <StartScreen 
+              onStart={() => setIsStarted(true)} 
+              onOpenSettings={() => setIsSettingsVisible(true)}
+              token={token}
+              syncStatus={syncStatus}
+              onLogin={login}
+          />
       ) : (
         <>
           <button 
@@ -318,7 +322,7 @@ const App: React.FC = () => {
         </>
       )}
       
-      {isSettingsVisible && <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} onClose={() => setIsSettingsVisible(false)} />}
+      {isSettingsVisible && <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} onClose={() => setIsSettingsVisible(false)} token={token} onLogout={logout} />}
       {isStarted && isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onSend={handleVisionSubmit} />}
     </div>
   );

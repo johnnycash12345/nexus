@@ -2,34 +2,29 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, Concept } from '../types';
 import { db } from '../services/indexedDBService';
-import { signIn, signOut, isSignedIn, backupToGoogleDrive, restoreFromGoogleDrive } from '../services/syncService';
 
 interface SettingsPanelProps {
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
   onClose: () => void;
+  token: string | null;
+  onLogout: () => void;
 }
 
 type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória';
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChange, onClose }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChange, onClose, token, onLogout }) => {
   const [activeTab, setActiveTab] = useState<Tab>('geral');
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [concepts, setConcepts] = useState<Concept[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
-  const [isUserSignedIn, setIsUserSignedIn] = useState(false);
 
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
   
   useEffect(() => {
-    const checkSignInStatus = () => setIsUserSignedIn(isSignedIn());
-    checkSignInStatus();
-
     const fetchVoices = () => {
       const availableVoices = window.speechSynthesis.getVoices();
       if (availableVoices.length > 0) {
@@ -73,7 +68,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
     }, 1200);
   };
 
-
   const handleDeleteConcept = async (name: string) => {
       if(window.confirm(`Tem certeza que quer que o Nexus esqueça sobre "${name}"?`)){
         await db.deleteConcept(name);
@@ -81,60 +75,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
       }
   };
 
-  const handleAuthClick = async () => {
-    setIsSyncing(true);
-    setSyncMessage('Aguardando autenticação...');
-    try {
-        if (isUserSignedIn) {
-            await signOut();
-            setIsUserSignedIn(false);
-            setSyncMessage('Você foi desconectado.');
-        } else {
-            await signIn();
-            setIsUserSignedIn(true);
-            setSyncMessage('Login realizado com sucesso!');
-        }
-    } catch (error) {
-        console.error("Auth Error", error);
-        setSyncMessage('Erro na autenticação.');
-    } finally {
-        setIsSyncing(false);
-        setTimeout(() => setSyncMessage(''), 3000);
+  const handleLogoutClick = () => {
+    if (window.confirm('Tem certeza de que deseja desconectar sua conta do Google? A sincronização automática será interrompida.')) {
+        onLogout();
     }
-  };
-
-  const handleBackup = async () => {
-    setIsSyncing(true);
-    setSyncMessage('Fazendo backup da memória...');
-    try {
-        const fileId = await backupToGoogleDrive();
-        setSyncMessage(`Backup concluído! (ID: ${fileId.slice(0,10)}...)`);
-    } catch (error) {
-        console.error(error);
-        setSyncMessage('Erro no backup.');
-    } finally {
-        setIsSyncing(false);
-        setTimeout(() => setSyncMessage(''), 3000);
-    }
-  };
-
-  const handleRestore = async () => {
-      if (!window.confirm('Restaurar um backup substituirá TODA a memória local atual do Nexus. Deseja continuar?')) {
-          return;
-      }
-      setIsSyncing(true);
-      setSyncMessage('Restaurando memória do Google Drive...');
-      try {
-        await restoreFromGoogleDrive();
-        setSyncMessage('Memória restaurada com sucesso! A aplicação será recarregada.');
-        setTimeout(() => window.location.reload(), 2500);
-      } catch (error: any) {
-        console.error(error);
-        setSyncMessage(`Erro ao restaurar: ${error.message}`);
-        setIsSyncing(false);
-        setTimeout(() => setSyncMessage(''), 3000);
-      }
-  };
+  }
   
   const handleClearHistory = async () => {
       if (window.confirm('Tem certeza que deseja apagar todo o histórico de conversas? Esta ação não pode ser desfeita.')) {
@@ -150,6 +95,70 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
           alert('Memória do Nexus resetada. A aplicação será recarregada.');
           window.location.reload();
       }
+  };
+
+  const handleExportMemory = async () => {
+    try {
+        const [profile, diary, system, concepts] = await Promise.all([
+            db.getUserProfile(),
+            db.getDiary(),
+            db.getSystemMemory(),
+            db.getAllConcepts()
+        ]);
+
+        const backupData = {
+            profile, diary, system, concepts,
+            exportedAt: new Date().toISOString(),
+            version: '1.0.0',
+        };
+
+        const fileContent = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([fileContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const today = new Date().toISOString().split('T')[0];
+        link.download = `nexus_memory_backup_${today}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Failed to export memory:", error);
+        alert("Ocorreu um erro ao exportar a memória.");
+    }
+  };
+
+  const handleImportMemory = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!window.confirm('Tem certeza que deseja importar este arquivo? Isso substituirá TODA a memória atual do Nexus.')) {
+        event.target.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const content = e.target?.result;
+            if (typeof content !== 'string') throw new Error("File content is not readable.");
+            const backupData = JSON.parse(content);
+            await db.importBackup(backupData);
+            alert('Memória importada com sucesso! A aplicação será recarregada.');
+            window.location.reload();
+        } catch (error: any) {
+            console.error("Failed to import memory:", error);
+            alert(`Ocorreu um erro ao importar o arquivo: ${error.message}`);
+        } finally {
+            event.target.value = '';
+        }
+    };
+    reader.onerror = () => {
+        alert("Erro ao ler o arquivo de backup.");
+        event.target.value = '';
+    };
+    reader.readAsText(file);
   };
 
   const renderTabContent = () => {
@@ -257,24 +266,46 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
           <div>
             <div className="p-3 bg-gray-700 rounded-md mb-4">
                 <p className="font-medium text-white">Sincronização com Google Drive</p>
-                <p className="text-sm text-gray-400 mb-3">Status: {isUserSignedIn ? 'Conectado' : 'Desconectado'}</p>
-                <button onClick={handleAuthClick} disabled={isSyncing} className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-500 rounded-md transition-colors mb-2">
-                    {isSyncing ? 'Processando...' : (isUserSignedIn ? 'Logout do Google' : 'Login com Google')}
-                </button>
-                {isUserSignedIn && (
-                    <div className="flex gap-2">
-                        <button onClick={handleBackup} disabled={isSyncing} className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-500 rounded-md transition-colors">
-                            Fazer Backup Agora
+                 {token ? (
+                    <>
+                        <p className="text-sm text-green-400 mb-3">Conectado. A memória é sincronizada automaticamente.</p>
+                        <button onClick={handleLogoutClick} className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors">
+                            Logout do Google
                         </button>
-                        <button onClick={handleRestore} disabled={isSyncing} className="w-full px-4 py-2 bg-cyan-700 hover:bg-cyan-600 disabled:bg-gray-500 rounded-md transition-colors">
-                           Restaurar Backup
-                        </button>
-                    </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-sm text-gray-400 mb-3">A sincronização na nuvem está desativada.</p>
+                        <p className="text-xs text-gray-400">Para ativar, reinicie a aplicação e faça login com o Google na tela inicial.</p>
+                    </>
                 )}
-                {syncMessage && <p className="text-xs text-center text-gray-300 mt-2">{syncMessage}</p>}
             </div>
 
-            <h3 className="text-lg font-semibold text-cyan-300 mb-2">Memória do Nexus (Conceitos)</h3>
+            <div>
+                <h4 className="text-md font-semibold text-cyan-300 mb-2">Backup Local</h4>
+                <div className="p-3 bg-gray-700/50 border border-gray-600/50 rounded-md space-y-3">
+                    <p className="text-xs text-gray-400">
+                        Salve um arquivo da memória completa do Nexus no seu dispositivo ou restaure a partir de um arquivo salvo anteriormente.
+                    </p>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleExportMemory} 
+                            className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
+                        >
+                            Exportar Memória
+                        </button>
+                        <label 
+                            htmlFor="import-backup" 
+                            className="w-full px-4 py-2 bg-cyan-700 hover:bg-cyan-600 rounded-md transition-colors text-sm font-medium text-center cursor-pointer"
+                        >
+                            Importar Memória
+                        </label>
+                        <input id="import-backup" type="file" accept=".json,application/json" className="hidden" onChange={handleImportMemory} />
+                    </div>
+                </div>
+            </div>
+            
+            <h3 className="text-lg font-semibold text-cyan-300 mb-2 mt-6">Memória do Nexus (Conceitos)</h3>
             <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-gray-700 pb-4">
                 {concepts.length > 0 ? concepts.map(c => (
                     <div key={c.name} className="bg-gray-700 p-3 rounded-md">
@@ -290,7 +321,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
             </div>
             
             <div>
-                <h4 className="text-md font-semibold text-red-400 mb-2">Ações Destrutivas</h4>
+                <h4 className="text-md font-semibold text-red-400 mb-2 mt-6">Ações Destrutivas</h4>
                 <div className="p-3 bg-gray-700/50 border border-red-500/30 rounded-md space-y-3">
                     <button onClick={handleClearHistory} className="w-full px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-500 rounded-md transition-colors text-sm">
                         Limpar Histórico de Conversas

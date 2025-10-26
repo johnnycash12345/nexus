@@ -288,6 +288,47 @@ class IndexedDBService {
       ]);
       await tx.done;
   }
+  
+  importBackup = async (backupData: any): Promise<void> => {
+    if (!backupData || !backupData.concepts || !backupData.systemMemory) {
+        throw new Error("Arquivo de backup inválido ou corrompido.");
+    }
+
+    const db = await this.database;
+    const tx = db.transaction(['concepts', 'userProfile', 'systemMemory', 'diary'], 'readwrite');
+
+    // Clear existing data
+    await Promise.all([
+        tx.objectStore('concepts').clear(),
+        tx.objectStore('userProfile').clear(),
+        tx.objectStore('systemMemory').clear(),
+        tx.objectStore('diary').clear(),
+    ]);
+    
+    await tx.done;
+    
+    const writeTx = db.transaction(['concepts', 'userProfile', 'systemMemory', 'diary'], 'readwrite');
+
+    // Import new data
+    if (backupData.userProfile) {
+        await writeTx.objectStore('userProfile').put({ ...backupData.userProfile, id: 1 });
+    }
+    if (backupData.systemMemory) {
+        await writeTx.objectStore('systemMemory').put({ ...backupData.systemMemory, id: 1 });
+    }
+    if (Array.isArray(backupData.concepts)) {
+        for (const concept of backupData.concepts) {
+            await writeTx.objectStore('concepts').put(concept);
+        }
+    }
+    if (backupData.diary) { // Assuming diary is an object of entries
+        for (const entry of Object.values(backupData.diary)) {
+            await writeTx.objectStore('diary').put(entry as DiaryEntry);
+        }
+    }
+
+    await writeTx.done;
+  }
 
   // RLHF Data
   addRlhfData = async (data: RlhfData): Promise<void> => {

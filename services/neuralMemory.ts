@@ -1,10 +1,10 @@
-
 // services/neuralMemory.ts
 // Sistema de sinapses e evolução cognitiva do Nexus
 
 import { db } from './indexedDBService';
 import { Concept, Synapse } from '../types';
-import { isSignedIn, backupToGoogleDrive } from './syncService';
+import { googleAuth } from './googleAuth';
+import { driveSyncService } from './driveSyncService';
 
 // Estrutura interna do cérebro
 interface BrainData {
@@ -92,10 +92,11 @@ export const neuralMemory = {
 
     // Trigger de backup automático
     if (newInteractionCount % 5 === 0) {
-        if (isSignedIn()) {
+        const token = googleAuth.getToken();
+        if (token) {
             try {
                 console.log(`Contagem de interações [${newInteractionCount}], iniciando backup automático...`);
-                await backupToGoogleDrive();
+                await driveSyncService.uploadBrain(token);
                 // Dispara evento para a UI (balão de pensamento)
                 window.dispatchEvent(
                   new CustomEvent('nexus-thought-update', {
