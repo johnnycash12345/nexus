@@ -136,6 +136,11 @@ class IndexedDBService {
     return allMessages.slice(-limit);
   }
 
+  clearChatHistory = async (): Promise<void> => {
+      const db = await this.database;
+      await db.clear('chatHistory');
+  }
+
 
   // User Profile
   getUserProfile = async (): Promise<UserProfile | null> => {
@@ -153,15 +158,20 @@ class IndexedDBService {
       const defaultSettings: AppSettings = {
           voice: { voiceURI: null, rate: 1, pitch: 1 },
           behavior: { enableProactive: true, enableCuriosity: true, enableDiary: true },
+          apiKeys: { newsApiKey: '', deepseekApiKey: '' },
       };
       const stored = await (await this.database).get('settings', 1);
       if (stored) {
          return {
             ...defaultSettings,
             ...stored,
+            voice: { ...defaultSettings.voice, ...stored.voice },
             behavior: { ...defaultSettings.behavior, ...stored.behavior },
+            apiKeys: { ...defaultSettings.apiKeys, ...stored.apiKeys },
          };
       }
+      // First time run, save defaults
+      await this.saveSettings(defaultSettings);
       return defaultSettings;
   }
   
@@ -201,6 +211,20 @@ class IndexedDBService {
   
   deleteConcept = async (name: string): Promise<void> => {
       await (await this.database).delete('concepts', name.toLowerCase());
+  }
+
+  resetNexusMemory = async (): Promise<void> => {
+      const db = await this.database;
+      const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary'], 'readwrite');
+      await Promise.all([
+          tx.objectStore('concepts').clear(),
+          tx.objectStore('userProfile').clear(),
+          tx.objectStore('rlhfFeedback').clear(),
+          tx.objectStore('chatHistory').clear(),
+          tx.objectStore('systemMemory').clear(),
+          tx.objectStore('diary').clear(),
+      ]);
+      await tx.done;
   }
 
   // RLHF Data

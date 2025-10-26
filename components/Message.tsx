@@ -21,7 +21,7 @@ const MessageStyles: React.FC = () => (
   `}</style>
 );
 
-export const Message: React.FC<MessageProps> = ({ role, text, type = 'message' }) => {
+export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl }) => {
   const isUser = role === 'user';
   
   if (type === 'status') {
@@ -63,6 +63,9 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message' }
             : 'bg-gray-700 rounded-bl-none'
         }`}
       >
+        {imageUrl && (
+            <img src={imageUrl} alt="User upload" className="rounded-lg mb-2 max-h-48 w-full object-cover" />
+        )}
         <p className="text-white whitespace-pre-wrap">{text}</p>
       </div>
     </div>

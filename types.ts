@@ -24,6 +24,7 @@ export interface ChatMessage {
   text: string;
   type?: 'message' | 'status' | 'proactive_question' | 'diary_entry' | 'curiosity_prompt';
   timestamp?: number; // Optional timestamp from IndexedDB
+  imageUrl?: string; // Base64 encoded image URL for vision
 }
 
 // --- IndexedDB Schemas ---
@@ -89,4 +90,8 @@ export interface AppSettings {
     id?: number;
     voice: VoiceSettings;
     behavior: BehaviorSettings;
+    apiKeys?: {
+        newsApiKey?: string;
+        deepseekApiKey?: string;
+    };
 }

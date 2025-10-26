@@ -20,11 +20,19 @@ export type GenerateResponseFn = (
   functionCalls?: { name: string; args: any }[];
 }>;
 
+export type GenerateVisionResponseFn = (
+  prompt: string,
+  imageUrl: string
+) => Promise<{
+  text: string;
+}>;
+
 export interface NexusBrainOptions {
   speak: SpeakFn;
   addMessage: AddMessageFn;
   setStatus: SetStatusFn;
   generateResponse: GenerateResponseFn;
+  generateVisionResponse: GenerateVisionResponseFn;
   getSettings: () => Promise<AppSettings>;
   getUserProfile: () => Promise<UserProfile | null>;
   setUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
@@ -33,7 +41,7 @@ export interface NexusBrainOptions {
 }
 
 export interface NexusBrain {
-  handleUserTurn: (userText: string, history: ChatMessage[]) => Promise<void>;
+  handleUserTurn: (userText: string, history: ChatMessage[], imageUrl?: string) => Promise<void>;
   ensureDailyReflection: () => Promise<void>;
   touchHeartbeat: () => void; // atualizar "last interaction" (ex.: ao abrir app)
   dispose: () => void; // limpa timers
@@ -140,20 +148,26 @@ async function handleWebIntents(prompt: string): Promise<string | null> {
 
   // Notícias (precisa de API key sua)
   if (lower.includes('notícias') || lower.includes('novidades') || lower.includes('headlines')) {
-    const KEY = (window as any)?.NEWS_API_KEY || 'YOUR_NEWS_API_KEY'; // SUBSTITUA A CHAVE AQUI
-    if (!KEY || KEY === 'YOUR_NEWS_API_KEY') {
-      return 'Posso buscar notícias se você configurar a sua NEWS_API_KEY.';
+    const settings = await db.getSettings();
+    const KEY = settings.apiKeys?.newsApiKey;
+    if (!KEY) {
+      return 'Posso buscar notícias se você configurar a sua chave da News API nas configurações.';
     }
     const url = `https://newsapi.org/v2/top-headlines?country=br&pageSize=5&apiKey=${KEY}`;
     try {
         const data = await fetch(url).then(r => r.json()).catch(() => null);
+        if (data?.status === 'error') {
+            console.error("NewsAPI Error:", data.message);
+            return 'Tive um problema ao buscar as notícias. Verifique sua chave de API.';
+        }
         const items = data?.articles?.slice(0, 3) || [];
         if (!items.length) return 'Não encontrei notícias agora. Quer tentar depois?';
 
         const news = items.map((n: any) => `• ${n.title}`).join('\n');
         return `📰 Manchetes principais:\n${news}\n\nQuer um resumo de alguma delas?`;
     } catch (e) {
-        return 'Tive um problema ao buscar as notícias. Verifique sua chave de API.'
+        console.error("News Fetch Error:", e);
+        return 'Tive um problema ao buscar as notícias. Verifique sua chave de API ou a conexão.'
     }
   }
 
@@ -166,6 +180,9 @@ async function handleWebIntents(prompt: string): Promise<string | null> {
 
 async function updateUserMemory(userText: string, nexusResponse: string) {
   const profile = await db.getUserProfile();
+  const settings = await db.getSettings();
+  if (!settings.behavior.enableDiary) return;
+
   const today = new Date().toISOString().split('T')[0];
 
   // Pequena reflexão automática do Nexus sobre a interação
@@ -187,6 +204,9 @@ async function updateUserMemory(userText: string, nexusResponse: string) {
 }
 
 async function ensureDailyReflection() {
+  const settings = await db.getSettings();
+  if (!settings.behavior.enableDiary) return;
+
   const system = await db.getSystemMemory();
   const last = system?.lastReflectionAt ?? 0;
   const elapsed = Date.now() - last;
@@ -210,20 +230,20 @@ async function ensureDailyReflection() {
 // ===========================
 
 export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
-  const { speak, addMessage, setStatus, generateResponse, getSettings, getUserProfile, setUserProfile, behavior, webEnabled } = opts;
+  const { speak, addMessage, setStatus, generateResponse, generateVisionResponse, getSettings, getUserProfile, setUserProfile, webEnabled } = opts;
 
   let curiosityTimer: number | null = null;
   let lastInteractionAt = Date.now();
 
   // Curiosidade autônoma: checa silêncio e sugere algo
   async function startCuriosityLoop() {
-    const settings = await getSettings();
-    const enabled = (behavior?.enableCuriosity ?? settings?.behavior?.enableCuriosity) !== false;
-
     if (curiosityTimer) window.clearInterval(curiosityTimer);
-    if (!enabled) return;
-
+    
     curiosityTimer = window.setInterval(async () => {
+      const settings = await getSettings();
+      const enabled = settings.behavior.enableCuriosity;
+      if (!enabled) return;
+        
       const idleMs = Date.now() - lastInteractionAt;
       if (idleMs < 120_000) return; // 2min
 
@@ -241,7 +261,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     }, 30_000);
   }
 
-  startCuriosityLoop().catch(() => {});
+  startCuriosityLoop().catch(console.error);
 
   function touchHeartbeat() {
     lastInteractionAt = Date.now();
@@ -283,29 +303,23 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     }
   }
 
-  async function handleUserTurn(userText: string, history: ChatMessage[]) {
+  async function handleUserTurn(userText: string, history: ChatMessage[], imageUrl?: string) {
     touchHeartbeat();
 
-    // 0) Nascimento (primeira execução)
     const bornJustNow = await ensureBirthOnce(addMessage, speak);
     if (bornJustNow) return;
 
-    // 1) Onboarding adaptativo (nome do usuário)
     const profile = await getUserProfile();
     if (!profile?.name) {
       const maybeName = userText.trim();
       if (maybeName && maybeName.split(' ').length <= 4 && /^[\p{L}\s.'-]+$/u.test(maybeName)) {
         await setUserProfile({ name: maybeName });
-        const greetOptions = [
-          `Prazer em te conhecer, ${maybeName}!`,
-          `Legal te conhecer, ${maybeName}.`,
-          `Perfeito, ${maybeName}!`,
-        ];
+        const greetOptions = [ `Prazer em te conhecer, ${maybeName}!`, `Legal te conhecer, ${maybeName}.`, `Perfeito, ${maybeName}!`, ];
         const greet = `${greetOptions[Math.floor(Math.random() * greetOptions.length)]} O que você quer fazer primeiro?`;
         addMessage({ role: 'model', text: greet, type: 'message' });
         speak(greet);
         return;
-      } else if (userText) { // User said something other than their name
+      } else if (userText) {
         const askName = 'Ainda não sei seu nome. Como posso te chamar?';
         addMessage({ role: 'model', text: askName, type: 'message' });
         speak(askName);
@@ -313,7 +327,18 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
       }
     }
 
-    // 2) Intenções web-aware (apenas se habilitado)
+    if (imageUrl) {
+        setStatus(AssistantStatus.THINKING);
+        const visionPrompt = `O usuário enviou uma imagem. Descreva o que você vê ou responda à pergunta dele. Pergunta: "${userText || 'O que é isso?'}"`;
+        const { text } = await generateVisionResponse(visionPrompt, imageUrl);
+        const finalText = text?.trim() || 'Não consegui interpretar a imagem. Podemos tentar outra?';
+
+        addMessage({ role: 'model', text: finalText, type: 'message' });
+        speak(finalText, () => setStatus(AssistantStatus.IDLE));
+        await updateUserMemory(userText, finalText);
+        return;
+    }
+
     if (webEnabled) {
       const webResult = await handleWebIntents(userText);
       if (webResult) {
@@ -325,7 +350,6 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
       }
     }
 
-    // 3) Contexto evolutivo + LLM
     setStatus(AssistantStatus.THINKING);
     const context = await buildContextPrompt(userText);
     const { text, functionCalls } = await generateResponse(context, [
@@ -333,10 +357,8 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
       { role: 'user', text: userText, type: 'message' },
     ]);
 
-    // 4) Executa tools (function calling)
     await routeFunctionCalls(functionCalls);
 
-    // 5) Resposta do modelo
     const finalText =
       text?.trim() ||
       'Eu processei sua mensagem, mas ainda estou organizando meus pensamentos. Pode me dizer mais um detalhe?';
@@ -344,7 +366,6 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     addMessage({ role: 'model', text: finalText, type: 'message' });
     speak(finalText, () => setStatus(AssistantStatus.IDLE));
 
-    // 6) Aprendizado/diário pós-turno
     await updateUserMemory(userText, finalText);
     await ensureDailyReflection();
   }
