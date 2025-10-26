@@ -21,12 +21,12 @@ declare const google: any;
 let gapiClientPromise: Promise<void> | null = null;
 let gisClientPromise: Promise<void> | null = null;
 let tokenClient: any = null;
-let autoSyncTimer: number | null = null;
 
 /**
  * Initializes the Google API and Identity clients by dynamically loading their scripts.
+ * Returns a promise that resolves when both clients are ready.
  */
-export const initGoogleClient = () => {
+export const initGoogleClient = (): Promise<any> => {
   if (!gapiClientPromise) {
     gapiClientPromise = new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -67,6 +67,7 @@ export const initGoogleClient = () => {
       document.body.appendChild(script);
     });
   }
+  return Promise.all([gapiClientPromise, gisClientPromise]);
 };
 
 const ensureClientsReady = async () => {
@@ -151,8 +152,11 @@ export const backupToGoogleDrive = async (): Promise<string> => {
   };
 
   const fileContent = JSON.stringify(backupData, null, 2);
-  const file = new Blob([fileContent], { type: 'application/json' });
-  const metadata = { name: BACKUP_FILENAME, mimeType: 'application/json' };
+  // Simple obfuscation (not encryption) via base64 to make the file not directly human-readable.
+  // This is a trade-off to enable cross-device sync without requiring user-managed passwords/keys.
+  const encodedContent = btoa(unescape(encodeURIComponent(fileContent)));
+  const file = new Blob([encodedContent], { type: 'application/octet-stream' });
+  const metadata = { name: BACKUP_FILENAME, mimeType: 'application/octet-stream' };
   
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
@@ -167,6 +171,7 @@ export const backupToGoogleDrive = async (): Promise<string> => {
   });
 
   const response = await request;
+  console.log('🧠 Backup sent to Google Drive.');
   return response.result.id;
 };
 
@@ -175,58 +180,50 @@ export const restoreFromGoogleDrive = async (): Promise<void> => {
     if (!isSignedIn()) throw new Error("User is not signed in.");
 
     const fileId = await findBackupFileId();
-    if (!fileId) throw new Error("Nenhum backup encontrado no Google Drive.");
+    if (!fileId) {
+        console.log("No backup file found in Google Drive. Skipping restore.");
+        return;
+    }
 
     const response = await gapi.client.drive.files.get({
         fileId: fileId,
         alt: 'media'
     });
-
-    const payload = JSON.parse(response.body);
-
-    // This is a destructive action, clearing local memory first.
-    await db.resetNexusMemory();
     
-    if (payload.profile) await db.saveUserProfile(payload.profile);
-    if (payload.system) await db.saveSystemMemory(payload.system);
+    // Decode the obfuscated content
+    const decodedContent = decodeURIComponent(escape(atob(response.body)));
+    const payload = JSON.parse(decodedContent);
+    
+    if (!payload?.system || !payload?.concepts) throw new Error('Arquivo de backup inválido ou corrompido.');
+
+    // Non-destructive merge restore.
+    console.log('Restoring from backup, merging with local data...');
+
+    if (payload.profile) {
+        const localProfile = await db.getUserProfile();
+        if (!localProfile?.name) { // Only restore profile if it doesn't exist locally
+            await db.saveUserProfile(payload.profile);
+        }
+    }
+    if (payload.system) {
+        await db.saveSystemMemory(payload.system); // System memory is a snapshot, safe to overwrite.
+    }
     if (payload.diary) {
       for (const entry of Object.values(payload.diary) as DiaryEntry[]) {
-        await db.saveDiaryEntry(entry);
+        await db.saveDiaryEntry(entry); // saveDiaryEntry has append logic
       }
     }
     if (payload.concepts?.length) {
       for (const concept of payload.concepts) {
-        await db.learnConcept(concept.name, concept, `Restaurado do backup de ${payload.exportedAt}`);
+        await db.learnConcept(concept.name, concept, `Restaurado do backup de ${payload.exportedAt}`); // learnConcept reinforces
       }
     }
+    
+    // Dispatch thought event to notify user of success
+    window.dispatchEvent(new CustomEvent('nexus-thought-update', {
+        detail: {
+            type: 'memory',
+            text: 'Recuperei minhas lembranças do Google Drive.',
+        },
+    }));
 };
-
-
-// =============================
-// SINCRONIZAÇÃO AUTOMÁTICA
-// =============================
-export async function startAutoSync(intervalMs = 1000 * 60 * 60 * 3) { // a cada 3h
-  if (autoSyncTimer) window.clearInterval(autoSyncTimer);
-  
-  const sync = async () => {
-      try {
-          // ensureClientsReady might not be done on first run
-          await Promise.all([gapiClientPromise, gisClientPromise]);
-          if (isSignedIn()) {
-              console.log('Sincronização automática em andamento...');
-              await backupToGoogleDrive();
-              console.log('Sincronização automática concluída.');
-          }
-      } catch (err) {
-          console.warn('Falha ao sincronizar automaticamente:', err);
-      }
-  };
-  
-  sync(); // Run once on start
-  autoSyncTimer = window.setInterval(sync, intervalMs);
-}
-
-export function stopAutoSync() {
-  if (autoSyncTimer) window.clearInterval(autoSyncTimer);
-  autoSyncTimer = null;
-}

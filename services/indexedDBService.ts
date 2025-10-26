@@ -159,16 +159,24 @@ class IndexedDBService {
       const defaultSettings: AppSettings = {
           voice: { voiceURI: null, rate: 1, pitch: 1 },
           behavior: { enableProactive: true, enableCuriosity: true, enableDiary: true },
-          apiKeys: {},
+          apiKeys: { deepseekApiKey: '' },
+          llmProvider: 'gemini',
+          cognitive: {
+              emotionalIntensity: 1.0,
+              learningRate: 1.0,
+              consolidationFrequency: 60,
+          },
       };
       const stored = await (await this.database).get('settings', 1);
       if (stored) {
+         // Deep merge to ensure new settings fields get default values if not present
          return {
             ...defaultSettings,
             ...stored,
             voice: { ...defaultSettings.voice, ...stored.voice },
             behavior: { ...defaultSettings.behavior, ...stored.behavior },
             apiKeys: { ...defaultSettings.apiKeys, ...stored.apiKeys },
+            cognitive: { ...defaultSettings.cognitive, ...stored.cognitive },
          };
       }
       // First time run, save defaults
@@ -186,12 +194,17 @@ class IndexedDBService {
     const db = await this.database;
     const key = name.toLowerCase().trim();
     if (!key) return;
+    
+    const settings = await this.getSettings();
+    const learningRate = settings.cognitive?.learningRate || 1.0;
+    const confidenceBoost = 0.15 * learningRate;
+    
     const existing = await db.get('concepts', key);
 
     const updatedConcept: Concept = {
         name: name,
         definition: metadata.definition || existing?.definition,
-        confidence: Math.min(1.0, (existing?.confidence || 0.3) + 0.15),
+        confidence: Math.min(1.0, (existing?.confidence || 0.3) + confidenceBoost),
         related: [...new Set([...(existing?.related || []), ...(metadata.related || [])])],
         evidence: [evidence, ...(existing?.evidence || [])].slice(0, 5),
         createdAt: existing?.createdAt || Date.now(),

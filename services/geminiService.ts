@@ -1,5 +1,4 @@
 
-
 import { GoogleGenAI } from "@google/genai";
 import { ChatMessage } from '../types';
 
@@ -35,15 +34,27 @@ export const generateGeminiResponse = async (prompt: string, history: ChatMessag
         const text = response.text;
         const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
         
-        const sources = groundingChunks
-            .map((chunk: any) => chunk.web)
-            .filter(Boolean)
-            .map((web: any) => ({ uri: web.uri, title: web.title }))
-            .filter((source: any) => source.uri && source.title);
+        // FIX: The previous map/filter with a type guard was causing a type inference error.
+        // This was refactored to use `reduce` for more robust and type-safe extraction of web sources.
+        // FIX: Correctly type the reduce accumulator and initial value to resolve type inference issues.
+        const sources = groundingChunks.reduce((acc: { uri: string; title: string }[], chunk: any) => {
+            if (chunk?.web?.uri && chunk?.web?.title) {
+                acc.push(chunk.web);
+            }
+            return acc;
+        }, [] as { uri: string; title: string }[]);
 
         // Deduplicate sources by URI
-        // FIX: Explicitly type uniqueSources to prevent TypeScript from inferring it as unknown[].
-        const uniqueSources: { uri: string; title: string }[] = Array.from(new Map(sources.map(item => [item.uri, item])).values());
+        // FIX: The `Array.from(new Map(...).values())` one-liner can cause type inference issues in some TS environments,
+        // leading to the `unknown[]` type error. Replaced with a more robust and explicit loop.
+        const uniqueSources: { uri: string; title: string }[] = [];
+        const seenUris = new Set<string>();
+        for (const source of sources) {
+            if (!seenUris.has(source.uri)) {
+                seenUris.add(source.uri);
+                uniqueSources.push(source);
+            }
+        }
 
         return { text, sources: uniqueSources };
     } catch (error: any) {

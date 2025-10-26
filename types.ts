@@ -33,6 +33,14 @@ export interface ChatMessage {
   sources?: { uri: string; title: string }[];
 }
 
+// --- Synapses for Neural Memory ---
+export interface Synapse {
+  source: string;
+  target: string;
+  strength: number; // 0 to 1
+  lastUsed: number;
+}
+
 // --- IndexedDB Schemas ---
 export interface Concept {
   id?: number;
@@ -69,6 +77,8 @@ export interface SystemMemory {
     emotion: Mood;
     reflections: string[];
     lastReflectionAt?: number;
+    synapses?: Synapse[];
+    interactionCount?: number;
 }
 
 export interface DiaryEntry {
@@ -92,9 +102,21 @@ export interface BehaviorSettings {
     enableDiary?: boolean;
 }
 
+export interface CognitiveSettings {
+    emotionalIntensity: number; // 0.5 to 1.5
+    learningRate: number;       // 0.5 to 2.0
+    consolidationFrequency: number; // in minutes
+}
+
+export interface ApiKeySettings {
+    deepseekApiKey?: string;
+}
+
 export interface AppSettings {
     id?: number;
     voice: VoiceSettings;
     behavior: BehaviorSettings;
-    apiKeys?: Record<string, never>; // API keys are now handled by environment variables
+    apiKeys?: ApiKeySettings;
+    llmProvider?: 'gemini' | 'deepseek';
+    cognitive?: CognitiveSettings;
 }

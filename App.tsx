@@ -7,7 +7,7 @@ import { db } from './services/indexedDBService';
 import { Avatar } from './components/Avatar';
 import { Message } from './components/Message';
 import { SettingsPanel } from './components/SettingsPanel';
-import { initGoogleClient, startAutoSync } from './services/syncService';
+import { initGoogleClient, isSignedIn, restoreFromGoogleDrive } from './services/syncService';
 import { createNexusBrain, NexusBrain } from './services/nexusBrain';
 import { CameraView } from './components/CameraView';
 import { StartScreen } from './components/StartScreen';
@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isStarted, setIsStarted] = useState(false);
+  const [thought, setThought] = useState<string | null>(null);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const brainRef = useRef<NexusBrain | null>(null);
@@ -32,6 +33,23 @@ const App: React.FC = () => {
   useEffect(() => {
     isChatVisibleRef.current = isChatVisible;
   }, [isChatVisible]);
+  
+  useEffect(() => {
+    const handleThoughtUpdate = (event: CustomEvent) => {
+        const { text } = event.detail;
+        setThought(text);
+        const timer = setTimeout(() => {
+            setThought(null);
+        }, 6000); // Hide after 6 seconds
+        return () => clearTimeout(timer);
+    };
+
+    window.addEventListener('nexus-thought-update', handleThoughtUpdate as EventListener);
+
+    return () => {
+        window.removeEventListener('nexus-thought-update', handleThoughtUpdate as EventListener);
+    };
+  }, []);
 
   const addMessage = useCallback(async (message: ChatMessage) => {
     const messageWithTimestamp = { ...message, timestamp: Date.now() };
@@ -50,7 +68,7 @@ const App: React.FC = () => {
     settings?.voice
   );
   
-  const { generateResponse, generateVisionResponse } = useLlm();
+  const { generateResponse, generateVisionResponse } = useLlm(settings);
   
   // App Initialization
   useEffect(() => {
@@ -59,8 +77,19 @@ const App: React.FC = () => {
       setMessages(history);
       const loadedSettings = await db.getSettings();
       setSettings(loadedSettings);
-      initGoogleClient();
-      startAutoSync();
+      
+      try {
+        await initGoogleClient();
+        if (isSignedIn()) {
+          console.log("User already signed in. Attempting to restore memory from Drive...");
+          await restoreFromGoogleDrive();
+          // Refresh messages from DB after potential restore
+          setMessages(await db.getChatHistory());
+        }
+      } catch (error) {
+          console.error("Failed to initialize or restore from Google services on startup:", error);
+      }
+      
       setIsInitializing(false);
     };
     initializeApp();
@@ -79,7 +108,6 @@ const App: React.FC = () => {
         getSettings: db.getSettings,
         getUserProfile: db.getUserProfile,
         setUserProfile: db.saveUserProfile,
-        behavior: settings.behavior,
       });
       brainRef.current = brain;
       
@@ -180,7 +208,16 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen bg-gray-900 flex flex-col overflow-hidden relative">
+    <div className="h-screen w-screen bg-gray-900 text-white flex flex-col overflow-hidden relative">
+      <style>{`
+        @keyframes fade-in-out {
+          0%, 100% { opacity: 0; transform: translateY(10px) scale(0.95); }
+          10%, 90% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .animate-fade-in-out {
+          animation: fade-in-out 6s ease-in-out forwards;
+        }
+      `}</style>
       {!isStarted ? (
           <StartScreen onStart={() => setIsStarted(true)} onOpenSettings={() => setIsSettingsVisible(true)} />
       ) : (
@@ -194,7 +231,12 @@ const App: React.FC = () => {
           </button>
 
           <main className="flex-grow flex items-center justify-center transition-all duration-500 ease-in-out">
-            <div className={`transition-transform duration-500 ease-in-out ${isChatVisible ? 'scale-100' : 'scale-125'}`}>
+            <div className={`transition-transform duration-500 ease-in-out relative ${isChatVisible ? 'scale-100' : 'scale-125'}`}>
+               {thought && (
+                <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 z-30 p-3 bg-gray-700/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-out max-w-xs text-center border border-gray-600">
+                    <p className="text-sm text-gray-300 italic">💭 {thought}</p>
+                </div>
+              )}
               <Avatar status={status} />
             </div>
           </main>

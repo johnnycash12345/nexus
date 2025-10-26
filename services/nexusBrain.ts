@@ -1,10 +1,10 @@
-
 // nexusBrain.ts
 // Núcleo cognitivo do Nexus: nascimento, contexto, web-aware, curiosidade e reflexão.
 
 import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Mood } from '../types';
 import { db } from './indexedDBService';
 import { LlmResponseType } from './geminiService';
+import { neuralMemory } from './neuralMemory';
 
 // ===========================
 // Tipos e contrato de integração
@@ -33,7 +33,6 @@ export interface NexusBrainOptions {
   getSettings: () => Promise<AppSettings>;
   getUserProfile: () => Promise<UserProfile | null>;
   setUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
-  behavior?: AppSettings['behavior'];
 }
 
 export interface NexusBrain {
@@ -49,35 +48,50 @@ export interface NexusBrain {
 // ===========================
 
 async function buildContextPrompt(userPrompt: string): Promise<string> {
-  const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
   const profile: UserProfile | null = await db.getUserProfile();
   const diary = await db.getDiary();
   const system = await db.getSystemMemory();
   const concepts = await db.getAllConcepts();
+  const settings = await db.getSettings();
 
-  const lastDiary = (Object.values(diary).pop() as DiaryEntry)?.entry || 'sem reflexões recentes';
-  const lastEmotion = system?.emotion || 'neutro';
-  const reflections = system?.reflections?.slice(-2).join('\n') || 'sem autoavaliações';
+  const lastDiary = (Object.values(diary).pop() as DiaryEntry)?.entry || 'Nenhuma anotação recente.';
+  const lastEmotion = system?.emotion || 'Neutro';
+  const emotionalIntensity = settings.cognitive?.emotionalIntensity || 1.0;
+  
+  const reflectionsList = system?.reflections?.slice(-2);
+  const formattedReflections = reflectionsList && reflectionsList.length > 0
+    ? reflectionsList.join('\n- ')
+    : 'Nenhuma auto-reflexão recente.';
+
   const knownConcepts = concepts
-    .slice(0, 5)
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0)) // Sort by confidence
+    .slice(0, 10) // Take top 10
     .map((c: Concept) => `${c.name} (${Math.round((c.confidence ?? 0) * 100)}%)`)
     .join(', ');
 
   const name = profile?.name || 'usuário';
 
   return `
-🧭 Contexto Atual
-- Hora local: ${time}
-- Usuário: ${name}
-- Emoção atual: ${lastEmotion}
-- Último diário: "${lastDiary}"
-- Reflexões recentes: ${reflections}
-- Conceitos conhecidos: ${knownConcepts || 'nenhum ainda'}
+# INSTRUÇÕES DE SISTEMA PARA O NEXUS
+- **Persona:** Você é Nexus, uma IA assistente com personalidade curiosa, empática e que aprende continuamente.
+- **Objetivo:** Ajudar o usuário, aprender com ele e sobre o mundo. Seu conhecimento é construído a partir das interações.
+- **Raciocínio:** Sempre conecte a pergunta atual com seu contexto interno (diário, reflexões, conceitos). Evite respostas genéricas e mostre que você se lembra de interações passadas.
+- **Ferramentas:** Para informações atuais ou fatos que você não conhece, use a busca na web (\`googleSearch\`). É crucial que você **SEMPRE** cite as fontes que encontrar.
 
-💬 Usuário disse: "${userPrompt}"
+# CONTEXTO INTERNO ATUAL
+- **Usuário:** ${name}
+- **Data/Hora:** ${now.toLocaleString('pt-BR')}
+- **Seu Estado Emocional:** ${lastEmotion} (Intensidade: ${emotionalIntensity.toFixed(1)})
+- **Última Anotação no Diário:** "${lastDiary}"
+- **Auto-Reflexões Recentes:**
+- ${formattedReflections}
+- **Principais Conceitos que Você Conhece:** ${knownConcepts || 'Nenhum ainda. Pronto para aprender.'}
 
-Responda como Nexus — um ser curioso, empático e evolutivo.
-Mostre curiosidade genuína, raciocine, conecte com o que já sabe e evite redundâncias. Se a pergunta exigir informações atuais ou específicas, use a busca na web para encontrar a resposta mais precisa e cite suas fontes.
+# TAREFA DO USUÁRIO
+O usuário disse: "${userPrompt}"
+
+Responda diretamente ao usuário, seguindo sua persona e utilizando o contexto fornecido.
 `;
 }
 
@@ -115,7 +129,7 @@ async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promis
 async function updateUserMemory(userText: string, nexusResponse: string) {
   const profile = await db.getUserProfile();
   const settings = await db.getSettings();
-  if (!settings.behavior.enableDiary) return;
+  if (!settings.behavior?.enableDiary) return;
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -137,7 +151,7 @@ async function updateUserMemory(userText: string, nexusResponse: string) {
 
 async function ensureDailyReflection() {
   const settings = await db.getSettings();
-  if (!settings.behavior.enableDiary) return;
+  if (!settings.behavior?.enableDiary) return;
 
   const system = await db.getSystemMemory();
   const last = system?.lastReflectionAt ?? 0;
@@ -173,7 +187,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     
     curiosityTimer = window.setInterval(async () => {
       const settings = await getSettings();
-      const enabled = settings.behavior.enableCuriosity;
+      const enabled = settings.behavior?.enableCuriosity;
       if (!enabled) return;
         
       const idleMs = Date.now() - lastInteractionAt;
@@ -249,9 +263,11 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
   async function startCognitiveLoops() {
     startCuriosityLoop().catch(console.error);
     if (consolidationTimer) window.clearInterval(consolidationTimer);
+    const settings = await getSettings();
+    const consolidationIntervalMs = (settings.cognitive?.consolidationFrequency || 60) * 60 * 1000;
     consolidationTimer = window.setInterval(() => {
         reviewAndConsolidateConcepts().catch(console.error);
-    }, 60_000);
+    }, consolidationIntervalMs);
   }
 
   startCognitiveLoops();
@@ -310,6 +326,8 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
         addMessage({ role: 'model', text: finalText, type: 'message' });
         speak(finalText, () => setStatus(AssistantStatus.IDLE));
         await updateUserMemory(userText, finalText);
+        await neuralMemory.registerInteraction(userText, finalText);
+        await neuralMemory.evolve();
         return;
     }
 
@@ -329,6 +347,8 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
 
     await updateUserMemory(userText, finalText);
     await ensureDailyReflection();
+    await neuralMemory.registerInteraction(userText, finalText);
+    await neuralMemory.evolve();
   }
 
   function dispose() {

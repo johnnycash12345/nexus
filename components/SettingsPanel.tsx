@@ -10,7 +10,7 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-type Tab = 'geral' | 'comportamento' | 'dados';
+type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória';
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChange, onClose }) => {
   const [activeTab, setActiveTab] = useState<Tab>('geral');
@@ -40,7 +40,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
     fetchVoices();
     window.speechSynthesis.onvoiceschanged = fetchVoices;
     
-    if (activeTab === 'dados') {
+    if (activeTab === 'memória') {
         db.getAllConcepts().then(setConcepts);
     }
   }, [activeTab]);
@@ -177,7 +177,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
             </div>
           </div>
         );
-      case 'comportamento':
+      case 'cérebro':
         return (
             <div>
                 <h3 className="text-lg font-semibold text-cyan-300 mb-4">Comportamento e Personalidade</h3>
@@ -187,26 +187,72 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
                             <p className="font-medium text-white">Iniciativa Proativa</p>
                             <p className="text-sm text-gray-400">Permitir que o Nexus inicie conversas.</p>
                         </div>
-                        <input type="checkbox" name="enableProactive" checked={localSettings.behavior.enableProactive} onChange={(e) => handleNestedSettingChange('behavior', 'enableProactive', e.target.checked)} className="toggle-checkbox" />
+                        <input type="checkbox" checked={localSettings.behavior?.enableProactive} onChange={(e) => handleNestedSettingChange('behavior', 'enableProactive', e.target.checked)} className="toggle-checkbox" />
                     </label>
                     <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
                         <div>
                             <p className="font-medium text-white">Curiosidade Autônoma</p>
                             <p className="text-sm text-gray-400">Permitir que o Nexus faça perguntas quando ocioso.</p>
                         </div>
-                        <input type="checkbox" name="enableCuriosity" checked={localSettings.behavior.enableCuriosity} onChange={(e) => handleNestedSettingChange('behavior', 'enableCuriosity', e.target.checked)} className="toggle-checkbox" />
+                        <input type="checkbox" checked={localSettings.behavior?.enableCuriosity} onChange={(e) => handleNestedSettingChange('behavior', 'enableCuriosity', e.target.checked)} className="toggle-checkbox" />
                     </label>
                     <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
                         <div>
                             <p className="font-medium text-white">Diário e Reflexões</p>
                             <p className="text-sm text-gray-400">Habilitar o Nexus para manter um diário sobre as interações.</p>
                         </div>
-                        <input type="checkbox" name="enableDiary" checked={localSettings.behavior.enableDiary} onChange={(e) => handleNestedSettingChange('behavior', 'enableDiary', e.target.checked)} className="toggle-checkbox" />
+                        <input type="checkbox" checked={localSettings.behavior?.enableDiary} onChange={(e) => handleNestedSettingChange('behavior', 'enableDiary', e.target.checked)} className="toggle-checkbox" />
                     </label>
+                </div>
+                <div className="mt-6">
+                    <h3 className="text-lg font-semibold text-cyan-300 mb-4">Parâmetros Cognitivos (Avançado)</h3>
+                    <div className="space-y-4">
+                        <div>
+                            <label htmlFor="emotional-intensity" className="block text-sm font-medium text-gray-300 mb-1">Intensidade Emocional ({localSettings.cognitive?.emotionalIntensity.toFixed(1)})</label>
+                            <input id="emotional-intensity" type="range" min="0.5" max="1.5" step="0.1" value={localSettings.cognitive?.emotionalIntensity || 1.0} onChange={(e) => handleNestedSettingChange('cognitive', 'emotionalIntensity', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                        </div>
+                        <div>
+                            <label htmlFor="learning-rate" className="block text-sm font-medium text-gray-300 mb-1">Velocidade de Aprendizado ({localSettings.cognitive?.learningRate.toFixed(1)})</label>
+                            <input id="learning-rate" type="range" min="0.5" max="2" step="0.1" value={localSettings.cognitive?.learningRate || 1.0} onChange={(e) => handleNestedSettingChange('cognitive', 'learningRate', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                        </div>
+                    </div>
                 </div>
             </div>
         );
-      case 'dados':
+    case 'integrações':
+        return (
+            <div>
+                <h3 className="text-lg font-semibold text-cyan-300 mb-4">Provedor de LLM</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label htmlFor="llm-provider" className="block text-sm font-medium text-gray-300 mb-1">Modelo de Linguagem</label>
+                        <select id="llm-provider" value={localSettings.llmProvider || 'gemini'} onChange={(e) => handleSettingChange('llmProvider', e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500">
+                            <option value="gemini">Google Gemini (Padrão)</option>
+                            <option value="deepseek">DeepSeek</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="deepseek-api-key" className="block text-sm font-medium text-gray-300 mb-1">Chave de API DeepSeek</label>
+                        <input
+                            type="password"
+                            id="deepseek-api-key"
+                            value={localSettings.apiKeys?.deepseekApiKey || ''}
+                            onChange={(e) => handleNestedSettingChange('apiKeys', 'deepseekApiKey', e.target.value)}
+                            placeholder="Cole sua chave aqui"
+                            className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500"
+                            disabled={localSettings.llmProvider !== 'deepseek'}
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                            Necessária apenas se o provedor for DeepSeek. Obtenha uma em <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">platform.deepseek.com</a>.
+                        </p>
+                    </div>
+                     <div className="p-3 bg-gray-700/50 border border-cyan-500/20 rounded-md">
+                        <p className="text-sm text-gray-300">A chave de API do **Google Gemini** é gerenciada pelo ambiente e não precisa ser inserida aqui.</p>
+                     </div>
+                </div>
+            </div>
+        );
+      case 'memória':
         return (
           <div>
             <div className="p-3 bg-gray-700 rounded-md mb-4">
@@ -284,8 +330,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
         
         <nav className="flex-shrink-0 flex border-b border-gray-700">
           <button onClick={() => handleTabChange('geral')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'geral' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Geral</button>
-          <button onClick={() => handleTabChange('comportamento')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'comportamento' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Comportamento</button>
-          <button onClick={() => handleTabChange('dados')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'dados' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Dados</button>
+          <button onClick={() => handleTabChange('cérebro')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'cérebro' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Cérebro</button>
+          <button onClick={() => handleTabChange('integrações')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'integrações' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Integrações</button>
+          <button onClick={() => handleTabChange('memória')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'memória' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Memória & Dados</button>
         </nav>
 
         <main className="p-4 flex-grow max-h-[70vh] overflow-y-auto">
