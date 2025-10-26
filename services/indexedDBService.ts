@@ -1,6 +1,6 @@
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Mood } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Mood, Personality } from '../types';
 
 const DB_NAME = 'NexusDB';
 const DB_VERSION = 4; // Increment version for schema change
@@ -83,11 +83,21 @@ class IndexedDBService {
       const existing = await db.get('systemMemory', 1) ?? {
           born: false,
           birthTime: '',
-          personality: '',
-          emotion: Mood.CURIOUS,
+          personality: {
+              curiosity: 0.6,
+              enthusiasm: 0.5,
+              formality: 0.5,
+              humor: 0.3,
+          },
           reflections: [],
       };
-      await db.put('systemMemory', { ...existing, ...memory, id: 1 });
+      
+      // Smart merge personality to handle partial updates
+      const updatedPersonality = memory.personality 
+          ? { ...(existing.personality || {}), ...memory.personality } 
+          : existing.personality;
+
+      await db.put('systemMemory', { ...existing, ...memory, personality: updatedPersonality, id: 1 });
   }
 
   addSystemReflection = async (reflection: string): Promise<void> => {

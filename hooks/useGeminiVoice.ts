@@ -1,0 +1,90 @@
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { VoiceService } from '../services/voiceService';
+import { LiveServerMessage } from '@google/genai';
+
+export interface TranscriptionTurn {
+    user: string;
+    model: string;
+}
+
+export const useGeminiVoice = (onNewTurn: (turn: TranscriptionTurn) => void) => {
+    const [isSessionActive, setIsSessionActive] = useState(false);
+    const [isNexusSpeaking, setIsNexusSpeaking] = useState(false);
+    const [currentUserTranscript, setCurrentUserTranscript] = useState('');
+    const [currentNexusTranscript, setCurrentNexusTranscript] = useState('');
+
+    const voiceServiceRef = useRef<VoiceService | null>(null);
+    const userTranscriptRef = useRef('');
+    const nexusTranscriptRef = useRef('');
+
+    useEffect(() => {
+        // Instantiate the service once
+        voiceServiceRef.current = new VoiceService();
+    }, []);
+
+    const handleMessage = (message: LiveServerMessage) => {
+        if (message.serverContent?.inputTranscription) {
+            const text = message.serverContent.inputTranscription.text;
+            userTranscriptRef.current += text;
+            setCurrentUserTranscript(userTranscriptRef.current);
+        } else if (message.serverContent?.outputTranscription) {
+            const text = message.serverContent.outputTranscription.text;
+            nexusTranscriptRef.current += text;
+            setCurrentNexusTranscript(nexusTranscriptRef.current);
+        }
+
+        if (message.serverContent?.modelTurn) {
+            setIsNexusSpeaking(true);
+        }
+
+        if (message.serverContent?.turnComplete) {
+            const finalUser = userTranscriptRef.current;
+            const finalNexus = nexusTranscriptRef.current;
+            
+            if (finalUser || finalNexus) {
+                onNewTurn({ user: finalUser, model: finalNexus });
+            }
+            
+            userTranscriptRef.current = '';
+            nexusTranscriptRef.current = '';
+            setCurrentUserTranscript('');
+            setCurrentNexusTranscript('');
+            setIsNexusSpeaking(false);
+        }
+    };
+
+    const startSession = useCallback(async () => {
+        if (isSessionActive || !voiceServiceRef.current) return;
+        setIsSessionActive(true);
+        
+        await voiceServiceRef.current.connect(
+            handleMessage,
+            (e) => {
+                console.error("Voice service error:", e);
+                setIsSessionActive(false);
+            },
+            (e) => {
+                console.log("Voice service closed:", e);
+                setIsSessionActive(false);
+            }
+        ).catch(err => {
+            console.error("Failed to connect voice service:", err);
+            setIsSessionActive(false);
+        });
+    }, [isSessionActive, onNewTurn]);
+
+    const endSession = useCallback(async () => {
+        if (!isSessionActive || !voiceServiceRef.current) return;
+        await voiceServiceRef.current.close();
+        setIsSessionActive(false);
+    }, [isSessionActive]);
+
+    return {
+        isSessionActive,
+        isNexusSpeaking,
+        currentUserTranscript,
+        currentNexusTranscript,
+        startSession,
+        endSession,
+    };
+};

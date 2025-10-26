@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AssistantStatus, ChatMessage, AppSettings } from './types';
-import { useSpeech } from './hooks/useSpeech';
-import { useLlm } from './hooks/useLlmOffline';
+import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
+import { useLlm } from './hooks/useLlm';
 import { db } from './services/indexedDBService';
 import { Avatar } from './components/Avatar';
 import { Message } from './components/Message';
@@ -73,17 +73,30 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const { isListening, startListening, stopListening, speak } = useSpeech(
-    (text: string) => brainRef.current?.handleUserTurn(text, messages),
-    settings?.voice
-  );
+  const handleNewTurn = useCallback(async (turn: TranscriptionTurn) => {
+      if (turn.user) {
+          await addMessage({ role: 'user', text: turn.user, type: 'message' });
+      }
+      if (turn.model) {
+          await addMessage({ role: 'model', text: turn.model, type: 'message' });
+          // Note: audio is played by the voice service itself
+      }
+  }, [addMessage]);
+
+  const { 
+    isSessionActive, 
+    isNexusSpeaking,
+    currentUserTranscript,
+    currentNexusTranscript,
+    startSession,
+    endSession 
+  } = useGeminiVoice(handleNewTurn);
   
   const { generateResponse, generateVisionResponse } = useLlm(settings);
   
   // App Initialization
   useEffect(() => {
     const initializeApp = async () => {
-      // Restore from Google Drive might have already happened, so load latest data.
       const history = await db.getChatHistory();
       setMessages(history);
       const loadedSettings = await db.getSettings();
@@ -91,14 +104,23 @@ const App: React.FC = () => {
       setIsInitializing(false);
     };
     initializeApp();
-  }, [syncStatus]); // Rerun init after sync completes
+  }, [syncStatus]);
   
   // Brain Initialization
   useEffect(() => {
       if (isInitializing || !settings || !isStarted) return;
 
+      // The speak function for text-based responses
+      const textSpeak = (text: string, onEnd?: () => void) => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        // Basic voice selection, can be enhanced
+        utterance.lang = 'pt-BR';
+        utterance.onend = () => onEnd?.();
+        window.speechSynthesis.speak(utterance);
+      };
+
       const brain = createNexusBrain({
-        speak,
+        speak: textSpeak, // Use basic speech synth for text turn
         addMessage,
         setStatus,
         generateResponse,
@@ -119,36 +141,38 @@ const App: React.FC = () => {
       return () => {
         brain.dispose();
       };
-  }, [isInitializing, isStarted, settings, speak, addMessage, generateResponse, generateVisionResponse, messages.length]);
+  }, [isInitializing, isStarted, settings, addMessage, generateResponse, generateVisionResponse, messages.length]);
 
 
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [messages, isChatVisible]);
+  }, [messages, isChatVisible, currentUserTranscript, currentNexusTranscript]);
 
   useEffect(() => {
-    if (status !== AssistantStatus.IDLE && status !== AssistantStatus.SLEEPY) {
-      brainRef.current?.touchHeartbeat();
+    const thinking = status === AssistantStatus.THINKING;
+    if (isSessionActive) {
+        if (isNexusSpeaking) {
+            setStatus(AssistantStatus.SPEAKING);
+        } else {
+            setStatus(AssistantStatus.LISTENING);
+        }
+    } else if (!thinking) {
+        setStatus(AssistantStatus.IDLE);
     }
-    if(llmStatus !== 'working') {
-       setStatus(isListening ? AssistantStatus.LISTENING : status === AssistantStatus.SLEEPY ? AssistantStatus.SLEEPY : AssistantStatus.IDLE);
-    }
-  }, [isListening, status]);
-  
-  const llmStatus = status === AssistantStatus.THINKING ? 'working' : 'idle';
-
+  }, [isSessionActive, isNexusSpeaking, status]);
 
   const handleMicClick = () => {
     brainRef.current?.touchHeartbeat();
     if (status === AssistantStatus.SLEEPY) setStatus(AssistantStatus.IDLE);
-    if (isListening) {
-        stopListening();
+    
+    if (isSessionActive) {
+        endSession();
     } else {
         setIsChatVisible(true);
         setHasNewMessage(false);
-        startListening();
+        startSession();
     }
   };
   
@@ -157,7 +181,7 @@ const App: React.FC = () => {
     const text = inputValue.trim();
     if (!text) return;
     
-    stopListening();
+    if(isSessionActive) endSession();
     setInputValue('');
     
     const userMessage: ChatMessage = { role: 'user', text, type: 'message' };
@@ -171,6 +195,7 @@ const App: React.FC = () => {
   };
   
   const handleVisionSubmit = async (imageData: string, prompt: string) => {
+      if(isSessionActive) endSession();
       setIsCameraOpen(false);
       const userMessage: ChatMessage = {
           role: 'user',
@@ -214,6 +239,13 @@ const App: React.FC = () => {
         }
         .animate-fade-in-out {
           animation: fade-in-out 6s ease-in-out forwards;
+        }
+        .animate-fade-in-slide-up {
+          animation: fade-in-slide-up 0.3s ease-out forwards;
+        }
+        @keyframes fade-in-slide-up {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
       {!isStarted ? (
@@ -264,6 +296,20 @@ const App: React.FC = () => {
                 {messages.map((msg, index) => (
                   <Message key={msg.id || index} {...msg} onAction={handleMessageAction} />
                 ))}
+                {currentUserTranscript && (
+                    <div className="flex items-end justify-end animate-fade-in-slide-up">
+                        <div className="max-w-xs md:max-w-md lg:max-w-lg px-4 py-3 rounded-2xl shadow-md bg-cyan-600/70 rounded-br-none opacity-70">
+                            <p className="text-white whitespace-pre-wrap italic">{currentUserTranscript}...</p>
+                        </div>
+                    </div>
+                )}
+                 {currentNexusTranscript && (
+                    <div className="flex items-end justify-start animate-fade-in-slide-up">
+                        <div className="max-w-xs md:max-w-md lg:max-w-lg px-4 py-3 rounded-2xl shadow-md bg-gray-700/70 rounded-bl-none opacity-70">
+                            <p className="text-white whitespace-pre-wrap italic">{currentNexusTranscript}...</p>
+                        </div>
+                    </div>
+                )}
               </div>
             </div>
             
@@ -287,10 +333,10 @@ const App: React.FC = () => {
                     <button
                         type="button"
                         onClick={handleMicClick}
-                        aria-label={isListening ? 'Parar de ouvir' : 'Começar a ouvir'}
-                        className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center transition-colors ${isListening ? 'bg-red-600 animate-pulse ring-4 ring-red-500/50' : 'bg-cyan-600 hover:bg-cyan-500'}`}
+                        aria-label={isSessionActive ? 'Encerrar conversa' : 'Iniciar conversa por voz'}
+                        className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center transition-colors ${isSessionActive ? 'bg-red-600 animate-pulse ring-4 ring-red-500/50' : 'bg-cyan-600 hover:bg-cyan-500'}`}
                     >
-                       {isListening ? (
+                       {isSessionActive ? (
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M5 5a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" clipRule="evenodd" />
                             </svg>

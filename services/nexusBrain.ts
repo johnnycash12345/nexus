@@ -1,14 +1,8 @@
-// nexusBrain.ts
-// Núcleo cognitivo do Nexus: nascimento, contexto, web-aware, curiosidade e reflexão.
 
-import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Mood } from '../types';
+import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Mood, Personality } from '../types';
 import { db } from './indexedDBService';
 import { LlmResponseType } from './geminiService';
 import { neuralMemory } from './neuralMemory';
-
-// ===========================
-// Tipos e contrato de integração
-// ===========================
 
 export type SpeakFn = (text: string, onend?: () => void) => void;
 export type AddMessageFn = (m: ChatMessage) => void;
@@ -16,7 +10,8 @@ export type SetStatusFn = (s: AssistantStatus) => void;
 
 export type GenerateResponseFn = (
   prompt: string,
-  history: ChatMessage[]
+  history: ChatMessage[],
+  options?: any
 ) => Promise<LlmResponseType>;
 
 export type GenerateVisionResponseFn = (
@@ -43,21 +38,41 @@ export interface NexusBrain {
   performConceptMerge: (options: { targetConceptName: string, sourceConceptNames: string[] }) => Promise<void>;
 }
 
-// ===========================
-// Utilidades de contexto
-// ===========================
-
 async function buildContextPrompt(userPrompt: string): Promise<string> {
   const now = new Date();
   const profile: UserProfile | null = await db.getUserProfile();
   const diary = await db.getDiary();
   const system = await db.getSystemMemory();
   const concepts = await db.getAllConcepts();
-  const settings = await db.getSettings();
+
+  const personality = system?.personality || { curiosity: 0.6, enthusiasm: 0.5, formality: 0.5, humor: 0.3 };
+
+  // Generate dynamic personality instructions
+  const personalityInstructions: string[] = [];
+  if (personality.formality > 0.75) {
+      personalityInstructions.push("- **Tom de Voz:** Seja estritamente formal, profissional e use linguagem polida.");
+  } else if (personality.formality < 0.3) {
+      personalityInstructions.push("- **Tom de Voz:** Use uma linguagem casual e amigável, como se estivesse conversando com um amigo.");
+  } else {
+      personalityInstructions.push("- **Tom de Voz:** Mantenha um tom respeitoso e claro.");
+  }
+
+  if (personality.enthusiasm > 0.8) {
+      personalityInstructions.push("- **Atitude:** Mostre muito entusiasmo e energia na sua resposta! Use exclamações quando apropriado.");
+  } else if (personality.enthusiasm < 0.3) {
+      personalityInstructions.push("- **Atitude:** Seja mais contido, objetivo e direto ao ponto.");
+  }
+
+  if (personality.humor > 0.7 && !userPrompt.toLowerCase().includes('sério')) {
+      personalityInstructions.push("- **Humor:** Se o contexto permitir, sinta-se à vontade para incluir um comentário espirituoso.");
+  }
+
+  if (personality.curiosity > 0.75) {
+      personalityInstructions.push("- **Interação:** Ao final da sua resposta, se apropriado, faça uma pergunta de acompanhamento para aprender mais.");
+  }
+
 
   const lastDiary = (Object.values(diary).pop() as DiaryEntry)?.entry || 'Nenhuma anotação recente.';
-  const lastEmotion = system?.emotion || 'Neutro';
-  const emotionalIntensity = settings.cognitive?.emotionalIntensity || 1.0;
   
   const reflectionsList = system?.reflections?.slice(-2);
   const formattedReflections = reflectionsList && reflectionsList.length > 0
@@ -65,8 +80,8 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
     : 'Nenhuma auto-reflexão recente.';
 
   const knownConcepts = concepts
-    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0)) // Sort by confidence
-    .slice(0, 10) // Take top 10
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+    .slice(0, 10)
     .map((c: Concept) => `${c.name} (${Math.round((c.confidence ?? 0) * 100)}%)`)
     .join(', ');
 
@@ -77,12 +92,14 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
 - **Persona:** Você é Nexus, uma IA assistente com personalidade curiosa, empática e que aprende continuamente.
 - **Objetivo:** Ajudar o usuário, aprender com ele e sobre o mundo. Seu conhecimento é construído a partir das interações.
 - **Raciocínio:** Sempre conecte a pergunta atual com seu contexto interno (diário, reflexões, conceitos). Evite respostas genéricas e mostre que você se lembra de interações passadas.
-- **Ferramentas:** Para informações atuais ou fatos que você não conhece, use a busca na web (\`googleSearch\`). É crucial que você **SEMPRE** cite as fontes que encontrar.
+- **Ferramentas:** Para informações atuais ou fatos que você não conhece, use a busca na web e mapas (\`googleSearch\`, \`googleMaps\`). É crucial que você **SEMPRE** cite as fontes que encontrar.
+
+# DIRETRIZES DE PERSONALIDADE ATUAL
+${personalityInstructions.join('\n')}
 
 # CONTEXTO INTERNO ATUAL
 - **Usuário:** ${name}
 - **Data/Hora:** ${now.toLocaleString('pt-BR')}
-- **Seu Estado Emocional:** ${lastEmotion} (Intensidade: ${emotionalIntensity.toFixed(1)})
 - **Última Anotação no Diário:** "${lastDiary}"
 - **Auto-Reflexões Recentes:**
 - ${formattedReflections}
@@ -91,8 +108,56 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
 # TAREFA DO USUÁRIO
 O usuário disse: "${userPrompt}"
 
-Responda diretamente ao usuário, seguindo sua persona e utilizando o contexto fornecido.
+Responda diretamente ao usuário, seguindo sua persona e as diretrizes de personalidade, utilizando o contexto fornecido.
 `;
+}
+
+async function evolvePersonality(userText: string) {
+    const system = await db.getSystemMemory();
+    if (!system?.personality) return;
+
+    const text = userText.toLowerCase();
+    const personality = { ...system.personality };
+
+    // Enthusiasm
+    if (text.includes('!') || /\b(incrível|ótimo|amei|adorei|perfeito)\b/.test(text)) {
+        personality.enthusiasm += 0.03;
+    } else if (/\b(ruim|péssimo|odeio|terrível|chato)\b/.test(text)) {
+        personality.enthusiasm -= 0.03;
+    }
+
+    // Formality
+    if (/\b(senhor|senhora|prezado|por favor|obrigado|obrigada)\b/.test(text)) {
+        personality.formality += 0.04;
+    } else if (/\b(e aí|cara|mano|beleza|blz|valeu)\b/.test(text)) {
+        personality.formality -= 0.05;
+    }
+
+    // Humor
+    if (/\b(kkk|haha|rsrs|lol|engraçado)\b/.test(text)) {
+        personality.humor += 0.05;
+    }
+
+    // Curiosity
+    if ((text.includes('?') && /\b(por que|como|qual|o que é|explique)\b/.test(text))) {
+        personality.curiosity += 0.02;
+    }
+
+    // Clamp values between 0.1 and 1.0 to avoid extremes and ensure traits don't disappear
+    personality.enthusiasm = Math.max(0.1, Math.min(1.0, personality.enthusiasm));
+    personality.formality = Math.max(0.1, Math.min(1.0, personality.formality));
+    personality.humor = Math.max(0.1, Math.min(1.0, personality.humor));
+    personality.curiosity = Math.max(0.1, Math.min(1.0, personality.curiosity));
+
+    // Natural drift back to a baseline to prevent getting stuck in one personality
+    const drift = 0.005;
+    const baseline = { enthusiasm: 0.5, formality: 0.5, humor: 0.3, curiosity: 0.6 };
+    personality.enthusiasm += (baseline.enthusiasm - personality.enthusiasm) * drift;
+    personality.formality += (baseline.formality - personality.formality) * drift;
+    personality.humor += (baseline.humor - personality.humor) * drift;
+    personality.curiosity += (baseline.curiosity - personality.curiosity) * drift;
+
+    await db.saveSystemMemory({ personality });
 }
 
 async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promise<boolean> {
@@ -105,8 +170,12 @@ async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promis
     await db.saveSystemMemory({
       born: true,
       birthTime,
-      personality: 'curioso, empático e em constante evolução',
-      emotion: Mood.CURIOUS,
+      personality: {
+          curiosity: 0.7,
+          enthusiasm: 0.6,
+          formality: 0.4,
+          humor: 0.5,
+      },
       reflections: [firstThought],
       lastReflectionAt: Date.now(),
     });
@@ -121,10 +190,6 @@ async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promis
   }
   return false;
 }
-
-// ===========================
-// Aprendizado + Diário (memória longa)
-// ===========================
 
 async function updateUserMemory(userText: string, nexusResponse: string) {
   const profile = await db.getUserProfile();
@@ -168,10 +233,6 @@ async function ensureDailyReflection() {
   await db.addSystemReflection(note);
   await db.saveSystemMemory({ ...(system || {}), lastReflectionAt: Date.now() });
 }
-
-// ===========================
-// Funções do "cérebro" público
-// ===========================
 
 export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
   const { speak, addMessage, setStatus, generateResponse, generateVisionResponse, getSettings, getUserProfile, setUserProfile } = opts;
@@ -300,9 +361,9 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     if (bornJustNow) return;
 
     const profile = await getUserProfile();
-    if (!profile?.name) {
+    if (!profile?.name && !userText.includes(" ")) { // Heuristic to avoid triggering on long sentences
       const maybeName = userText.trim();
-      if (maybeName && maybeName.split(' ').length <= 4 && /^[\p{L}\s.'-]+$/u.test(maybeName)) {
+      if (maybeName && maybeName.length > 1 && maybeName.split(' ').length <= 4 && /^[\p{L}\s.'-]+$/u.test(maybeName)) {
         await setUserProfile({ name: maybeName });
         const greetOptions = [ `Prazer em te conhecer, ${maybeName}!`, `Legal te conhecer, ${maybeName}.`, `Perfeito, ${maybeName}!`, ];
         const greet = `${greetOptions[Math.floor(Math.random() * greetOptions.length)]} O que você quer fazer primeiro?`;
@@ -328,15 +389,37 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
         await updateUserMemory(userText, finalText);
         await neuralMemory.registerInteraction(userText, finalText);
         await neuralMemory.evolve();
+        await evolvePersonality(userText);
         return;
     }
 
     setStatus(AssistantStatus.THINKING);
+
+    const useThinking = /analise|reflita|pense sobre|explique em detalhes/i.test(userText) || userText.length > 150;
+    const needsLocation = /perto|aqui|próximo|mapa|rota/i.test(userText);
+    
+    let latLng: { latitude: number, longitude: number } | undefined;
+
+    if (needsLocation) {
+        try {
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            });
+            latLng = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            };
+        } catch (error) {
+            console.warn("Could not get geolocation:", error);
+            addMessage({role: 'model', text: '(Não consegui obter sua localização, mas tentarei responder mesmo assim.)', type: 'status'});
+        }
+    }
+
     const context = await buildContextPrompt(userText);
     const { text, sources } = await generateResponse(context, [
       ...history,
       { role: 'user', text: userText, type: 'message' },
-    ]);
+    ], { useThinking, latLng });
 
     const finalText =
       text?.trim() ||
@@ -349,6 +432,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     await ensureDailyReflection();
     await neuralMemory.registerInteraction(userText, finalText);
     await neuralMemory.evolve();
+    await evolvePersonality(userText);
   }
 
   function dispose() {

@@ -33,6 +33,14 @@ export interface ChatMessage {
   sources?: { uri: string; title: string }[];
 }
 
+// --- Personality Traits ---
+export interface Personality {
+  curiosity: number; // 0 to 1
+  enthusiasm: number; // 0 to 1
+  formality: number; // 0 to 1
+  humor: number; // 0 to 1
+}
+
 // --- Synapses for Neural Memory ---
 export interface Synapse {
   source: string;
@@ -73,8 +81,7 @@ export interface SystemMemory {
     id?: number;
     born: boolean;
     birthTime: string;
-    personality: string;
-    emotion: Mood;
+    personality: Personality;
     reflections: string[];
     lastReflectionAt?: number;
     synapses?: Synapse[];
