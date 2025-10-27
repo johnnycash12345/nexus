@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppSettings, AssistantStatus } from '../types';
 
-export const useSpeech = (settings: AppSettings | null, status?: AssistantStatus) => {
+export const useSpeech = (settings: AppSettings | null, status: AssistantStatus) => {
   const synthRef = useRef(window.speechSynthesis);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
@@ -59,24 +59,22 @@ export const useSpeech = (settings: AppSettings | null, status?: AssistantStatus
     utter.pitch = settings.voice.pitch;
     
     // Emotional modulation based on status
-    if (status) {
-        switch (status) {
-            case AssistantStatus.SUCCESS:
-            case AssistantStatus.SURPRISED:
-                utter.pitch = Math.min(2, settings.voice.pitch + 0.2);
-                utter.rate = Math.min(2, settings.voice.rate + 0.1);
-                break;
-            case AssistantStatus.ERROR:
-                utter.pitch = Math.max(0, settings.voice.pitch - 0.2);
-                utter.rate = Math.max(0.5, settings.voice.rate - 0.1);
-                break;
-            case AssistantStatus.CURIOUS:
-                utter.pitch = Math.min(2, settings.voice.pitch + 0.1);
-                break;
-            case AssistantStatus.SLEEPY:
-                utter.rate = Math.max(0.5, settings.voice.rate - 0.2);
-                break;
-        }
+    switch (status) {
+        case AssistantStatus.SUCCESS:
+        case AssistantStatus.SURPRISED:
+            utter.pitch = Math.min(2, settings.voice.pitch + 0.2);
+            utter.rate = Math.min(2, settings.voice.rate + 0.1);
+            break;
+        case AssistantStatus.ERROR:
+            utter.pitch = Math.max(0, settings.voice.pitch - 0.2);
+            utter.rate = Math.max(0.5, settings.voice.rate - 0.1);
+            break;
+        case AssistantStatus.CURIOUS:
+            utter.pitch = Math.min(2, settings.voice.pitch + 0.1);
+            break;
+        case AssistantStatus.SLEEPY:
+            utter.rate = Math.max(0.5, settings.voice.rate - 0.2);
+            break;
     }
 
     // --- Voice Selection Logic ---
@@ -114,6 +112,14 @@ export const useSpeech = (settings: AppSettings | null, status?: AssistantStatus
     if (selectedVoice) {
         utter.voice = selectedVoice;
     }
+
+    // Dispatch event on each word boundary for visual feedback
+    utter.onboundary = (event) => {
+        const customEvent = new CustomEvent("nexus-voice-boundary", {
+          detail: { charIndex: event.charIndex },
+        });
+        window.dispatchEvent(customEvent);
+    };
 
     if (onEnd) {
       utter.onend = onEnd;

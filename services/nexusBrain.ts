@@ -217,7 +217,7 @@ async function evolveEmotion(userText: string, nexusResponse: string) {
     
     window.dispatchEvent(
         new CustomEvent('nexus-emotion-update', {
-            detail: { emotion: newEmotionState.current },
+            detail: { emotion: newEmotionState.current, intensity: newEmotionState.intensity },
         })
     );
 }
@@ -372,14 +372,25 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     const runCycle = async () => {
         console.log('[NEXUS-BRAIN] Starting 12-hour learning cycle...');
         try {
+            const system = await db.getSystemMemory();
             const diary = await db.getDiary();
-            const recentEntries = Object.values(diary).slice(-5);
-            if (recentEntries.length < 2) return;
+            const recentEntries = Object.values(diary).slice(-3);
+            const recentReflections = system?.reflections?.slice(-2) || [];
             
-            const historyForInsight: ChatMessage[] = recentEntries.map(e => ({ role: 'model', text: `My previous diary entry: ${e.entry}` }));
+            if (recentEntries.length < 2 && recentReflections.length < 1) {
+                console.log('[NEXUS-BRAIN] Not enough data for learning cycle.');
+                return;
+            }
+            
+            // FIX: Explicitly cast 'role' to a const to prevent TypeScript from widening the type to 'string',
+            // ensuring it matches the 'user' | 'model' type required by ChatMessage.
+            const historyForInsight: ChatMessage[] = [
+                ...recentEntries.map(e => ({ role: 'model' as const, text: `My previous diary entry: ${e.entry}` })),
+                ...recentReflections.map(r => ({ role: 'model' as const, text: `My previous self-reflection: ${r}` }))
+            ];
 
             const insightResponse = await generateResponse(
-                "Analyze your recent diary entries and reflections. What new insight have you gained about your user, yourself, or the world? Formulate a single, concise thought.",
+                "Analyze your recent diary entries and self-reflections. What new insight have you gained about your user, yourself, or the world? Formulate a single, concise thought.",
                 historyForInsight,
                 { useThinking: true }
             );

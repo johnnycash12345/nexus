@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import './Avatar.css';
 import { AssistantStatus } from '../types';
@@ -6,6 +7,7 @@ interface AvatarProps {
   status: AssistantStatus;
   className?: string;
   appearance?: 'neutral' | 'feminine' | 'masculine';
+  intensity?: number;
 }
 
 const themeColors = {
@@ -34,18 +36,23 @@ const useAvatarSound = (status: AssistantStatus) => {
 };
 
 /* --- Main Component --- */
-export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 'neutral' }) => {
+export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 'neutral', intensity = 1.0 }) => {
   useAvatarSound(status);
 
   const antennaClass = `antenna-${status.toLowerCase()}`;
   const bodyMotion = `motion-${status.toLowerCase()}`;
   const theme = themeColors[appearance];
+  
+  // Modulate idle animation speed with intensity
+  const bodyStyle = status === AssistantStatus.IDLE ? {
+      animationDuration: `${4 / Math.max(0.5, intensity)}s`
+  } : {};
 
   return (
     <div className={`relative ${className || 'w-64 h-64'}`}>
       <div className="absolute bottom-0 w-32 h-2 bg-cyan-400 rounded-full blur-xl opacity-40 shadow-xl animate-pulse"></div>
 
-      <svg viewBox="0 0 200 200" className={`w-full h-full transition-all duration-700 ${bodyMotion}`}>
+      <svg viewBox="0 0 200 200" className={`w-full h-full transition-all duration-700 ${bodyMotion} drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)]`} style={bodyStyle}>
         <defs>
           <radialGradient id="bodyGradient" cx="50%" cy="50%" r="80%">
             <stop offset="0%" stopColor="#6b7280" />

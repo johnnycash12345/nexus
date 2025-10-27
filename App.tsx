@@ -14,7 +14,16 @@ import { useGoogleSync } from './hooks/useGoogleSync';
 import { useSpeech } from './hooks/useSpeech';
 import { TodoList } from './components/TodoList';
 import { InternalMap } from './components/InternalMap';
+import { selfRepairSystem } from './services/selfRepairSystem';
 
+const withVibration = <T extends (...args: any[]) => any>(fn: T) => {
+    return (...args: Parameters<T>): ReturnType<T> => {
+        if (navigator.vibrate) {
+            navigator.vibrate(15);
+        }
+        return fn(...args);
+    };
+};
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AssistantStatus>(AssistantStatus.IDLE);
@@ -30,25 +39,20 @@ const App: React.FC = () => {
   const [thought, setThought] = useState<string | null>(null);
   const [isTodoListVisible, setIsTodoListVisible] = useState(false);
   const [isInternalMapVisible, setIsInternalMapVisible] = useState(false);
+  const [emotionIntensity, setEmotionIntensity] = useState(1.0);
+  const [emotion, setEmotion] = useState<Emotion>(Emotion.CALM);
 
   const { token, status: syncStatus, login, logout } = useGoogleSync();
-  const { speak: unstableSpeak, stop } = useSpeech(settings, status);
+  const { speak: speakFromHook, stop } = useSpeech(settings, status);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const brainRef = useRef<NexusBrain | null>(null);
   const isChatVisibleRef = useRef(isChatVisible);
 
-  // Create a ref to hold the latest version of the speak function
-  const speakRef = useRef(unstableSpeak);
-  useEffect(() => {
-    speakRef.current = unstableSpeak;
-  }, [unstableSpeak]);
-
-  // Create a stable version of the speak function that we can pass to dependencies
   const speak = useCallback((text: string, onEnd?: () => void) => {
-    speakRef.current(text, onEnd);
-  }, []);
+    speakFromHook(text, onEnd);
+  }, [speakFromHook]);
 
   useEffect(() => {
     isChatVisibleRef.current = isChatVisible;
@@ -74,7 +78,9 @@ const App: React.FC = () => {
   // Listen for emotion changes from the brain
   useEffect(() => {
     const handleEmotionUpdate = (event: CustomEvent) => {
-        const { emotion } = event.detail as { emotion: Emotion };
+        const { emotion, intensity } = event.detail as { emotion: Emotion, intensity?: number };
+        setEmotion(emotion);
+        setEmotionIntensity(intensity ?? 1.0);
         
         // Only change status if assistant is in a passive state
         if ([AssistantStatus.IDLE, AssistantStatus.SLEEPY, AssistantStatus.SUCCESS, AssistantStatus.ERROR, AssistantStatus.CURIOUS].includes(status)) {
@@ -145,6 +151,7 @@ const App: React.FC = () => {
   // App Initialization
   useEffect(() => {
     const initializeApp = async () => {
+      selfRepairSystem.autoHealOnCrash(); // Activate self-repair monitoring
       const history = await db.getChatHistory();
       setMessages(history);
       const loadedSettings = await db.getSettings();
@@ -157,9 +164,13 @@ const App: React.FC = () => {
   // Brain Initialization
   useEffect(() => {
       if (isInitializing || !settings || !isStarted) return;
+      
+      const stableSpeak = (text: string, onEnd?: () => void) => {
+          speak(text, onEnd);
+      };
 
       const brain = createNexusBrain({
-        speak, // Use speak from the useSpeech hook
+        speak: stableSpeak,
         addMessage,
         setStatus,
         generateResponse,
@@ -207,7 +218,7 @@ const App: React.FC = () => {
     }
   }, [isSessionActive, isNexusSpeaking, status]);
 
-  const handleMicClick = () => {
+  const handleMicClick = withVibration(() => {
     brainRef.current?.touchHeartbeat();
     if (status === AssistantStatus.SLEEPY) setStatus(AssistantStatus.IDLE);
     
@@ -218,9 +229,9 @@ const App: React.FC = () => {
         setHasNewMessage(false);
         startSession();
     }
-  };
+  });
   
-  const handleTextSubmit = async (e: React.FormEvent) => {
+  const handleTextSubmit = withVibration(async (e: React.FormEvent) => {
     e.preventDefault();
     const text = inputValue.trim();
     if (!text) return;
@@ -236,7 +247,7 @@ const App: React.FC = () => {
     const currentHistory = [...messages, userMessage];
     
     await brainRef.current?.handleUserTurn(text, currentHistory);
-  };
+  });
   
   const handleVisionSubmit = async (imageData: string, prompt: string) => {
       if(isSessionActive) endSession();
@@ -270,9 +281,9 @@ const App: React.FC = () => {
     }
   };
   
-  const handleAttachClick = () => {
+  const handleAttachClick = withVibration(() => {
     fileInputRef.current?.click();
-  };
+  });
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -319,6 +330,9 @@ const App: React.FC = () => {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        .bg-gradient-radial {
+          background-image: radial-gradient(circle, var(--tw-gradient-stops));
+        }
       `}</style>
       {!isStarted ? (
           <StartScreen 
@@ -330,69 +344,74 @@ const App: React.FC = () => {
           />
       ) : (
         <>
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-20 pointer-events-none transition-transform duration-500 ease-in-out"
+            style={{ transform: isChatVisible ? 'translateY(-15vh)' : 'translateY(0)' }}
+          >
+            <AvatarLayer 
+              isChatOpen={isChatVisible} 
+              appearance={settings?.appearance ?? 'neutral'}
+              status={status}
+              intensity={emotionIntensity}
+              emotion={emotion}
+            />
+             {thought && !isChatVisible && (
+              <div className="absolute top-1/2 -translate-y-[12rem] left-1/2 -translate-x-1/2 z-30 p-3 bg-gray-700/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-out max-w-xs text-center border border-gray-600 pointer-events-auto">
+                  <p className="text-sm text-gray-300 italic">💭 {thought}</p>
+              </div>
+            )}
+          </div>
+
           <button 
-            onClick={() => setIsSettingsVisible(true)}
+            onClick={withVibration(() => setIsSettingsVisible(true))}
             aria-label="Abrir configurações"
-            className="absolute top-4 right-4 z-30 p-2 bg-gray-700/50 rounded-full text-gray-300 hover:bg-gray-600/80 transition-colors"
+            className="fixed top-4 right-4 z-30 p-2 bg-gray-700/50 rounded-full text-gray-300 hover:bg-gray-600/80 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066 2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           </button>
-
-          <AvatarLayer 
-            isChatOpen={isChatVisible} 
-            appearance={settings?.appearance ?? 'neutral'}
-            status={status}
-          />
           
-          {thought && !isChatVisible && (
-            <div className="absolute top-1/2 -translate-y-[12rem] left-1/2 -translate-x-1/2 z-30 p-3 bg-gray-700/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-out max-w-xs text-center border border-gray-600">
-                <p className="text-sm text-gray-300 italic">💭 {thought}</p>
-            </div>
-          )}
-
-          {!isChatVisible && (
-            <div className="absolute bottom-6 left-6 z-30 flex flex-col gap-3">
-               <button
-                  onClick={() => setIsInternalMapVisible(true)}
-                  aria-label="Abrir mapa interno"
-                  className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
+          <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 z-30 flex flex-col items-end gap-3">
+            {!isChatVisible && (
+              <>
+                <button
+                    onClick={withVibration(() => setIsInternalMapVisible(true))}
+                    aria-label="Abrir mapa interno"
+                    className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-              </button>
-              <button
-                onClick={() => setIsTodoListVisible(true)}
-                aria-label="Abrir lista de tarefas"
-                className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </button>
-            </div>
-          )}
-          
-          {!isChatVisible && (
-            <button
-              onClick={() => { setIsChatVisible(true); setHasNewMessage(false); }}
-              aria-label="Abrir chat"
-              className="absolute bottom-6 right-6 z-30 w-16 h-16 bg-cyan-600 rounded-full flex items-center justify-center shadow-lg hover:bg-cyan-500 transition-all transform hover:scale-110"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-              {hasNewMessage && (
-                <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-500 border-2 border-white animate-pulse"></span>
-              )}
-            </button>
-          )}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+                <button
+                    onClick={withVibration(() => setIsTodoListVisible(true))}
+                    aria-label="Abrir lista de tarefas"
+                    className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                </button>
+                <button
+                    onClick={withVibration(() => { setIsChatVisible(true); setHasNewMessage(false); })}
+                    aria-label="Abrir chat"
+                    className="w-16 h-16 bg-cyan-600 rounded-full flex items-center justify-center shadow-lg hover:bg-cyan-500 transition-all transform hover:scale-110"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                    {hasNewMessage && (
+                        <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-500 border-2 border-white animate-pulse"></span>
+                    )}
+                </button>
+             </>
+            )}
+          </div>
 
-          <div className={`absolute bottom-0 left-0 right-0 h-[70vh] max-h-[600px] bg-gray-800/80 backdrop-blur-md rounded-t-2xl flex flex-col z-20 transition-transform duration-500 ease-in-out ${isChatVisible ? 'translate-y-0' : 'translate-y-full'}`}>
+          <div className={`fixed bottom-0 left-0 right-0 max-h-[70vh] bg-gray-800/85 backdrop-blur-md rounded-t-2xl shadow-[0_-10px_30px_rgba(0,0,0,0.5)] flex flex-col z-10 transition-transform duration-500 ease-in-out ${isChatVisible ? 'translate-y-0' : 'translate-y-full'}`}>
             <header className="flex-shrink-0 p-2 border-b border-gray-700/50 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-300 pl-2">Nexus</h3>
                 <button
                     type="button"
-                    onClick={() => setIsChatVisible(false)}
+                    onClick={withVibration(() => setIsChatVisible(false))}
                     aria-label="Recolher chat"
                     className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-colors"
                 >
@@ -402,7 +421,7 @@ const App: React.FC = () => {
                 </button>
             </header>
             
-            <div ref={chatContainerRef} className="flex-grow p-4 overflow-y-auto">
+            <div ref={chatContainerRef} className="flex-grow p-4 overflow-y-auto scroll-smooth pb-[calc(4rem+env(safe-area-inset-bottom))]">
               <div className="flex flex-col space-y-4">
                 {messages.map((msg, index) => (
                   <Message key={msg.id || index} {...msg} onAction={handleMessageAction} />
@@ -424,7 +443,7 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            <footer className="flex-shrink-0 p-2 border-t border-gray-700/50">
+            <footer className="flex-shrink-0 p-2 border-t border-gray-700/50 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
                 <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
                     <input
                         type="file"
@@ -446,7 +465,7 @@ const App: React.FC = () => {
                     </button>
                     <button
                         type="button"
-                        onClick={() => setIsCameraOpen(true)}
+                        onClick={withVibration(() => setIsCameraOpen(true))}
                         aria-label="Abrir câmera"
                         className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors"
                     >

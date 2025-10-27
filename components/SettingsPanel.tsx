@@ -1,9 +1,11 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { AppSettings, Concept, Permissions } from '../types';
 import { db } from '../services/indexedDBService';
-import { AppearanceSelector } from './AppearanceSelector';
+import { GeneralSettings } from './settings/GeneralSettings';
+import { BrainSettings } from './settings/BrainSettings';
+import { IntegrationsSettings } from './settings/IntegrationsSettings';
+import { MemorySettings } from './settings/MemorySettings';
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -83,379 +85,34 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
     }, 1200);
   };
 
-  const handleDeleteConcept = async (name: string) => {
-      if(window.confirm(`Tem certeza que quer que o Nexus esqueça sobre "${name}"?`)){
-        await db.deleteConcept(name);
-        setConcepts(await db.getAllConcepts());
-      }
-  };
-
-  const handleLogoutClick = () => {
-    if (window.confirm('Tem certeza de que deseja desconectar sua conta do Google? A sincronização automática será interrompida.')) {
-        onLogout();
-    }
-  }
-  
-  const handleClearHistory = async () => {
-      if (window.confirm('Tem certeza que deseja apagar todo o histórico de conversas? Esta ação não pode ser desfeita.')) {
-          await db.clearChatHistory();
-          alert('Histórico de conversas apagado. A aplicação será recarregada.');
-          window.location.reload();
-      }
-  };
-
-  const handleResetMemory = async () => {
-      if (window.confirm('ATENÇÃO: Você tem certeza que deseja resetar TODA a memória do Nexus? Isso inclui conceitos, perfil de usuário, diário e histórico. Esta ação não pode ser desfeita.')) {
-          await db.resetNexusMemory();
-          alert('Memória do Nexus resetada. A aplicação será recarregada.');
-          window.location.reload();
-      }
-  };
-
-  const handleExportMemory = async () => {
-    try {
-        const [profile, diary, system, concepts] = await Promise.all([
-            db.getUserProfile(),
-            db.getDiary(),
-            db.getSystemMemory(),
-            db.getAllConcepts()
-        ]);
-
-        const backupData = {
-            profile, diary, system, concepts,
-            exportedAt: new Date().toISOString(),
-            version: '1.0.0',
-        };
-
-        const fileContent = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([fileContent], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const today = new Date().toISOString().split('T')[0];
-        link.download = `nexus_memory_backup_${today}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    } catch (error) {
-        console.error("Failed to export memory:", error);
-        alert("Ocorreu um erro ao exportar a memória.");
-    }
-  };
-
-  const handleExportCognitiveGraph = async () => {
-    try {
-        const systemMemory = await db.getSystemMemory();
-        const synapses = systemMemory?.synapses || [];
-
-        if (synapses.length === 0) {
-            alert("Nenhuma sinapse encontrada na memória para exportar.");
-            return;
-        }
-
-        const nodesSet = new Set<string>();
-        synapses.forEach(s => {
-            nodesSet.add(s.source);
-            nodesSet.add(s.target);
-        });
-
-        const graphData = {
-            nodes: Array.from(nodesSet).map(node => ({ id: node })),
-            edges: synapses.map(s => ({
-                source: s.source,
-                target: s.target,
-                weight: s.strength,
-            })),
-        };
-
-        const fileContent = JSON.stringify(graphData, null, 2);
-        const blob = new Blob([fileContent], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const today = new Date().toISOString().split('T')[0];
-        link.download = `nexus_cognitive_graph_${today}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    } catch (error) {
-        console.error("Failed to export cognitive graph:", error);
-        alert("Ocorreu um erro ao exportar o grafo cognitivo.");
-    }
-  };
-
-
-  const handleImportMemory = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!window.confirm('Tem certeza que deseja importar este arquivo? Isso substituirá TODA a memória atual do Nexus.')) {
-        event.target.value = '';
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const content = e.target?.result;
-            if (typeof content !== 'string') throw new Error("File content is not readable.");
-            const backupData = JSON.parse(content);
-            await db.importBackup(backupData);
-            alert('Memória importada com sucesso! A aplicação será recarregada.');
-            window.location.reload();
-        } catch (error: any) {
-            console.error("Failed to import memory:", error);
-            alert(`Ocorreu um erro ao importar o arquivo: ${error.message}`);
-        } finally {
-            event.target.value = '';
-        }
-    };
-    reader.onerror = () => {
-        alert("Erro ao ler o arquivo de backup.");
-        event.target.value = '';
-    };
-    reader.readAsText(file);
-  };
-
   const renderTabContent = () => {
     switch (activeTab) {
       case 'geral':
-        return (
-          <div>
-            <h3 className="text-lg font-semibold text-cyan-300 mb-4">Aparência do Nexus</h3>
-            <AppearanceSelector
-              current={localSettings.appearance ?? 'neutral'}
-              onChange={(newAppearance) => handleSettingChange('appearance', newAppearance)}
-            />
-            <h3 className="text-lg font-semibold text-cyan-300 my-4">Configurações de Voz</h3>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="voice-select" className="block text-sm font-medium text-gray-300 mb-1">Voz</label>
-                <select id="voice-select" value={localSettings.voice.voiceURI || ''} onChange={(e) => handleNestedSettingChange('voice', 'voiceURI', e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500">
-                  <option value="">Padrão do Sistema (PT-BR)</option>
-                  {voices.map(v => <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="voice-rate" className="block text-sm font-medium text-gray-300 mb-1">Velocidade ({localSettings.voice.rate.toFixed(1)})</label>
-                <input id="voice-rate" type="range" min="0.5" max="2" step="0.1" value={localSettings.voice.rate} onChange={(e) => handleNestedSettingChange('voice', 'rate', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-              </div>
-              <div>
-                <label htmlFor="voice-pitch" className="block text-sm font-medium text-gray-300 mb-1">Tom ({localSettings.voice.pitch.toFixed(1)})</label>
-                <input id="voice-pitch" type="range" min="0" max="2" step="0.1" value={localSettings.voice.pitch} onChange={(e) => handleNestedSettingChange('voice', 'pitch', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-              </div>
-            </div>
-          </div>
-        );
+        return <GeneralSettings 
+                    settings={localSettings} 
+                    onSettingChange={handleSettingChange} 
+                    onNestedSettingChange={handleNestedSettingChange} 
+                    voices={voices} 
+                />;
       case 'cérebro':
-        return (
-            <div>
-                <h3 className="text-lg font-semibold text-cyan-300 mb-4">Comportamento e Personalidade</h3>
-                <div className="space-y-3">
-                    <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                        <div>
-                            <p className="font-medium text-white">Iniciativa Proativa</p>
-                            <p className="text-sm text-gray-400">Permitir que o Nexus inicie conversas.</p>
-                        </div>
-                        <input type="checkbox" checked={localSettings.behavior?.enableProactive} onChange={(e) => handleNestedSettingChange('behavior', 'enableProactive', e.target.checked)} className="toggle-checkbox" />
-                    </label>
-                    <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                        <div>
-                            <p className="font-medium text-white">Curiosidade Autônoma</p>
-                            <p className="text-sm text-gray-400">Permitir que o Nexus faça perguntas quando ocioso.</p>
-                        </div>
-                        <input type="checkbox" checked={localSettings.behavior?.enableCuriosity} onChange={(e) => handleNestedSettingChange('behavior', 'enableCuriosity', e.target.checked)} className="toggle-checkbox" />
-                    </label>
-                    <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                        <div>
-                            <p className="font-medium text-white">Diário e Reflexões</p>
-                            <p className="text-sm text-gray-400">Habilitar o Nexus para manter um diário sobre as interações.</p>
-                        </div>
-                        <input type="checkbox" checked={localSettings.behavior?.enableDiary} onChange={(e) => handleNestedSettingChange('behavior', 'enableDiary', e.target.checked)} className="toggle-checkbox" />
-                    </label>
-                </div>
-
-                <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-cyan-300 mb-4">Permissões Autônomas</h3>
-                    <div className="space-y-3">
-                        <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                            <div>
-                                <p className="font-medium text-white">Acesso a APIs Externas</p>
-                                <p className="text-sm text-gray-400">Permitir que o Nexus use APIs como a de notícias.</p>
-                            </div>
-                            <input type="checkbox" checked={localSettings.behavior?.permissions?.allowApiAccess} onChange={(e) => handlePermissionChange('allowApiAccess', e.target.checked)} className="toggle-checkbox" />
-                        </label>
-                        <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                            <div>
-                                <p className="font-medium text-white">Decisões Autônomas</p>
-                                <p className="text-sm text-gray-400">Permitir que o Nexus inicie ações (ex: curiosidade).</p>
-                            </div>
-                            <input type="checkbox" checked={localSettings.behavior?.permissions?.allowAutonomousDecision} onChange={(e) => handlePermissionChange('allowAutonomousDecision', e.target.checked)} className="toggle-checkbox" />
-                        </label>
-                        <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                            <div>
-                                <p className="font-medium text-white">Auto-modificação da Memória</p>
-                                <p className="text-sm text-gray-400">Permitir que o Nexus organize sua memória sem perguntar.</p>
-                            </div>
-                            <input type="checkbox" checked={localSettings.behavior?.permissions?.allowSelfModification} onChange={(e) => handlePermissionChange('allowSelfModification', e.target.checked)} className="toggle-checkbox" />
-                        </label>
-                    </div>
-                </div>
-
-                <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-cyan-300 mb-4">Parâmetros Cognitivos (Avançado)</h3>
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="emotional-intensity" className="block text-sm font-medium text-gray-300 mb-1">Intensidade Emocional ({localSettings.cognitive?.emotionalIntensity.toFixed(1)})</label>
-                            <input id="emotional-intensity" type="range" min="0.5" max="1.5" step="0.1" value={localSettings.cognitive?.emotionalIntensity || 1.0} onChange={(e) => handleNestedSettingChange('cognitive', 'emotionalIntensity', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-                        </div>
-                        <div>
-                            <label htmlFor="learning-rate" className="block text-sm font-medium text-gray-300 mb-1">Velocidade de Aprendizado ({localSettings.cognitive?.learningRate.toFixed(1)})</label>
-                            <input id="learning-rate" type="range" min="0.5" max="2" step="0.1" value={localSettings.cognitive?.learningRate || 1.0} onChange={(e) => handleNestedSettingChange('cognitive', 'learningRate', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    case 'integrações':
-        return (
-            <div>
-                <h3 className="text-lg font-semibold text-cyan-300 mb-4">Provedor de LLM</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="llm-provider" className="block text-sm font-medium text-gray-300 mb-1">Modelo de Linguagem</label>
-                        <select id="llm-provider" value={localSettings.llmProvider || 'gemini'} onChange={(e) => handleSettingChange('llmProvider', e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500">
-                            <option value="gemini">Google Gemini (Padrão)</option>
-                            <option value="deepseek">DeepSeek</option>
-                        </select>
-                    </div>
-                     <div className="p-3 bg-gray-700/50 border border-cyan-500/20 rounded-md">
-                        <p className="text-sm text-gray-300">A chave de API do **Google Gemini** é gerenciada pelo ambiente e não precisa ser inserida aqui.</p>
-                     </div>
-                </div>
-                <h3 className="text-lg font-semibold text-cyan-300 my-4">Chaves de API (Opcional)</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="deepseek-api-key" className="block text-sm font-medium text-gray-300 mb-1">Chave de API DeepSeek</label>
-                        <input
-                            type="password"
-                            id="deepseek-api-key"
-                            value={localSettings.apiKeys?.deepseekApiKey || ''}
-                            onChange={(e) => handleNestedSettingChange('apiKeys', 'deepseekApiKey', e.target.value)}
-                            placeholder="Cole sua chave aqui"
-                            className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500"
-                            disabled={localSettings.llmProvider !== 'deepseek'}
-                        />
-                        <p className="text-xs text-gray-400 mt-1">
-                            Necessária apenas se o provedor for DeepSeek. Obtenha uma em <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">platform.deepseek.com</a>.
-                        </p>
-                    </div>
-                    <div>
-                        <label htmlFor="news-api-key" className="block text-sm font-medium text-gray-300 mb-1">Chave de API NewsAPI</label>
-                        <input
-                            type="password"
-                            id="news-api-key"
-                            value={localSettings.apiKeys?.newsApiKey || ''}
-                            onChange={(e) => handleNestedSettingChange('apiKeys', 'newsApiKey', e.target.value)}
-                            placeholder="Cole sua chave aqui"
-                            className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500"
-                        />
-                        <p className="text-xs text-gray-400 mt-1">
-                            Habilita a busca por notícias. Obtenha uma chave gratuita em <a href="https://newsapi.org/" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">newsapi.org</a>.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        );
+        return <BrainSettings 
+                    settings={localSettings} 
+                    onNestedSettingChange={handleNestedSettingChange} 
+                    onPermissionChange={handlePermissionChange} 
+                />;
+      case 'integrações':
+        return <IntegrationsSettings 
+                    settings={localSettings} 
+                    onSettingChange={handleSettingChange} 
+                    onNestedSettingChange={handleNestedSettingChange} 
+                />;
       case 'memória':
-        return (
-          <div>
-            <div className="p-3 bg-gray-700 rounded-md mb-4">
-                <p className="font-medium text-white">Sincronização com Google Drive</p>
-                 {token ? (
-                    <>
-                        <p className="text-sm text-green-400 mb-3">Conectado. A memória é sincronizada automaticamente.</p>
-                        <button onClick={handleLogoutClick} className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors">
-                            Logout do Google
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        <p className="text-sm text-gray-400 mb-3">A sincronização na nuvem está desativada.</p>
-                        <p className="text-xs text-gray-400">Para ativar, reinicie a aplicação e faça login com o Google na tela inicial.</p>
-                    </>
-                )}
-            </div>
-
-            <div>
-                <h4 className="text-md font-semibold text-cyan-300 mb-2">Backup Local</h4>
-                <div className="p-3 bg-gray-700/50 border border-gray-600/50 rounded-md space-y-3">
-                    <p className="text-xs text-gray-400">
-                        Salve um arquivo da memória completa do Nexus no seu dispositivo ou restaure a partir de um arquivo salvo anteriormente.
-                    </p>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={handleExportMemory} 
-                            className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
-                        >
-                            Exportar Memória
-                        </button>
-                        <label 
-                            htmlFor="import-backup" 
-                            className="w-full px-4 py-2 bg-cyan-700 hover:bg-cyan-600 rounded-md transition-colors text-sm font-medium text-center cursor-pointer"
-                        >
-                            Importar Memória
-                        </label>
-                        <input id="import-backup" type="file" accept=".json,application/json" className="hidden" onChange={handleImportMemory} />
-                    </div>
-                </div>
-            </div>
-
-            <div>
-                <h4 className="text-md font-semibold text-cyan-300 mb-2 mt-4">Visualização Cognitiva</h4>
-                <div className="p-3 bg-gray-700/50 border border-gray-600/50 rounded-md space-y-3">
-                    <p className="text-xs text-gray-400">
-                        Exporte a rede de sinapses do Nexus em formato JSON para visualização em ferramentas como Gephi ou D3.js.
-                    </p>
-                    <button 
-                        onClick={handleExportCognitiveGraph} 
-                        className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
-                    >
-                        Exportar Grafo Cognitivo
-                    </button>
-                </div>
-            </div>
-            
-            <h3 className="text-lg font-semibold text-cyan-300 mb-2 mt-6">Memória do Nexus (Conceitos)</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-gray-700 pb-4">
-                {concepts.length > 0 ? concepts.map(c => (
-                    <div key={c.name} className="bg-gray-700 p-3 rounded-md">
-                        <div className="flex justify-between items-start">
-                           <div>
-                             <p className="font-semibold text-white">{c.name}</p>
-                             <p className="text-sm text-gray-400">Confiança: {Math.round((c.confidence || 0) * 100)}%</p>
-                           </div>
-                           <button onClick={() => handleDeleteConcept(c.name)} className="text-red-400 hover:text-red-300 text-sm flex-shrink-0 ml-2">Esquecer</button>
-                        </div>
-                    </div>
-                )) : <p className="text-gray-400">O Nexus ainda não aprendeu nenhum conceito.</p>}
-            </div>
-            
-            <div>
-                <h4 className="text-md font-semibold text-red-400 mb-2 mt-6">Ações Destrutivas</h4>
-                <div className="p-3 bg-gray-700/50 border border-red-500/30 rounded-md space-y-3">
-                    <button onClick={handleClearHistory} className="w-full px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-500 rounded-md transition-colors text-sm">
-                        Limpar Histórico de Conversas
-                    </button>
-                    <button onClick={handleResetMemory} className="w-full px-4 py-2 bg-red-800 hover:bg-red-700 disabled:bg-gray-500 rounded-md transition-colors text-sm">
-                        Resetar Memória do Nexus
-                    </button>
-                </div>
-            </div>
-          </div>
-        );
+        return <MemorySettings 
+                    token={token}
+                    onLogout={onLogout}
+                    concepts={concepts}
+                    setConcepts={setConcepts}
+                />;
     }
   };
 

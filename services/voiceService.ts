@@ -1,5 +1,4 @@
 
-// FIX: Removed `LiveSession` as it is not an exported member of `@google/genai`.
 import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
 
 function encode(bytes: Uint8Array): string {
@@ -27,9 +26,8 @@ async function decodeAudioData(
     sampleRate: number,
     numChannels: number,
 ): Promise<AudioBuffer> {
-    // FIX: A Uint8Array pode ser uma visualização de um ArrayBuffer maior.
-    // Usar data.buffer diretamente pode ler dados incorretos. Especificar
-    // o byteOffset e o byteLength garante que apenas os dados relevantes sejam lidos.
+    // FIX: Using the buffer's byteOffset and byteLength is safer, as the Uint8Array
+    // might be a view into a larger ArrayBuffer.
     const dataInt16 = new Int16Array(data.buffer, data.byteOffset, data.byteLength / 2);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
@@ -58,7 +56,7 @@ function createBlob(data: Float32Array): Blob {
 
 export class VoiceService {
     private ai: GoogleGenAI;
-    // FIX: Replaced `Promise<LiveSession>` with an inferred type using `ReturnType`
+    // FIX: Replaced explicit `LiveSession` with an inferred type using `ReturnType`
     // because `LiveSession` is not exported from the SDK. This maintains type safety.
     private sessionPromise: ReturnType<GoogleGenAI['live']['connect']> | null = null;
     
@@ -136,7 +134,8 @@ export class VoiceService {
     private async handleAudioPlayback(message: LiveServerMessage) {
         if (!this.outputAudioContext) return;
 
-        // Adicionado para garantir que o contexto de áudio seja retomado se suspenso pelo navegador
+        // FIX: Resume audio context if it was suspended by the browser,
+        // which can happen on page load or tab switching.
         if (this.outputAudioContext.state === 'suspended') {
             await this.outputAudioContext.resume();
         }
