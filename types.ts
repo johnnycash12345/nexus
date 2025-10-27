@@ -220,8 +220,6 @@ export interface Permissions {
   allowApiAccess: boolean;
   allowAutonomousDecision: boolean;
   allowSelfModification: boolean;
-  allowEmotionEvolve?: boolean;
-  allowDriveSync?: boolean;
 }
 
 export interface BehaviorSettings {

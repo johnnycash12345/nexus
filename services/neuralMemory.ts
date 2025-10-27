@@ -130,9 +130,8 @@ export const neuralMemory = {
     // await db.addSystemReflection(reflection);
 
     if (newInteractionCount % 5 === 0) {
-        const settings = await db.getSettings();
         const token = googleAuth.getToken();
-        if (token && settings.behavior?.permissions?.allowDriveSync) {
+        if (token) {
             try {
                 console.log(`[NEXUS-LOG] Interaction count [${newInteractionCount}], triggering auto-backup.`);
                 await driveSyncService.uploadBrain(token);

@@ -8,11 +8,9 @@ interface MemorySettingsProps {
     onLogout: () => void;
     concepts: Concept[];
     setConcepts: React.Dispatch<React.SetStateAction<Concept[]>>;
-    isUnlocked: boolean;
-    requestAuth: () => void;
 }
 
-export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout, concepts, setConcepts, isUnlocked, requestAuth }) => {
+export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout, concepts, setConcepts }) => {
     
     const handleDeleteConcept = async (name: string) => {
       if(window.confirm(`Tem certeza que quer que o Nexus esqueça sobre "${name}"?`)){
@@ -152,8 +150,25 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
 
     return (
         <div>
-             <h3 className="text-lg font-semibold text-cyan-300 mb-2">Backup e Restauração</h3>
+            <div className="p-3 bg-gray-700 rounded-md mb-4">
+                <p className="font-medium text-white">Sincronização com Google Drive</p>
+                 {token ? (
+                    <>
+                        <p className="text-sm text-green-400 mb-3">Conectado. A memória é sincronizada automaticamente.</p>
+                        <button onClick={handleLogoutClick} className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors">
+                            Logout do Google
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-sm text-gray-400 mb-3">A sincronização na nuvem está desativada.</p>
+                        <p className="text-xs text-gray-400">Para ativar, reinicie a aplicação e faça login com o Google na tela inicial.</p>
+                    </>
+                )}
+            </div>
+
             <div>
+                <h4 className="text-md font-semibold text-cyan-300 mb-2">Backup Local</h4>
                 <div className="p-3 bg-gray-700/50 border border-gray-600/50 rounded-md space-y-3">
                     <p className="text-xs text-gray-400">
                         Salve um arquivo da memória completa do Nexus no seu dispositivo ou restaure a partir de um arquivo salvo anteriormente.
@@ -207,19 +222,12 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
             </div>
             
             <div>
-                <h4 className="text-md font-semibold text-red-400 mb-2 mt-6 flex items-center gap-2">
-                    {!isUnlocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>}
-                    Ações Destrutivas
-                </h4>
-                <div 
-                    className={`p-3 bg-gray-700/50 border border-red-500/30 rounded-md space-y-3 transition-opacity ${!isUnlocked ? 'opacity-60' : ''}`}
-                    onClick={!isUnlocked ? requestAuth : undefined}
-                    title={!isUnlocked ? 'Clique para desbloquear com senha de administrador' : ''}
-                >
-                    <button onClick={handleClearHistory} disabled={!isUnlocked} className="w-full px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-600/50 disabled:cursor-not-allowed rounded-md transition-colors text-sm">
+                <h4 className="text-md font-semibold text-red-400 mb-2 mt-6">Ações Destrutivas</h4>
+                <div className="p-3 bg-gray-700/50 border border-red-500/30 rounded-md space-y-3">
+                    <button onClick={handleClearHistory} className="w-full px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-gray-500 rounded-md transition-colors text-sm">
                         Limpar Histórico de Conversas
                     </button>
-                    <button onClick={handleResetMemory} disabled={!isUnlocked} className="w-full px-4 py-2 bg-red-800 hover:bg-red-700 disabled:bg-gray-600/50 disabled:cursor-not-allowed rounded-md transition-colors text-sm">
+                    <button onClick={handleResetMemory} className="w-full px-4 py-2 bg-red-800 hover:bg-red-700 disabled:bg-gray-500 rounded-md transition-colors text-sm">
                         Resetar Memória do Nexus
                     </button>
                 </div>

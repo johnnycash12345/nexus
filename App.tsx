@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AssistantStatus, ChatMessage, AppSettings, Emotion, VisualState } from './types';
 import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
@@ -14,8 +16,9 @@ import { StartScreen } from './components/StartScreen';
 import { useGoogleSync } from './hooks/useGoogleSync';
 import { useSpeech } from './hooks/useSpeech';
 import { TodoList } from './components/TodoList';
-import { InternalMap } from './components/InternalMap';
+import { ReflectionHistory } from './components/ReflectionHistory';
 import { selfRepairSystem } from './services/selfRepairSystem';
+import { CognitiveStatus } from './components/CognitiveStatus';
 
 const withVibration = <T extends (...args: any[]) => any>(fn: T) => {
     return (...args: Parameters<T>): ReturnType<T> => {
@@ -39,7 +42,8 @@ const App: React.FC = () => {
   const [isStarted, setIsStarted] = useState(false);
   const [thought, setThought] = useState<string | null>(null);
   const [isTodoListVisible, setIsTodoListVisible] = useState(false);
-  const [isInternalMapVisible, setIsInternalMapVisible] = useState(false);
+  const [isReflectionHistoryVisible, setIsReflectionHistoryVisible] = useState(false);
+  const [isCognitiveStatusVisible, setIsCognitiveStatusVisible] = useState(false);
   const [emotionIntensity, setEmotionIntensity] = useState(1.0);
   const [emotion, setEmotion] = useState<Emotion>(Emotion.CALM);
 
@@ -317,10 +321,18 @@ const App: React.FC = () => {
             {!isChatVisible && (
               <>
                 <button
-                    onClick={withVibration(() => setIsInternalMapVisible(true))} aria-label="Abrir mapa interno"
+                    onClick={withVibration(() => setIsCognitiveStatusVisible(true))} aria-label="Abrir status cognitivo"
                     className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
+                    </svg>
+                </button>
+                <button
+                    onClick={withVibration(() => setIsReflectionHistoryVisible(true))} aria-label="Abrir histórico de pensamentos"
+                    className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
                 </button>
                 <button
                     onClick={withVibration(() => setIsTodoListVisible(true))} aria-label="Abrir lista de tarefas"
@@ -405,7 +417,8 @@ const App: React.FC = () => {
       {isSettingsVisible && <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} onClose={() => setIsSettingsVisible(false)} token={token} onLogout={logout} />}
       {isStarted && isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onSend={handleVisionSubmit} />}
       {isStarted && <TodoList isVisible={isTodoListVisible} onClose={() => setIsTodoListVisible(false)} />}
-      {isStarted && <InternalMap isVisible={isInternalMapVisible} onClose={() => setIsInternalMapVisible(false)} />}
+      {isStarted && <ReflectionHistory isVisible={isReflectionHistoryVisible} onClose={() => setIsReflectionHistoryVisible(false)} />}
+      {isStarted && <CognitiveStatus isVisible={isCognitiveStatusVisible} onClose={() => setIsCognitiveStatusVisible(false)} />}
     </div>
   );
 };

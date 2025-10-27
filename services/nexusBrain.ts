@@ -102,9 +102,6 @@ Responda à tarefa do usuário seguindo todas as diretivas acima. Sua resposta D
 }
 
 async function evolveEmotion(learningContext: any, systemResponse: string) {
-    const settings = await db.getSettings();
-    if (!settings.behavior?.permissions?.allowEmotionEvolve) return;
-
     const system = await db.getSystemMemory();
     if (!system) return;
 
@@ -258,6 +255,40 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     setStatus(AssistantStatus.THINKING);
 
     try {
+        // --- NEWS TOOL ---
+        const newsMatch = userText.match(/(?:notícias|novidades|manchetes) (?:sobre|de) (.*)/i);
+        const newsQuery = newsMatch ? newsMatch[1].trim() : null;
+
+        if (newsQuery) {
+            const settings = await getSettings();
+            if (!settings.behavior?.permissions?.allowApiAccess) {
+                const msg = "A busca por notícias está desativada. Você pode habilitá-la nas configurações de Cérebro > Permissões.";
+                addMessage({ role: 'model', text: msg, type: 'status' });
+                speak(msg, () => setStatus(AssistantStatus.IDLE));
+                return;
+            }
+            if (!settings.apiKeys?.newsApiKey) {
+                const msg = "Minha conexão com o serviço de notícias não está configurada. Por favor, adicione uma chave da NewsAPI nas configurações de Integrações.";
+                addMessage({ role: 'model', text: msg, type: 'status' });
+                speak(msg, () => setStatus(AssistantStatus.IDLE));
+                return;
+            }
+
+            setStatus(AssistantStatus.SEARCHING_WEB);
+            const articles = await fetchNews(settings.apiKeys.newsApiKey, newsQuery);
+
+            if (articles && articles.length > 0) {
+                const summaryText = `Encontrei as seguintes manchetes sobre "${newsQuery}":`;
+                addMessage({ role: 'model', text: summaryText, type: 'news_summary', articles });
+                speak(`Claro, buscando notícias sobre ${newsQuery}.`, () => setStatus(AssistantStatus.IDLE));
+            } else {
+                const notFoundText = `Desculpe, não encontrei nenhuma notícia recente sobre "${newsQuery}".`;
+                addMessage({ role: 'model', text: notFoundText, type: 'message' });
+                speak(notFoundText, () => setStatus(AssistantStatus.IDLE));
+            }
+            return;
+        }
+
         // --- VISION ---
         if (imageUrl) {
             const visionPrompt = `O usuário enviou uma imagem. Descreva o que você vê ou responda à pergunta dele. Pergunta: "${userText || 'O que é isso?'}"`;
