@@ -264,7 +264,9 @@ class IndexedDBService {
               permissions: {
                   allowApiAccess: true,
                   allowAutonomousDecision: true,
-                  allowSelfModification: false, // Default to false for safety
+                  allowSelfModification: false,
+                  allowEmotionEvolve: false,
+                  allowDriveSync: false,
               }
           },
           apiKeys: { deepseekApiKey: '', newsApiKey: '' },

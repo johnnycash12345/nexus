@@ -6,9 +6,32 @@ interface BrainSettingsProps {
   settings: AppSettings;
   onNestedSettingChange: (field: keyof AppSettings, subField: string, value: any) => void;
   onPermissionChange: (field: keyof Permissions, value: boolean) => void;
+  isUnlocked: boolean;
+  requestAuth: () => void;
 }
 
-export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, onNestedSettingChange, onPermissionChange }) => {
+const LockedSetting: React.FC<{ isLocked: boolean; requestAuth: () => void; title: string; description: string; children: React.ReactNode }> = ({ isLocked, requestAuth, title, description, children }) => {
+    return (
+        <div 
+            className={`p-3 bg-gray-700 rounded-md transition-opacity ${isLocked ? 'opacity-60 cursor-pointer' : ''}`}
+            onClick={isLocked ? requestAuth : undefined}
+            title={isLocked ? 'Clique para desbloquear com senha de administrador' : ''}
+        >
+            <label className="flex items-center justify-between">
+                <div>
+                    <p className="font-medium text-white flex items-center gap-2">
+                        {isLocked && <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-400" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>}
+                        {title}
+                    </p>
+                    <p className="text-sm text-gray-400">{description}</p>
+                </div>
+                {children}
+            </label>
+        </div>
+    );
+};
+
+export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, onNestedSettingChange, onPermissionChange, isUnlocked, requestAuth }) => {
     return (
         <div>
             <h3 className="text-lg font-semibold text-cyan-300 mb-4">Comportamento e Personalidade</h3>
@@ -35,6 +58,17 @@ export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, onNested
                     <input type="checkbox" checked={settings.behavior?.enableDiary} onChange={(e) => onNestedSettingChange('behavior', 'enableDiary', e.target.checked)} className="toggle-checkbox" />
                 </label>
             </div>
+            
+            <div className="mt-6">
+                <h3 className="text-lg font-semibold text-cyan-300 mb-4">Controle Emocional</h3>
+                 <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
+                    <div>
+                        <p className="font-medium text-white">Evolução Emocional</p>
+                        <p className="text-sm text-gray-400">Permitir que as emoções do Nexus mudem com base nas interações.</p>
+                    </div>
+                    <input type="checkbox" checked={settings.behavior?.permissions?.allowEmotionEvolve} onChange={(e) => onPermissionChange('allowEmotionEvolve', e.target.checked)} className="toggle-checkbox" />
+                </label>
+            </div>
 
             <div className="mt-6">
                 <h3 className="text-lg font-semibold text-cyan-300 mb-4">Permissões Autônomas</h3>
@@ -53,13 +87,20 @@ export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, onNested
                         </div>
                         <input type="checkbox" checked={settings.behavior?.permissions?.allowAutonomousDecision} onChange={(e) => onPermissionChange('allowAutonomousDecision', e.target.checked)} className="toggle-checkbox" />
                     </label>
-                    <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                        <div>
-                            <p className="font-medium text-white">Auto-modificação da Memória</p>
-                            <p className="text-sm text-gray-400">Permitir que o Nexus organize sua memória sem perguntar.</p>
-                        </div>
-                        <input type="checkbox" checked={settings.behavior?.permissions?.allowSelfModification} onChange={(e) => onPermissionChange('allowSelfModification', e.target.checked)} className="toggle-checkbox" />
-                    </label>
+                    <LockedSetting
+                        isLocked={!isUnlocked}
+                        requestAuth={requestAuth}
+                        title="Auto-modificação (Autoevolução)"
+                        description="Permitir que o Nexus otimize seus próprios parâmetros internos."
+                    >
+                        <input 
+                            type="checkbox" 
+                            checked={!isUnlocked ? false : settings.behavior?.permissions?.allowSelfModification} 
+                            onChange={(e) => onPermissionChange('allowSelfModification', e.target.checked)} 
+                            className="toggle-checkbox"
+                            disabled={!isUnlocked}
+                        />
+                    </LockedSetting>
                 </div>
             </div>
 

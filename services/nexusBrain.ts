@@ -102,6 +102,9 @@ Responda à tarefa do usuário seguindo todas as diretivas acima. Sua resposta D
 }
 
 async function evolveEmotion(learningContext: any, systemResponse: string) {
+    const settings = await db.getSettings();
+    if (!settings.behavior?.permissions?.allowEmotionEvolve) return;
+
     const system = await db.getSystemMemory();
     if (!system) return;
 
