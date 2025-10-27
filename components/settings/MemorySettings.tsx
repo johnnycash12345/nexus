@@ -153,6 +153,38 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
         reader.readAsText(file);
     };
 
+    const handleImportCognitiveGraph = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!window.confirm('Tem certeza que deseja importar este grafo? As novas conexões serão mescladas com a memória existente.')) {
+            event.target.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const content = e.target?.result;
+                if (typeof content !== 'string') throw new Error("File content is not readable.");
+                const graphData = JSON.parse(content);
+                await db.importCognitiveGraph(graphData);
+                alert('Grafo cognitivo importado com sucesso! A aplicação será recarregada.');
+                window.location.reload();
+            } catch (error: any) {
+                console.error("Failed to import cognitive graph:", error);
+                alert(`Ocorreu um erro ao importar o grafo: ${error.message}`);
+            } finally {
+                event.target.value = '';
+            }
+        };
+        reader.onerror = () => {
+            alert("Erro ao ler o arquivo de grafo.");
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
     return (
         <div>
             <div className="p-3 bg-gray-700 rounded-md mb-4">
@@ -200,14 +232,23 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
                 <h4 className="text-md font-semibold text-cyan-300 mb-2 mt-4">Visualização Cognitiva</h4>
                 <div className="p-3 bg-gray-700/50 border border-gray-600/50 rounded-md space-y-3">
                     <p className="text-xs text-gray-400">
-                        Exporte a rede de sinapses do Nexus em formato JSON para visualização em ferramentas como Gephi ou D3.js.
+                        Exporte ou importe a rede de sinapses do Nexus. Útil para transferir o conhecimento evoluído para uma nova instância ou para visualização.
                     </p>
-                    <button 
-                        onClick={handleExportCognitiveGraph} 
-                        className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
-                    >
-                        Exportar Grafo Cognitivo
-                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleExportCognitiveGraph} 
+                            className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
+                        >
+                            Exportar Grafo
+                        </button>
+                        <label 
+                            htmlFor="import-graph" 
+                            className="w-full px-4 py-2 bg-cyan-700 hover:bg-cyan-600 rounded-md transition-colors text-sm font-medium text-center cursor-pointer"
+                        >
+                            Importar Grafo
+                        </label>
+                        <input id="import-graph" type="file" accept=".json,application/json" className="hidden" onChange={handleImportCognitiveGraph} />
+                    </div>
                 </div>
             </div>
             

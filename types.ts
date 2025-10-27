@@ -1,5 +1,3 @@
-
-
 export enum AssistantStatus {
   IDLE = 'IDLE',
   LISTENING = 'LISTENING',

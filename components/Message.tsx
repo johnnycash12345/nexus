@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 import { ChatMessage, Concept, NewsArticle } from '../types';
 

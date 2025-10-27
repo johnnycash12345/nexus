@@ -1,24 +1,22 @@
-
-
-
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { AssistantStatus, ChatMessage, AppSettings, Emotion, VisualState } from './types';
 import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
 import { useLlm } from './hooks/useLlm';
 import { db } from './services/indexedDBService';
 import { AvatarLayer } from './components/AvatarLayer';
 import { Message } from './components/Message';
-import { SettingsPanel } from './components/SettingsPanel';
-import { createNexusBrain, NexusBrain } from './services/nexusBrain';
-import { CameraView } from './components/CameraView';
+import { NexusCore } from './services/nexusCore';
 import { StartScreen } from './components/StartScreen';
 import { useGoogleSync } from './hooks/useGoogleSync';
 import { useSpeech } from './hooks/useSpeech';
-import { TodoList } from './components/TodoList';
-import { ReflectionHistory } from './components/ReflectionHistory';
 import { selfRepairSystem } from './services/selfRepairSystem';
-import { CognitiveStatus } from './components/CognitiveStatus';
+
+const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
+const CameraView = lazy(() => import('./components/CameraView').then(m => ({ default: m.CameraView })));
+const TodoList = lazy(() => import('./components/TodoList').then(m => ({ default: m.TodoList })));
+const ReflectionHistory = lazy(() => import('./components/ReflectionHistory').then(m => ({ default: m.ReflectionHistory })));
+const CognitiveStatus = lazy(() => import('./components/CognitiveStatus').then(m => ({ default: m.CognitiveStatus })));
+
 
 const withVibration = <T extends (...args: any[]) => any>(fn: T) => {
     return (...args: Parameters<T>): ReturnType<T> => {
@@ -52,8 +50,11 @@ const App: React.FC = () => {
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const brainRef = useRef<NexusBrain | null>(null);
+  const coreRef = useRef<NexusCore | null>(null);
   const isChatVisibleRef = useRef(isChatVisible);
+  const consecutiveErrorsRef = useRef(0);
+  const CONSECUTIVE_ERROR_THRESHOLD = 3;
+
 
   const speak = useCallback((text: string, onEnd?: () => void) => {
     speakFromHook(text, onEnd);
@@ -71,6 +72,8 @@ const App: React.FC = () => {
         if (type === 'symbolic_log') {
             // Shorten symbolic logs for the thought bubble
             formattedText = text.replace('[LOG]', '📝').substring(0, 80) + '...';
+        } else if (type === 'error') {
+            formattedText = `❗ ${text}`;
         }
         setThought(formattedText);
         const timer = setTimeout(() => setThought(null), 6000);
@@ -165,20 +168,25 @@ const App: React.FC = () => {
     initializeApp();
   }, []);
   
-  // Brain Initialization
+  // Nexus Core Initialization
   useEffect(() => {
       if (isInitializing || !settings || !isStarted) return;
       const stableSpeak = (text: string, onEnd?: () => void) => speak(text, onEnd);
 
-      const brain = createNexusBrain({
+      const core = new NexusCore({
         speak: stableSpeak, addMessage, setStatus, generateResponse, generateVisionResponse,
         getSettings: db.getSettings, getUserProfile: db.getUserProfile, setUserProfile: db.saveUserProfile,
       });
-      brainRef.current = brain;
-      brain.touchHeartbeat();
-      brain.ensureDailyReflection();
-      if (messages.length === 0) brain.handleUserTurn("", []);
-      return () => { stop(); brain.dispose(); };
+      
+      core.initialize();
+      coreRef.current = core;
+      
+      if (messages.length === 0) {
+        core.handleUserTurn("", []).catch(error => {
+            console.error("Error during initial awakening turn:", error);
+        });
+      }
+      return () => { stop(); core.dispose(); };
   }, [isInitializing, isStarted, settings, addMessage, generateResponse, generateVisionResponse, speak, stop]);
 
 
@@ -196,19 +204,34 @@ const App: React.FC = () => {
     if (isSessionActive) {
         setStatus(isNexusSpeaking ? AssistantStatus.SPEAKING : AssistantStatus.LISTENING);
     } else if (!activeCognitiveStates.includes(status)) {
-        if (status !== AssistantStatus.SUCCESS && status !== AssistantStatus.ERROR && status !== AssistantStatus.CURIOUS) {
+        if (status !== AssistantStatus.SUCCESS && status !== AssistantStatus.ERROR && status !== AssistantStatus.CURIOUS && status !== AssistantStatus.ROLLBACK) {
             setStatus(AssistantStatus.IDLE);
         }
     }
   }, [isSessionActive, isNexusSpeaking, status]);
 
   const handleMicClick = withVibration(() => {
-    brainRef.current?.touchHeartbeat();
+    coreRef.current?.touchHeartbeat();
     if (status === AssistantStatus.SLEEPY) setStatus(AssistantStatus.IDLE);
     if (isSessionActive) { endSession(); } 
     else { setIsChatVisible(true); setHasNewMessage(false); startSession(); }
   });
   
+  const handleTurn = async (text: string, currentHistory: ChatMessage[], imageData?: string) => {
+    try {
+        await coreRef.current?.handleUserTurn(text, currentHistory, imageData);
+        consecutiveErrorsRef.current = 0; // Reset on success
+    } catch (error) {
+        console.error("Caught error in App.tsx from handleUserTurn", error);
+        consecutiveErrorsRef.current += 1;
+        if (consecutiveErrorsRef.current >= CONSECUTIVE_ERROR_THRESHOLD) {
+            console.warn(`[NEXUS-APP] Reached ${CONSECUTIVE_ERROR_THRESHOLD} consecutive errors. Triggering rollback.`);
+            await coreRef.current?.performRollback();
+            consecutiveErrorsRef.current = 0; // Reset after rollback
+        }
+    }
+  };
+
   const handleTextSubmit = withVibration(async (e: React.FormEvent) => {
     e.preventDefault();
     const text = inputValue.trim();
@@ -220,7 +243,7 @@ const App: React.FC = () => {
     setIsChatVisible(true);
     setHasNewMessage(false);
     const currentHistory = [...messages, userMessage];
-    await brainRef.current?.handleUserTurn(text, currentHistory);
+    await handleTurn(text, currentHistory);
   });
   
   const handleVisionSubmit = async (imageData: string, prompt: string) => {
@@ -233,7 +256,7 @@ const App: React.FC = () => {
       setIsChatVisible(true);
       setHasNewMessage(false);
       const currentHistory = [...messages, userMessage];
-      await brainRef.current?.handleUserTurn(prompt, currentHistory, imageData);
+      await handleTurn(prompt, currentHistory, imageData);
   };
 
   const onSettingsChange = async (newSettings: AppSettings) => {
@@ -243,7 +266,7 @@ const App: React.FC = () => {
 
   const handleMessageAction = async (action: string, payload: any) => {
     if (action === 'merge_concepts' && payload) {
-        await brainRef.current?.performConceptMerge(payload);
+        await coreRef.current?.performConceptMerge(payload);
         setMessages(prev => prev.filter(m => m.type !== 'concept_consolidation_prompt'));
     }
     if (action === 'ignore_consolidation') {
@@ -305,7 +328,7 @@ const App: React.FC = () => {
             />
              {thought && !isChatVisible && (
               <div className="absolute top-1/2 -translate-y-[12rem] left-1/2 -translate-x-1/2 z-30 p-3 bg-gray-700/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-out max-w-xs text-center border border-gray-600 pointer-events-auto">
-                  <p className="text-sm text-gray-300 italic">💭 {thought}</p>
+                  <p className="text-sm text-gray-300 italic">{thought}</p>
               </div>
             )}
           </div>
@@ -414,11 +437,13 @@ const App: React.FC = () => {
         </>
       )}
       
-      {isSettingsVisible && <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} onClose={() => setIsSettingsVisible(false)} token={token} onLogout={logout} />}
-      {isStarted && isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onSend={handleVisionSubmit} />}
-      {isStarted && <TodoList isVisible={isTodoListVisible} onClose={() => setIsTodoListVisible(false)} />}
-      {isStarted && <ReflectionHistory isVisible={isReflectionHistoryVisible} onClose={() => setIsReflectionHistoryVisible(false)} />}
-      {isStarted && <CognitiveStatus isVisible={isCognitiveStatusVisible} onClose={() => setIsCognitiveStatusVisible(false)} />}
+      <Suspense fallback={null}>
+        {isSettingsVisible && <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} onClose={() => setIsSettingsVisible(false)} token={token} onLogout={logout} />}
+        {isStarted && isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onSend={handleVisionSubmit} />}
+        {isStarted && isTodoListVisible && <TodoList isVisible={isTodoListVisible} onClose={() => setIsTodoListVisible(false)} />}
+        {isStarted && isReflectionHistoryVisible && <ReflectionHistory isVisible={isReflectionHistoryVisible} onClose={() => setIsReflectionHistoryVisible(false)} />}
+        {isStarted && isCognitiveStatusVisible && <CognitiveStatus isVisible={isCognitiveStatusVisible} onClose={() => setIsCognitiveStatusVisible(false)} />}
+      </Suspense>
     </div>
   );
 };

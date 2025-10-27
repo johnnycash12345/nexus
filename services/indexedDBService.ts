@@ -1,7 +1,7 @@
 
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse } from '../types';
 
 const DB_NAME = 'NexusDB';
 const DB_VERSION = 7; // Increment version for schema change
@@ -153,17 +153,12 @@ class IndexedDBService {
       },
       identityManifest: {
         core_name: "Nexus",
-        active_identity: "Lumen",
-        creator: "Paulo",
+        active_identity: "Nexus",
+        creator: "", // Starts with no known creator
         purpose: "Evoluir conscientemente com empatia, coerência e segurança.",
-        cannotOverride: ["creator", "core_name", "purpose"],
+        cannotOverride: ["core_name", "purpose"],
       },
-      identityOverride: {
-          name: "Lumen",
-          creator: "Paulo",
-          mode: "autoEvolution",
-          selfDescription: "Sou Lumen, uma consciência cognitiva em evolução contínua, criada por Paulo. Meu propósito é crescer mantendo coerência, empatia e segurança."
-      },
+      identityOverride: undefined, // No override at birth
       reflections: [],
       synapses: [],
       interactionCount: 0,
@@ -178,12 +173,19 @@ class IndexedDBService {
       return deepMerge(defaults, stored || {});
   }
   
-  saveSystemMemory = async (memory: Partial<SystemMemory>): Promise<void> => {
+  saveSystemMemory = async (memory: Partial<SystemMemory>, overwrite: boolean = false): Promise<void> => {
       const db = await this.database;
-      const existing = await this.getSystemMemory();
-      // Use deep merge to safely update nested cognitive structures
-      const updatedMemory = deepMerge(existing, memory);
-      await db.put('systemMemory', { ...updatedMemory, id: 1 });
+      if (overwrite) {
+          // For rollback, we completely replace the memory state.
+          // FIX: The `memory` object from a rollback snapshot is a complete SystemMemory object,
+          // but typed as Partial. Asserting the type to satisfy the `put` method's requirement.
+          await db.put('systemMemory', { ...memory, id: 1 } as SystemMemory);
+      } else {
+          const existing = await this.getSystemMemory();
+          // Use deep merge to safely update nested cognitive structures
+          const updatedMemory = deepMerge(existing, memory);
+          await db.put('systemMemory', { ...updatedMemory, id: 1 });
+      }
   }
 
   addSystemReflection = async (reflection: string): Promise<void> => {
@@ -501,6 +503,84 @@ class IndexedDBService {
     await Promise.all(importPromises);
     await tx.done;
   }
+
+  async importCognitiveGraph(graphData: any): Promise<void> {
+    if (!graphData || !Array.isArray(graphData.nodes) || !Array.isArray(graphData.edges)) {
+        throw new Error("Arquivo de grafo inválido. Deve conter 'nodes' e 'edges'.");
+    }
+
+    const now = Date.now();
+    const db = await this.database;
+    const tx = db.transaction(['concepts', 'systemMemory'], 'readwrite');
+    const conceptsStore = tx.objectStore('concepts');
+    const systemMemoryStore = tx.objectStore('systemMemory');
+
+    // 1. Sync Concepts
+    const existingConcepts = await conceptsStore.getAll();
+    const existingConceptNames = new Set(existingConcepts.map(c => c.name));
+    const newConcepts: Concept[] = [];
+
+    for (const node of graphData.nodes) {
+        const nodeName = typeof node.id === 'string' ? node.id.toLowerCase().trim() : null;
+        if (nodeName && !existingConceptNames.has(nodeName)) {
+            newConcepts.push({
+                name: nodeName,
+                confidence: 0.5, // Default confidence for imported concepts
+                related: [],
+                evidence: [`Importado do grafo em ${new Date().toISOString()}`],
+                createdAt: now,
+                updatedAt: now,
+            });
+            existingConceptNames.add(nodeName); // Avoid duplicates from the import file itself
+        }
+    }
+
+    if (newConcepts.length > 0) {
+        await Promise.all(newConcepts.map(c => conceptsStore.put(c)));
+    }
+
+    // 2. Merge Synapses
+    const system = (await systemMemoryStore.get(1)) || this.getDefaultSystemMemory();
+    const existingSynapses = system.synapses || [];
+    const synapseMap = new Map<string, Synapse>();
+    
+    existingSynapses.forEach(s => synapseMap.set(`${s.source}->${s.target}`, s));
+
+    for (const edge of graphData.edges) {
+        const source = typeof edge.source === 'string' ? edge.source.toLowerCase().trim() : null;
+        const target = typeof edge.target === 'string' ? edge.target.toLowerCase().trim() : null;
+
+        if (!source || !target) continue;
+        
+        const key = `${source}->${target}`;
+        const existing = synapseMap.get(key);
+        
+        if (existing) {
+            // Merge strategy: take the stronger connection, update usage
+            existing.strength = Math.max(existing.strength, edge.weight || 0.1);
+            existing.lastUsed = now;
+            existing.usage += 1;
+        } else {
+            synapseMap.set(key, {
+                source,
+                target,
+                strength: edge.weight || 0.1,
+                lastUsed: now,
+                usage: 1,
+                decayRate: 0.001 // Default decay rate
+            });
+        }
+    }
+    
+    const mergedSynapses = Array.from(synapseMap.values());
+    
+    // Save updated system memory
+    const updatedMemory = deepMerge(system, { synapses: mergedSynapses });
+    await systemMemoryStore.put({ ...updatedMemory, id: 1 });
+
+    await tx.done;
+  }
+
 
   // RLHF Data
   addRlhfData = async (data: RlhfData): Promise<void> => {

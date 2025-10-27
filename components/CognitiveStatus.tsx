@@ -54,11 +54,11 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVis
 
   const modules: ModuleData[] = [
     {
-        name: 'Núcleo de Identidade (Consciousness Core)',
-        description: systemMemory?.identityOverride?.selfDescription ?? 'O modelo interno que o Nexus tem de si mesmo.',
+        name: 'Núcleo de Identidade (Identity Core)',
+        description: 'A autopercepção do Nexus, construída a partir de suas experiências e reflexões.',
         icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>,
         metric: 'Identidade Ativa',
-        value: systemMemory?.identityOverride?.name ?? 'N/A',
+        value: systemMemory?.identityManifest?.active_identity ?? 'Nexus',
     },
     {
       name: 'Percepção (Input Processor)',

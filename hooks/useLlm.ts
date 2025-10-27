@@ -21,13 +21,8 @@ export const useLlm = (settings: AppSettings | null) => {
         if (settings?.apiKeys?.deepseekApiKey) {
             try {
                 console.log('[NEXUS-LLM] Tentando provedor secundário: DeepSeek');
-                const deepseekResponse = await generateDeepSeekResponse(settings.apiKeys.deepseekApiKey, prompt, history);
-                // Adaptar a resposta simples do DeepSeek para a estrutura cognitiva
-                return {
-                    text: deepseekResponse.text,
-                    learningContext: { inputIntent: 'deepseek_fallback', emotionalTone: 'neutral', contextTags: ['fallback', 'deepseek'], responseEffectiveness: 0.6, reinforcementSignal: 'neutral' },
-                    metaReflection: { analysis: 'Resposta gerada via modelo DeepSeek (fallback).', improvementFocus: 'n/a', nextStep: 'n/a' }
-                };
+                // O deepseekService agora retorna a LlmCognitiveResponse completa
+                return await generateDeepSeekResponse(settings.apiKeys.deepseekApiKey, prompt, history);
             } catch (deepseekError) {
                 console.error('[NEXUS-FALLBACK] DeepSeek também falhou. Ativando modo de resposta offline.', deepseekError);
                 // --- 3. Ambos falharam, ativar modo offline ---
@@ -53,13 +48,8 @@ export const useLlm = (settings: AppSettings | null) => {
         if (settings?.apiKeys?.deepseekApiKey) {
             try {
                 console.log('[NEXUS-LLM] Tentando provedor de visão secundário: DeepSeek');
-                const deepseekResponse = await generateDeepSeekVisionResponse(settings.apiKeys.deepseekApiKey, prompt, imageUrl);
-                 // Adaptar a resposta simples do DeepSeek para a estrutura cognitiva
-                return {
-                    text: deepseekResponse.text,
-                    learningContext: { inputIntent: 'vision_deepseek_fallback', emotionalTone: 'curious', contextTags: ['image', 'fallback', 'deepseek'], responseEffectiveness: 0.6, reinforcementSignal: 'neutral' },
-                    metaReflection: { analysis: 'Resposta de visão gerada via modelo DeepSeek (fallback).', improvementFocus: 'n/a', nextStep: 'n/a' }
-                };
+                 // O deepseekService agora retorna a LlmCognitiveResponse completa
+                return await generateDeepSeekVisionResponse(settings.apiKeys.deepseekApiKey, prompt, imageUrl);
             } catch (deepseekError) {
                  console.error('[NEXUS-FALLBACK] DeepSeek Vision também falhou. Ativando modo de resposta offline.', deepseekError);
                 // --- 3. Ambos falharam, ativar modo offline ---
