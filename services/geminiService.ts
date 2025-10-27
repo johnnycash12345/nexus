@@ -48,7 +48,7 @@ const responseSchema = {
 export const generateGeminiResponse = async (
   prompt: string,
   history: ChatMessage[],
-  options?: { useThinking?: boolean; latLng?: { latitude: number; longitude: number } }
+  options?: { useThinking?: boolean; latLng?: { latitude: number; longitude: number }; customSchema?: any; }
 ): Promise<LlmCognitiveResponse> => {
   const now = Date.now();
 
@@ -73,7 +73,7 @@ export const generateGeminiResponse = async (
 
     const config: any = {
       responseMimeType: "application/json",
-      responseSchema,
+      responseSchema: options?.customSchema || responseSchema,
     };
     if (options?.useThinking) config.thinkingConfig = { thinkingBudget: 32768 };
 
@@ -92,9 +92,10 @@ export const generateGeminiResponse = async (
     }
 
     const cognitiveResponse: LlmCognitiveResponse = {
-      text:
+      text: options?.customSchema ? response.text : (
         parsedJson.responseText ||
-        "Não consegui formular uma resposta no momento.",
+        "Não consegui formular uma resposta no momento."
+      ),
       learningContext:
         parsedJson.learningContext || {
           inputIntent: "generic",
