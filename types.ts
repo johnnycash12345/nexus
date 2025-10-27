@@ -10,6 +10,9 @@ export enum AssistantStatus {
   CURIOUS = 'CURIOUS',
   SLEEPY = 'SLEEPY',
   SURPRISED = 'SURPRISED',
+  REWRITING_CODE = 'REWRITING_CODE',
+  SELF_ANALYSIS = 'SELF_ANALYSIS',
+  SEARCHING_WEB = 'SEARCHING_WEB',
 }
 
 export enum Emotion {

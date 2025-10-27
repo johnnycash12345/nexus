@@ -1,4 +1,5 @@
 
+
 import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Emotion, Personality, EmotionState } from '../types';
 import { db } from './indexedDBService';
 import { LlmResponseType } from './geminiService';
@@ -341,6 +342,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
 
     const runEvolutionCycle = async () => {
         console.log('[NEXUS-BRAIN] Starting cognitive evolution cycle...');
+        setStatus(AssistantStatus.SELF_ANALYSIS);
         try {
             await adaptiveMemory.decayUnusedConcepts();
             const hasReflected = await selfReflection.weeklyIntrospection(generateResponse);
@@ -353,11 +355,15 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
                 
                 setTimeout(() => {
                     addMessage({ role: 'model', text: proactiveMessage });
-                    speak(proactiveMessage);
+                    speak(proactiveMessage, () => setStatus(AssistantStatus.IDLE));
                 }, 5000);
+            } else {
+                setTimeout(() => setStatus(AssistantStatus.IDLE), 5000);
             }
         } catch (error) {
             console.error('[NEXUS-BRAIN] Error during cognitive evolution cycle:', error);
+            setStatus(AssistantStatus.ERROR);
+            setTimeout(() => setStatus(AssistantStatus.IDLE), 5000);
         }
     };
     
@@ -423,7 +429,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
 
   async function performConceptMerge(options: { targetConceptName: string, sourceConceptNames: string[] }) {
     touchHeartbeat();
-    setStatus(AssistantStatus.THINKING);
+    setStatus(AssistantStatus.REWRITING_CODE);
     try {
         await db.mergeConcepts(options.targetConceptName, options.sourceConceptNames);
         const confirmationText = `Entendido. Unifiquei meu conhecimento sobre "${options.targetConceptName}". Agradeço a ajuda!`;
@@ -493,13 +499,12 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
             return;
         }
 
-        setStatus(AssistantStatus.THINKING);
+        setStatus(AssistantStatus.SEARCHING_WEB);
         const topic = userText.replace(newsRegex, '').replace(/sobre|de|a respeito/g, '').trim();
         if (!topic) {
             const msg = "Sobre qual tópico você gostaria de saber as notícias?";
             addMessage({ role: 'model', text: msg });
-            speak(msg);
-            setStatus(AssistantStatus.IDLE);
+            speak(msg, () => setStatus(AssistantStatus.IDLE));
             return;
         }
         
@@ -512,13 +517,12 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
                 type: 'news_summary',
                 articles: articles
             });
-            speak(`Encontrei algumas notícias sobre ${topic}.`);
+            speak(`Encontrei algumas notícias sobre ${topic}.`, () => setStatus(AssistantStatus.IDLE));
         } else {
             const msg = `Não encontrei nenhuma notícia recente sobre "${topic}". Quer tentar outro assunto?`;
             addMessage({ role: 'model', text: msg });
-            speak(msg);
+            speak(msg, () => setStatus(AssistantStatus.IDLE));
         }
-        setStatus(AssistantStatus.IDLE);
         await updateUserMemory(userText, `Busquei notícias sobre ${topic}`);
         await evolveEmotion(userText, `Busquei notícias sobre ${topic}`);
         return;
@@ -541,14 +545,13 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
         return;
     }
 
-    setStatus(AssistantStatus.THINKING);
-
     const useThinking = /analise|reflita|pense sobre|explique em detalhes/i.test(userText) || userText.length > 150;
     const needsLocation = /perto|aqui|próximo|mapa|rota/i.test(userText);
     
     let latLng: { latitude: number, longitude: number } | undefined;
-
+    
     if (needsLocation) {
+        setStatus(AssistantStatus.SEARCHING_WEB);
         try {
             const position = await new Promise<GeolocationPosition>((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
@@ -561,6 +564,8 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
             console.warn("Could not get geolocation:", error);
             addMessage({role: 'model', text: '(Não consegui obter sua localização, mas tentarei responder mesmo assim.)', type: 'status'});
         }
+    } else {
+        setStatus(AssistantStatus.THINKING);
     }
 
     const context = await buildContextPrompt(userText);

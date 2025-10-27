@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AssistantStatus, ChatMessage, AppSettings, Emotion } from './types';
 import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
@@ -202,14 +203,20 @@ const App: React.FC = () => {
   }, [messages, isChatVisible, currentUserTranscript, currentNexusTranscript]);
 
   useEffect(() => {
-    const thinking = status === AssistantStatus.THINKING;
+    const activeCognitiveStates = [
+        AssistantStatus.THINKING,
+        AssistantStatus.REWRITING_CODE,
+        AssistantStatus.SELF_ANALYSIS,
+        AssistantStatus.SEARCHING_WEB
+    ];
+
     if (isSessionActive) {
         if (isNexusSpeaking) {
             setStatus(AssistantStatus.SPEAKING);
         } else {
             setStatus(AssistantStatus.LISTENING);
         }
-    } else if (!thinking) {
+    } else if (!activeCognitiveStates.includes(status)) {
         // This logic is complex because emotion can also set status.
         // Let's prevent this effect from overriding a recent emotional status update.
         if (status !== AssistantStatus.SUCCESS && status !== AssistantStatus.ERROR && status !== AssistantStatus.CURIOUS) {

@@ -83,3 +83,24 @@
 .antenna-curious { --c1:#facc15;--c2:#fde68a; animation: antenna-pulse-keyframes 2s ease-in-out infinite; }
 .antenna-sleepy { --c1:#94a3b8;--c2:#cbd5e1; animation: antenna-pulse-keyframes 5s ease-in-out infinite; }
 .antenna-surprised { --c1:#38bdf8;--c2:#7dd3fc; animation: antenna-pulse-keyframes .6s ease-in-out infinite; }
+
+/* --- Cognitive Effects Animations --- */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin-slow 10s linear infinite;
+}
+.animation-delay-[-5s] {
+    animation-delay: -5s;
+}
+
+@keyframes float-slow {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+.animate-float-slow {
+  animation: float-slow 4s ease-in-out infinite;
+}
