@@ -1,14 +1,17 @@
 
+
 import { db } from './indexedDBService';
 import { Concept } from '../types';
 import { memoryCache } from './memoryCache';
 
-const DECAY_HALF_LIFE_DAYS = 30; // Time for confidence to halve
-const DECAY_CONSTANT = Math.log(2) / DECAY_HALF_LIFE_DAYS;
 const MIN_CONFIDENCE = 0.05;
 
 export const adaptiveMemory = {
   async decayUnusedConcepts(): Promise<void> {
+    const settings = await db.getSettings();
+    const decayHalfLifeDays = settings.cognitive?.memoryDecayHalfLifeDays ?? 30;
+    const decayConstant = Math.log(2) / decayHalfLifeDays;
+
     const allConcepts = await db.getAllConcepts();
     const now = Date.now();
     const conceptsToUpdate: Concept[] = [];
@@ -19,7 +22,7 @@ export const adaptiveMemory = {
       if (ageInMs <= 0) continue;
 
       const ageInDays = ageInMs / (1000 * 60 * 60 * 24);
-      const decayFactor = Math.exp(-ageInDays * DECAY_CONSTANT);
+      const decayFactor = Math.exp(-ageInDays * decayConstant);
       const newConfidence = (concept.confidence || 0) * decayFactor;
       
       if (newConfidence < MIN_CONFIDENCE) {

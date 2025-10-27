@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { Concept } from '../../types';
 import { db } from '../../services/indexedDBService';
@@ -43,17 +44,21 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
 
     const handleExportMemory = async () => {
         try {
-            const [profile, diary, system, concepts] = await Promise.all([
+            const [profile, diary, system, concepts, chatHistory, tasks] = await Promise.all([
                 db.getUserProfile(),
                 db.getDiary(),
                 db.getSystemMemory(),
-                db.getAllConcepts()
+                db.getAllConcepts(),
+                db.getChatHistory(),
+                db.getAllTasks(),
             ]);
 
             const backupData = {
-                profile, diary, system, concepts,
-                exportedAt: new Date().toISOString(),
-                version: '1.0.0',
+                profile, diary, system, concepts, chatHistory, tasks,
+                meta: {
+                    exportedAt: new Date().toISOString(),
+                    version: '1.1.0',
+                }
             };
 
             const fileContent = JSON.stringify(backupData, null, 2);

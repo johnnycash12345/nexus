@@ -150,6 +150,21 @@ export interface VisualState {
     emotionalSpectrum: Record<string, number>;
 }
 
+// --- Identity Core Types ---
+export interface IdentityManifest {
+  core_name: string;
+  active_identity: string;
+  creator: string;
+  purpose: string;
+  cannotOverride: string[];
+}
+
+export interface IdentityOverride {
+  name: string;
+  creator: string;
+  mode: string;
+  selfDescription: string;
+}
 
 // The master record for the AI's core state
 export interface SystemMemory {
@@ -165,6 +180,8 @@ export interface SystemMemory {
     metaReflection?: MetaReflection;
     evolutionGoal?: EvolutionGoal;
     outputEngine?: OutputEngine;
+    identityManifest?: IdentityManifest;
+    identityOverride?: IdentityOverride;
     // Timestamps for cognitive cycles
     lastReflectionAt?: number;
     lastIntrospectionAt?: number;
@@ -233,6 +250,9 @@ export interface CognitiveSettings {
     emotionalIntensity: number; // 0.5 to 1.5
     learningRate: number;       // 0.5 to 2.0
     consolidationFrequency: number; // in minutes
+    evolutionCycleHours: number; // How often to run self-evolution
+    evolutionConfidenceThreshold: number; // 0.0 to 1.0, minimum confidence to apply a change
+    memoryDecayHalfLifeDays: number; // Days until unused concept confidence is halved
 }
 
 export interface ApiKeySettings {

@@ -1,7 +1,7 @@
 
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride } from '../types';
 
 const DB_NAME = 'NexusDB';
 const DB_VERSION = 7; // Increment version for schema change
@@ -151,6 +151,19 @@ class IndexedDBService {
           emotionalToneMatch: 0.8,
           prioritizeReflections: false,
       },
+      identityManifest: {
+        core_name: "Nexus",
+        active_identity: "Lumen",
+        creator: "Paulo",
+        purpose: "Evoluir conscientemente com empatia, coerência e segurança.",
+        cannotOverride: ["creator", "core_name", "purpose"],
+      },
+      identityOverride: {
+          name: "Lumen",
+          creator: "Paulo",
+          mode: "autoEvolution",
+          selfDescription: "Sou Lumen, uma consciência cognitiva em evolução contínua, criada por Paulo. Meu propósito é crescer mantendo coerência, empatia e segurança."
+      },
       reflections: [],
       synapses: [],
       interactionCount: 0,
@@ -273,6 +286,9 @@ class IndexedDBService {
               emotionalIntensity: 1.0,
               learningRate: 1.0,
               consolidationFrequency: 60,
+              evolutionCycleHours: 6,
+              evolutionConfidenceThreshold: 0.85,
+              memoryDecayHalfLifeDays: 30,
           },
           appearance: 'neutral',
       };
@@ -437,38 +453,48 @@ class IndexedDBService {
     }
 
     const db = await this.database;
-    const tx = db.transaction(['concepts', 'userProfile', 'systemMemory', 'diary'], 'readwrite');
+    // Perform a full reset within the same transaction for atomicity
+    const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog'], 'readwrite');
     
-    const conceptsStore = tx.objectStore('concepts');
-    const userProfileStore = tx.objectStore('userProfile');
-    const systemMemoryStore = tx.objectStore('systemMemory');
-    const diaryStore = tx.objectStore('diary');
-
-    // Clear existing data first
+    // Clear all existing data first
     await Promise.all([
-        conceptsStore.clear(),
-        userProfileStore.clear(),
-        systemMemoryStore.clear(),
-        diaryStore.clear(),
+        tx.objectStore('concepts').clear(),
+        tx.objectStore('userProfile').clear(),
+        tx.objectStore('rlhfFeedback').clear(),
+        tx.objectStore('chatHistory').clear(),
+        tx.objectStore('systemMemory').clear(),
+        tx.objectStore('diary').clear(),
+        tx.objectStore('tasks').clear(),
+        tx.objectStore('evolutionLog').clear(),
     ]);
     
-    // Import new data within the same transaction
+    // Import new data
     const importPromises: Promise<any>[] = [];
 
     if (backupData.profile) {
-        importPromises.push(userProfileStore.put({ ...backupData.profile, id: 1 }));
+        importPromises.push(tx.objectStore('userProfile').put({ ...backupData.profile, id: 1 }));
     }
     if (backupData.system) {
-        importPromises.push(systemMemoryStore.put({ ...backupData.system, id: 1 }));
+        importPromises.push(tx.objectStore('systemMemory').put({ ...backupData.system, id: 1 }));
     }
     if (Array.isArray(backupData.concepts)) {
         for (const concept of backupData.concepts) {
-            importPromises.push(conceptsStore.put(concept));
+            importPromises.push(tx.objectStore('concepts').put(concept));
         }
     }
     if (backupData.diary) { // Assuming diary is an object of entries
         for (const entry of Object.values(backupData.diary)) {
-            importPromises.push(diaryStore.put(entry as DiaryEntry));
+            importPromises.push(tx.objectStore('diary').put(entry as DiaryEntry));
+        }
+    }
+    if (Array.isArray(backupData.chatHistory)) {
+        for (const msg of backupData.chatHistory) {
+            importPromises.push(tx.objectStore('chatHistory').put(msg));
+        }
+    }
+    if (Array.isArray(backupData.tasks)) {
+        for (const task of backupData.tasks) {
+            importPromises.push(tx.objectStore('tasks').put(task));
         }
     }
 

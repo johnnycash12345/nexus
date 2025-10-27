@@ -8,9 +8,6 @@ import { adaptiveMemory } from './adaptiveMemory';
 import { selfReflection } from './selfReflection';
 import { associativeReasoner } from './associativeReasoner';
 
-const EVOLUTION_CYCLE_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
-const MIN_CONFIDENCE_FOR_CHANGE = 0.85;
-
 interface EvolutionServiceOptions {
     generateResponse: GenerateResponseFn;
     setStatus: SetStatusFn;
@@ -42,8 +39,9 @@ const proposalSchema = {
 };
 
 class SelfEvolutionServiceImpl implements SelfEvolutionService {
-    private timer: number | null = null;
+    private timeoutId: number | null = null;
     private isRunning = false;
+    private isStopped = false;
     private opts: EvolutionServiceOptions;
 
     constructor(opts: EvolutionServiceOptions) {
@@ -51,18 +49,19 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     }
 
     start() {
-        if (this.timer) clearInterval(this.timer);
-        this.runCycle();
-        this.timer = window.setInterval(() => this.runCycle(), EVOLUTION_CYCLE_INTERVAL_MS);
+        this.isStopped = false;
+        // Run the first cycle shortly after startup, then schedule the next one.
+        this.timeoutId = window.setTimeout(() => this.runCycle(), 30 * 1000); // 30s delay on first run
     }
 
     stop() {
-        if (this.timer) clearInterval(this.timer);
-        this.timer = null;
+        this.isStopped = true;
+        if (this.timeoutId) clearTimeout(this.timeoutId);
+        this.timeoutId = null;
     }
 
     private async runCycle() {
-        if (this.isRunning) return;
+        if (this.isStopped || this.isRunning) return;
         this.isRunning = true;
         
         console.log('[NEXUS-EVOLVE] Starting cognitive evolution cycle...');
@@ -77,7 +76,7 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             const settings = await db.getSettings();
             if (!settings.behavior?.permissions?.allowSelfModification) {
                 console.log("[NEXUS-EVOLVE] Self-modification disabled by user settings.");
-                this.isRunning = false;
+                this.scheduleNextRun();
                 return;
             }
 
@@ -88,19 +87,20 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             // 2. Analysis
             const proposal = await this.analyze(systemState);
             if (!proposal) {
-                this.isRunning = false;
+                this.scheduleNextRun();
                 return;
             }
 
             // 3. Sandbox (Simulation)
             this.opts.setStatus(AssistantStatus.THINKING);
             const confidence = await this.sandbox(proposal);
+            const confidenceThreshold = settings.cognitive?.evolutionConfidenceThreshold ?? 0.85;
 
             // 4. Integration
-            if (confidence > MIN_CONFIDENCE_FOR_CHANGE) {
+            if (confidence > confidenceThreshold) {
                 await this.integrate(proposal, confidence);
             } else {
-                 console.log(`[NEXUS-EVOLVE] Proposal confidence ${confidence} is below threshold ${MIN_CONFIDENCE_FOR_CHANGE}. Aborting integration.`);
+                 console.log(`[NEXUS-EVOLVE] Proposal confidence ${confidence} is below threshold ${confidenceThreshold}. Aborting integration.`);
             }
 
         } catch (error) {
@@ -108,8 +108,18 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             this.opts.setStatus(AssistantStatus.ERROR);
         } finally {
             this.opts.setStatus(AssistantStatus.IDLE);
-            this.isRunning = false;
+            this.scheduleNextRun();
         }
+    }
+
+    private async scheduleNextRun() {
+        this.isRunning = false;
+        if (this.isStopped) return;
+        
+        const settings = await db.getSettings();
+        const interval = (settings.cognitive?.evolutionCycleHours ?? 6) * 60 * 60 * 1000;
+        this.timeoutId = window.setTimeout(() => this.runCycle(), interval);
+        console.log(`[NEXUS-EVOLVE] Next evolution cycle scheduled in ${settings.cognitive?.evolutionCycleHours ?? 6} hours.`);
     }
     
     private async observe(): Promise<string> {
