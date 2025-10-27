@@ -13,6 +13,7 @@ export enum AssistantStatus {
   REWRITING_CODE = 'REWRITING_CODE',
   SELF_ANALYSIS = 'SELF_ANALYSIS',
   SEARCHING_WEB = 'SEARCHING_WEB',
+  ROLLBACK = 'ROLLBACK',
 }
 
 export enum Emotion {
@@ -37,12 +38,22 @@ export interface NewsArticle {
   sourceName: string;
 }
 
+// --- Nexus Learning Engine 2.0 Types ---
+
+export interface LearningContext {
+  inputIntent: string; // e.g., 'question', 'statement', 'command'
+  emotionalTone: string; // e.g., 'curious', 'happy', 'urgent'
+  contextTags: string[]; // e.g., ['autonomy', 'consciousness']
+  responseEffectiveness: number; // 0 to 1, model's self-evaluation
+  reinforcementSignal: 'positive' | 'neutral' | 'negative';
+}
+
 export interface ChatMessage {
   id?: number; // Optional ID from IndexedDB
   role: 'user' | 'model';
   text: string;
   type?: 'message' | 'status' | 'proactive_question' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary';
-  timestamp?: number; // Optional timestamp from IndexedDB
+  timestamp?: number; // Optional ID from IndexedDB
   imageUrl?: string; // Base64 encoded image URL for vision
   consolidationOptions?: {
     targetConceptName: string;
@@ -50,9 +61,9 @@ export interface ChatMessage {
   };
   sources?: { uri: string; title: string }[];
   articles?: NewsArticle[];
+  learningContext?: LearningContext; // New deep learning context
 }
 
-// --- Personality Traits ---
 export interface Personality {
   curiosity: number; // 0 to 1
   enthusiasm: number; // 0 to 1
@@ -60,15 +71,16 @@ export interface Personality {
   humor: number; // 0 to 1
 }
 
-// --- Synapses for Neural Memory ---
+// Evolved Synapse with dynamic properties
 export interface Synapse {
   source: string;
   target: string;
   strength: number; // 0 to 1
   lastUsed: number;
+  usage: number; // New: interaction counter
+  decayRate: number; // New: rate of forgetting
 }
 
-// --- IndexedDB Schemas ---
 export interface Concept {
   id?: number;
   name: string;
@@ -96,18 +108,81 @@ export interface RlhfData {
     timestamp: number;
 }
 
+export interface HierarchicalMemory {
+    episodic: string[];     // Summaries of recent events/conversations
+    semantic: string[];     // Key learned concepts
+    reflective: string[];   // Key insights and lessons learned
+}
+
+export interface MetaReflection {
+    analysis: string;
+    improvementFocus: string;
+    nextStep: string;
+}
+
+// FIX: Exported LlmCognitiveResponse from here to be a shared type, resolving import errors.
+export type LlmCognitiveResponse = {
+  text: string;
+  sources?: { uri: string; title: string }[];
+  learningContext: LearningContext;
+  metaReflection: MetaReflection;
+};
+
+export interface EvolutionGoal {
+    currentFocus: string;
+    metrics: {
+        contextAccuracy: number;
+        emotionalCoherence: number;
+    };
+    guidingStatement: string;
+}
+
+export interface OutputEngine {
+    contextSensitivity: number; // 0-1
+    clarityWeight: number;      // 0-1
+    emotionalToneMatch: number; // 0-1
+    prioritizeReflections: boolean;
+}
+
+export interface VisualState {
+    highlightNodes: string[];
+    pulseIntensity: number;
+    emotionalSpectrum: Record<string, number>;
+}
+
+
+// The master record for the AI's core state
 export interface SystemMemory {
     id?: number;
     born: boolean;
     birthTime: string;
     personality: Personality;
-    reflections: string[];
-    lastReflectionAt?: number;
-    synapses?: Synapse[];
     interactionCount?: number;
     emotionState?: EmotionState;
+    // New Learning Engine 2.0 modules
+    memory?: HierarchicalMemory;
+    synapses?: Synapse[];
+    metaReflection?: MetaReflection;
+    evolutionGoal?: EvolutionGoal;
+    outputEngine?: OutputEngine;
+    // Timestamps for cognitive cycles
+    lastReflectionAt?: number;
     lastIntrospectionAt?: number;
     lastReasoningAt?: number;
+    lastEvolutionAt?: number;
+    // This is now part of memory.reflective, but keep for legacy/simplicity
+    reflections: string[]; 
+    // For self-evolution rollbacks
+    evolutionSnapshot?: Partial<SystemMemory>;
+}
+
+export interface EvolutionLog {
+    id?: number;
+    cycleId: string;
+    changes: { target: string; value: any; }[];
+    confidence: number;
+    rollbackUsed: boolean;
+    timestamp: number;
 }
 
 export interface DiaryEntry {
@@ -115,6 +190,7 @@ export interface DiaryEntry {
     dayKey: string; // "YYYY-MM-DD"
     entry: string;
     createdAt: number;
+    learningContext?: LearningContext;
 }
 
 export interface Task {
@@ -124,8 +200,16 @@ export interface Task {
   createdAt: number;
 }
 
+export interface AppSettings {
+    id?: number;
+    voice: VoiceSettings;
+    behavior: BehaviorSettings;
+    apiKeys?: ApiKeySettings;
+    llmProvider?: 'gemini' | 'deepseek';
+    cognitive?: CognitiveSettings;
+    appearance?: 'neutral' | 'feminine' | 'masculine';
+}
 
-// --- App Settings ---
 export interface VoiceSettings {
     voiceURI: string | null;
     rate: number;
@@ -154,14 +238,4 @@ export interface CognitiveSettings {
 export interface ApiKeySettings {
     deepseekApiKey?: string;
     newsApiKey?: string;
-}
-
-export interface AppSettings {
-    id?: number;
-    voice: VoiceSettings;
-    behavior: BehaviorSettings;
-    apiKeys?: ApiKeySettings;
-    llmProvider?: 'gemini' | 'deepseek';
-    cognitive?: CognitiveSettings;
-    appearance?: 'neutral' | 'feminine' | 'masculine';
 }

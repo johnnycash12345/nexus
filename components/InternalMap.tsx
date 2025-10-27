@@ -1,23 +1,40 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/indexedDBService';
-import { Concept } from '../types';
+import { Concept, Synapse } from '../types';
 
 interface InternalMapProps {
   onClose: () => void;
   isVisible: boolean;
 }
 
+interface ConceptWithSynapses extends Concept {
+    synapses: Synapse[];
+}
+
 export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) => {
-  const [concepts, setConcepts] = useState<Concept[]>([]);
+  const [concepts, setConcepts] = useState<ConceptWithSynapses[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (isVisible) {
       setIsLoading(true);
-      db.getAllConcepts().then(allConcepts => {
-        allConcepts.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
-        setConcepts(allConcepts);
+      Promise.all([
+        db.getAllConcepts(),
+        db.getSystemMemory()
+      ]).then(([allConcepts, systemMemory]) => {
+        const synapses = systemMemory.synapses || [];
+        const conceptsWithSynapses = allConcepts.map(concept => {
+            const conceptSynapses = synapses
+                .filter(s => s.source === concept.name || s.target === concept.name)
+                .sort((a, b) => b.strength - a.strength)
+                .slice(0, 3);
+            return { ...concept, synapses: conceptSynapses };
+        });
+        
+        conceptsWithSynapses.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+        setConcepts(conceptsWithSynapses);
         setIsLoading(false);
       });
     }
@@ -64,7 +81,18 @@ export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) 
                         </div>
                         <span className="text-xs font-medium text-gray-300">{Math.round((concept.confidence || 0) * 100)}%</span>
                     </div>
-                     <p className="text-xs text-gray-400 mt-1.5">Última atualização: {new Date(concept.updatedAt).toLocaleDateString()}</p>
+                    {concept.synapses.length > 0 && (
+                        <div className="mt-2 pt-2 pl-2 border-l-2 border-gray-600">
+                            <h4 className="text-xs font-bold text-gray-400">Conexões Fortes:</h4>
+                            <ul className="text-xs text-gray-300 list-disc list-inside">
+                                {concept.synapses.map((syn, i) => (
+                                    <li key={i} className="capitalize">
+                                        {syn.source === concept.name ? '→' : '←'} {syn.source === concept.name ? syn.target : syn.source} ({Math.round(syn.strength * 100)}%)
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </li>
               ))}
             </ul>

@@ -45,6 +45,7 @@ const MatrixBackground: React.FC = () => {
         const drops: number[] = Array(Math.floor(columns)).fill(1);
 
         const draw = () => {
+            if (!ctx) return;
             ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = "#0F0";
@@ -78,52 +79,48 @@ const MatrixBackground: React.FC = () => {
 const ThinkingEffect: React.FC = () => (
     <>
         <motion.div
-            animate={{ scale: [1, 1.03, 1], opacity: [0.7, 1, 0.7] }}
-            transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-            className="absolute w-72 h-72 rounded-full bg-gradient-radial from-cyan-500/20 to-transparent blur-3xl"
+            animate={{
+                scale: [1, 1.03, 1],
+                opacity: [1, 0.9, 1],
+            }}
+            transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+            className="absolute w-72 h-72 rounded-full bg-gradient-radial from-yellow-500/15 to-transparent blur-3xl"
         />
-        <div className="absolute animate-spin-slow w-48 h-48 border-2 border-dashed border-cyan-400/30 rounded-full blur-sm" />
-        <div className="absolute animate-spin-slow animation-delay-[-5s] w-56 h-56 border border-cyan-400/20 rounded-full" />
+        <div className="absolute animate-spin-slow w-20 h-20 border-2 border-yellow-400/30 rounded-full blur-sm" />
     </>
 );
 
 const SelfAnalysisEffect: React.FC = () => (
-    <>
-        <motion.div
-            animate={{ y: ["-40vh", "40vh", "-40vh"] }}
-            transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-            className="absolute w-96 h-1 bg-cyan-400 rounded-full blur-sm opacity-75"
-        />
-        <motion.div
-            animate={{ scale: [1, 1.05, 1], rotate: [0, 5, -5, 0] }}
-            transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-            className="absolute -top-16 -right-16 w-24 h-24 opacity-80 animate-float-slow"
-        >
-             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-[0_0_10px_#22d3ee]">
-                <circle cx="45" cy="45" r="30" stroke="#22d3ee" strokeWidth="6"/>
-                <line x1="65" y1="65" x2="85" y2="85" stroke="#22d3ee" strokeWidth="8" strokeLinecap="round"/>
-            </svg>
-        </motion.div>
-    </>
+    <motion.div
+        animate={{ scale: [1, 1.02, 1], rotate: [0, 1, -1, 0] }}
+        transition={{ repeat: Infinity, duration: 3 }}
+        className="absolute flex items-center justify-center"
+    >
+        <div className="absolute w-40 h-40 border-2 border-blue-400 rounded-full animate-scan-glow" />
+         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 animate-float-slow drop-shadow-[0_0_10px_#60a5fa]">
+            <circle cx="45" cy="45" r="30" stroke="#60a5fa" strokeWidth="6"/>
+            <line x1="65" y1="65" x2="85" y2="85" stroke="#60a5fa" strokeWidth="8" strokeLinecap="round"/>
+        </svg>
+    </motion.div>
 );
 
+const RollbackEffect: React.FC = () => (
+    <motion.div
+        animate={{ scale: [1.2, 0.8, 1.2], rotate: [0, -180, -360] }}
+        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+        className="absolute w-64 h-64 border-4 border-purple-400/80 rounded-full border-dashed"
+    />
+);
+
+
 const SearchEffect: React.FC = () => (
-    <>
-        {[0, 1, 2].map(i => (
-            <motion.div
-                key={i}
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 2.5, opacity: [0.8, 0] }}
-                transition={{
-                    repeat: Infinity,
-                    duration: 3,
-                    ease: "easeOut",
-                    delay: i * 1
-                }}
-                className="absolute w-48 h-48 rounded-full border-2 border-blue-400"
-            />
-        ))}
-    </>
+    <motion.div
+        animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.6, 1, 0.6] }}
+        transition={{ repeat: Infinity, duration: 2 }}
+        className="absolute w-[300px] h-[300px] rounded-full border-2 border-blue-400/40"
+    >
+        <div className="absolute inset-0 rounded-full bg-gradient-radial from-blue-400/10 to-transparent blur-2xl" />
+    </motion.div>
 );
 
 
@@ -146,12 +143,19 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
     return () => window.removeEventListener('nexus-voice-boundary', handleBoundary);
   }, [status, haloControls]);
 
-  // Animate halo rotation for thinking/curious status
+  // Animate halo rotation for thinking/curious/idle status
   useEffect(() => {
     if (status === AssistantStatus.THINKING || status === AssistantStatus.CURIOUS) {
       haloControls.start({
         rotate: 360,
         transition: { duration: 8, ease: 'linear', repeat: Infinity },
+      });
+    } else if (status === AssistantStatus.IDLE) {
+       haloControls.start({
+        opacity: [0.8, 1, 0.8],
+        scale: 1,
+        rotate: 0,
+        transition: { repeat: Infinity, duration: 4, ease: "easeInOut" }
       });
     } else if (status !== AssistantStatus.SPEAKING) {
       // Stop animations and reset if not thinking or speaking
@@ -181,10 +185,11 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
   };
   
   const cognitiveStateColors: Partial<Record<AssistantStatus, string>> = {
-      [AssistantStatus.REWRITING_CODE]: "from-green-400/40 to-green-900/10",
-      [AssistantStatus.SELF_ANALYSIS]: "from-purple-400/30 to-indigo-900/10",
+      [AssistantStatus.REWRITING_CODE]: "from-green-400/40 to-green-900/10", // Verde para integração
+      [AssistantStatus.SELF_ANALYSIS]: "from-blue-400/40 to-blue-900/10", // Azul para observação
       [AssistantStatus.SEARCHING_WEB]: "from-blue-400/40 to-blue-900/10",
-      [AssistantStatus.THINKING]: "from-cyan-400/30 to-cyan-800/20",
+      [AssistantStatus.THINKING]: "from-yellow-400/40 to-amber-700/10", // Amarelo para análise
+      [AssistantStatus.ROLLBACK]: "from-purple-500/50 to-purple-900/20", // Roxo para rollback
   };
 
   const bgClass = cognitiveStateColors[status] || emotionColors[emotion] || emotionColors.CALM;
@@ -201,6 +206,7 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
           {status === AssistantStatus.THINKING && <ThinkingEffect />}
           {status === AssistantStatus.SELF_ANALYSIS && <SelfAnalysisEffect />}
           {status === AssistantStatus.SEARCHING_WEB && <SearchEffect />}
+          {status === AssistantStatus.ROLLBACK && <RollbackEffect />}
       </div>
 
       {/* Clickable, moving avatar container */}
@@ -224,7 +230,7 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
             {/* Halo for speaking/thinking effects */}
             <motion.div
               animate={haloControls}
-              className="absolute top-[-1rem] w-6 h-6 bg-cyan-400 rounded-full shadow-[0_0_15px_rgba(0,255,255,0.8)]"
+              className="absolute top-[-1rem] w-4 h-4 rounded-full bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.7)]"
             />
             
             {/* The actual avatar model */}

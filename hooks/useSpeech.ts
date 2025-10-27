@@ -5,6 +5,11 @@ import { AppSettings, AssistantStatus } from '../types';
 export const useSpeech = (settings: AppSettings | null, status: AssistantStatus) => {
   const synthRef = useRef(window.speechSynthesis);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const statusRef = useRef(status);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -59,7 +64,8 @@ export const useSpeech = (settings: AppSettings | null, status: AssistantStatus)
     utter.pitch = settings.voice.pitch;
     
     // Emotional modulation based on status
-    switch (status) {
+    const currentStatus = statusRef.current;
+    switch (currentStatus) {
         case AssistantStatus.SUCCESS:
         case AssistantStatus.SURPRISED:
             utter.pitch = Math.min(2, settings.voice.pitch + 0.2);
@@ -129,7 +135,7 @@ export const useSpeech = (settings: AppSettings | null, status: AssistantStatus)
     }
 
     synth.speak(utter);
-  }, [settings, voices, cleanText, status]);
+  }, [settings, voices, cleanText]);
 
   const stop = useCallback(() => {
     if (synthRef.current.speaking) {

@@ -70,9 +70,6 @@ export class VoiceService {
     private nextStartTime = 0;
 
     constructor() {
-        if (!process.env.API_KEY) {
-            throw new Error("API_KEY environment variable not set");
-        }
         this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     }
     

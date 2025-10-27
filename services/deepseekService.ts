@@ -31,10 +31,8 @@ export const generateDeepSeekResponse = async (apiKey: string, prompt: string, h
         if (!response.ok) {
             const errorData = await response.json();
             console.error('DeepSeek API Error:', errorData);
-            const errorMessage = errorData.error?.message || response.statusText;
-            return {
-               text: `Desculpe, ocorreu um erro com a API: ${errorMessage}. Verifique se sua chave de API é válida.`
-            };
+            const errorMessage = errorData.error?.message || `Status: ${response.status}`;
+            throw new Error(`DeepSeek API Error: ${errorMessage}`);
         }
 
         const data = await response.json();
@@ -44,9 +42,8 @@ export const generateDeepSeekResponse = async (apiKey: string, prompt: string, h
 
     } catch (error) {
         console.error('Falha ao buscar da API DeepSeek:', error);
-        return {
-            text: 'Desculpe, tive um problema ao me conectar com meu cérebro. Por favor, verifique sua conexão com a internet e a chave de API.'
-        };
+        // Re-throw the error to be caught by the fallback orchestrator
+        throw error;
     }
 };
 
@@ -88,10 +85,8 @@ export const generateDeepSeekVisionResponse = async (apiKey: string, prompt: str
         if (!response.ok) {
             const errorData = await response.json();
             console.error('DeepSeek Vision API Error:', errorData);
-            const errorMessage = errorData.error?.message || response.statusText;
-            return {
-               text: `Desculpe, ocorreu um erro ao analisar a imagem: ${errorMessage}.`
-            };
+            const errorMessage = errorData.error?.message || `Status: ${response.status}`;
+            throw new Error(`DeepSeek Vision API Error: ${errorMessage}`);
         }
 
         const data = await response.json();
@@ -101,8 +96,7 @@ export const generateDeepSeekVisionResponse = async (apiKey: string, prompt: str
 
     } catch (error) {
         console.error('Falha ao buscar da API DeepSeek Vision:', error);
-        return {
-            text: 'Desculpe, tive um problema ao me conectar com meu cérebro visual. Verifique sua conexão.'
-        };
+        // Re-throw the error
+        throw error;
     }
 };

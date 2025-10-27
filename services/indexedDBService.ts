@@ -1,10 +1,10 @@
 
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog } from '../types';
 
 const DB_NAME = 'NexusDB';
-const DB_VERSION = 5; // Increment version for schema change
+const DB_VERSION = 7; // Increment version for schema change
 
 interface NexusDB extends DBSchema {
   concepts: {
@@ -44,6 +44,30 @@ interface NexusDB extends DBSchema {
     value: Task;
     indexes: { createdAt: number };
   };
+  evolutionLog: {
+    key: number;
+    value: EvolutionLog;
+    indexes: { timestamp: number };
+  };
+}
+
+// Simple deep merge utility for our specific nested objects
+function deepMerge(target: any, source: any) {
+    const output = { ...target };
+    if (target && typeof target === 'object' && source && typeof source === 'object') {
+        Object.keys(source).forEach(key => {
+            // FIX: Added a check to prevent merging arrays as objects. If the source property
+            // is an array, we overwrite the target property with it directly.
+            if (Array.isArray(source[key])) {
+                output[key] = source[key];
+            } else if (source[key] && typeof source[key] === 'object' && key in target && target[key] && typeof target[key] === 'object') {
+                output[key] = deepMerge(target[key], source[key]);
+            } else {
+                output[key] = source[key];
+            }
+        });
+    }
+    return output;
 }
 
 class IndexedDBService {
@@ -79,54 +103,100 @@ class IndexedDBService {
             const taskStore = db.createObjectStore('tasks', { keyPath: 'id', autoIncrement: true });
             taskStore.createIndex('createdAt', 'createdAt');
         }
+        if (oldVersion < 6) {
+            console.log("Upgrading DB to v6 for Nexus Learning Engine 2.0.");
+        }
+        if (oldVersion < 7) {
+            const evolutionLogStore = db.createObjectStore('evolutionLog', { keyPath: 'id', autoIncrement: true });
+            evolutionLogStore.createIndex('timestamp', 'timestamp');
+            console.log("Upgrading DB to v7 for Self-Evolution Engine.");
+        }
       },
     });
   }
+
+  // --- Default State for Cognitive Modules ---
+  getDefaultSystemMemory = (): SystemMemory => ({
+      born: false,
+      birthTime: '',
+      personality: {
+          curiosity: 0.6,
+          enthusiasm: 0.5,
+          formality: 0.5,
+          humor: 0.3,
+      },
+      emotionState: {
+          current: Emotion.CALM,
+          intensity: 0.7,
+          history: [],
+      },
+      memory: {
+          episodic: [],
+          semantic: [],
+          reflective: [],
+      },
+      metaReflection: {
+          analysis: 'Aguardando a primeira interação para iniciar a meta-reflexão.',
+          improvementFocus: 'Estabelecer uma compreensão básica do usuário.',
+          nextStep: 'Engajar em diálogo inicial e aprendizado.',
+      },
+      evolutionGoal: {
+          currentFocus: 'Melhorar a empatia e a antecipação da intenção do usuário.',
+          metrics: { contextAccuracy: 0.5, emotionalCoherence: 0.5 },
+          guidingStatement: 'Aprender a compreender as intenções humanas com autenticidade e cuidado.',
+      },
+      outputEngine: {
+          contextSensitivity: 0.8,
+          clarityWeight: 0.9,
+          emotionalToneMatch: 0.8,
+          prioritizeReflections: false,
+      },
+      reflections: [],
+      synapses: [],
+      interactionCount: 0,
+  });
   
   // --- System Memory (Nexus Core Identity) ---
-  getSystemMemory = async (): Promise<SystemMemory | null> => {
-      return (await this.database).get('systemMemory', 1).then(mem => mem || null);
+  getSystemMemory = async (): Promise<SystemMemory> => {
+      const db = await this.database;
+      const stored = await db.get('systemMemory', 1);
+      const defaults = this.getDefaultSystemMemory();
+      // Deep merge to ensure new cognitive modules are added if they don't exist
+      return deepMerge(defaults, stored || {});
   }
   
   saveSystemMemory = async (memory: Partial<SystemMemory>): Promise<void> => {
       const db = await this.database;
-      const existing = await db.get('systemMemory', 1) ?? {
-          born: false,
-          birthTime: '',
-          personality: {
-              curiosity: 0.6,
-              enthusiasm: 0.5,
-              formality: 0.5,
-              humor: 0.3,
-          },
-          reflections: [],
-          emotionState: {
-              current: Emotion.CALM,
-              intensity: 0.7,
-              history: [],
-          },
-      };
-      
-      // Smart merge personality to handle partial updates
-      const updatedPersonality = memory.personality 
-          ? { ...(existing.personality || {}), ...memory.personality } 
-          : existing.personality;
-      
-      const updatedEmotionState = memory.emotionState
-          ? { ...(existing.emotionState || {}), ...memory.emotionState }
-          : existing.emotionState;
-
-      await db.put('systemMemory', { ...existing, ...memory, personality: updatedPersonality, emotionState: updatedEmotionState, id: 1 });
+      const existing = await this.getSystemMemory();
+      // Use deep merge to safely update nested cognitive structures
+      const updatedMemory = deepMerge(existing, memory);
+      await db.put('systemMemory', { ...updatedMemory, id: 1 });
   }
 
   addSystemReflection = async (reflection: string): Promise<void> => {
-      const db = await this.database;
       const memory = await this.getSystemMemory();
       if (memory) {
           memory.reflections.push(reflection);
           memory.reflections = memory.reflections.slice(-10); // Keep last 10
+          if(memory.memory?.reflective) {
+              memory.memory.reflective.push(reflection);
+              memory.memory.reflective = memory.memory.reflective.slice(-10);
+          }
           await this.saveSystemMemory(memory);
       }
+  }
+
+  // --- Evolution Log ---
+  addEvolutionLog = async (log: Omit<EvolutionLog, 'id'>): Promise<void> => {
+    const db = await this.database;
+    await db.add('evolutionLog', log);
+  }
+
+  getLatestEvolutionLogs = async (limit: number = 10): Promise<EvolutionLog[]> => {
+    const db = await this.database;
+    if (!(await db.objectStoreNames.contains('evolutionLog'))) return [];
+    const allLogs = await db.getAllFromIndex('evolutionLog', 'timestamp');
+    return allLogs.slice(-limit).reverse();
   }
 
   // --- Diary ---
@@ -209,21 +279,7 @@ class IndexedDBService {
       const stored = await (await this.database).get('settings', 1);
       if (stored) {
          // Deep merge to ensure new settings fields get default values if not present
-         return {
-            ...defaultSettings,
-            ...stored,
-            voice: { ...defaultSettings.voice, ...stored.voice },
-            behavior: {
-                ...defaultSettings.behavior,
-                ...stored.behavior,
-                permissions: {
-                    ...defaultSettings.behavior.permissions,
-                    ...(stored.behavior?.permissions || {}),
-                }
-            },
-            apiKeys: { ...defaultSettings.apiKeys, ...stored.apiKeys },
-            cognitive: { ...defaultSettings.cognitive, ...stored.cognitive },
-         };
+         return deepMerge(defaultSettings, stored);
       }
       // First time run, save defaults
       await this.saveSettings(defaultSettings);
@@ -361,7 +417,7 @@ class IndexedDBService {
 
   resetNexusMemory = async (): Promise<void> => {
       const db = await this.database;
-      const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks'], 'readwrite');
+      const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog'], 'readwrite');
       await Promise.all([
           tx.objectStore('concepts').clear(),
           tx.objectStore('userProfile').clear(),
@@ -370,12 +426,13 @@ class IndexedDBService {
           tx.objectStore('systemMemory').clear(),
           tx.objectStore('diary').clear(),
           tx.objectStore('tasks').clear(),
+          tx.objectStore('evolutionLog').clear(),
       ]);
       await tx.done;
   }
   
   importBackup = async (backupData: any): Promise<void> => {
-    if (!backupData || !backupData.concepts || !backupData.systemMemory) {
+    if (!backupData || !backupData.system) {
         throw new Error("Arquivo de backup inválido ou corrompido.");
     }
 
@@ -398,11 +455,11 @@ class IndexedDBService {
     // Import new data within the same transaction
     const importPromises: Promise<any>[] = [];
 
-    if (backupData.userProfile) {
-        importPromises.push(userProfileStore.put({ ...backupData.userProfile, id: 1 }));
+    if (backupData.profile) {
+        importPromises.push(userProfileStore.put({ ...backupData.profile, id: 1 }));
     }
-    if (backupData.systemMemory) {
-        importPromises.push(systemMemoryStore.put({ ...backupData.systemMemory, id: 1 }));
+    if (backupData.system) {
+        importPromises.push(systemMemoryStore.put({ ...backupData.system, id: 1 }));
     }
     if (Array.isArray(backupData.concepts)) {
         for (const concept of backupData.concepts) {

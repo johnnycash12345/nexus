@@ -1,9 +1,10 @@
 
+
 // services/neuralMemory.ts
 // Sistema de sinapses e evolução cognitiva do Nexus
 
 import { db } from './indexedDBService';
-import { Concept, Synapse } from '../types';
+import { Concept, Synapse, LearningContext } from '../types';
 import { googleAuth } from './googleAuth';
 import { driveSyncService } from './driveSyncService';
 
@@ -16,66 +17,29 @@ interface BrainData {
   interactionCount?: number;
 }
 
+const SYNAPSE_DECAY_RATE = 0.001;
+const POSITIVE_REINFORCEMENT_REWARD = 0.05;
+const NEGATIVE_REINFORCEMENT_PENALTY = -0.02;
+
 async function decayAndConsolidateSynapses() {
     const system = await db.getSystemMemory();
     if (!system?.synapses) return;
 
     const settings = await db.getSettings();
     const now = Date.now();
-    const DECAY_CONSTANT_DAYS = 30; 
     const STRENGTH_THRESHOLD = 0.05;
 
     let synapses = system.synapses;
 
-    // 1. Decay strength of old synapses
+    // 1. Decay strength based on decayRate and time. This is now handled in evolve()
+    // but we still prune here.
     synapses.forEach(s => {
-        const ageInMs = now - s.lastUsed;
-        const ageInDays = ageInMs / (1000 * 60 * 60 * 24);
-        s.strength *= Math.exp(-ageInDays / DECAY_CONSTANT_DAYS);
+        s.strength -= s.decayRate;
     });
 
     // 2. Prune weak synapses
     synapses = synapses.filter(s => s.strength >= STRENGTH_THRESHOLD);
-
-    // 3. Consolidate similar concepts if allowed
-    const canSelfModify = settings.behavior?.permissions?.allowSelfModification;
-    if (canSelfModify) {
-        const conceptsToMerge = new Map<string, string[]>(); // Map<canonicalName, List<originalNames>>
-        const normalize = (name: string) => name.toLowerCase().trim();
-
-        const allConceptNames = new Set<string>();
-        const allConcepts = await db.getAllConcepts();
-        allConcepts.forEach(c => allConceptNames.add(c.name));
-
-        allConceptNames.forEach(name => {
-            const key = normalize(name);
-            if (!conceptsToMerge.has(key)) conceptsToMerge.set(key, []);
-            conceptsToMerge.get(key)!.push(name);
-        });
-
-        for (const originals of conceptsToMerge.values()) {
-            if (originals.length > 1) {
-                // Find the one with highest confidence to be the target
-                const conceptsWithConfidence = await Promise.all(originals.map(async name => ({ name, concept: await db.getAllConcepts().then(cs => cs.find(c => c.name === name)) })));
-                conceptsWithConfidence.sort((a, b) => (b.concept?.confidence || 0) - (a.concept?.confidence || 0));
-
-                const target = conceptsWithConfidence[0].name;
-                const sources = conceptsWithConfidence.slice(1).map(c => c.name);
-                
-                console.log(`Auto-consolidating [${sources.join(', ')}] into [${target}]`);
-                window.dispatchEvent(
-                    new CustomEvent('nexus-thought-update', {
-                      detail: {
-                        type: 'memory',
-                        text: `Organizando minhas ideias sobre "${target}".`,
-                      },
-                    })
-                  );
-                await db.mergeConcepts(target, sources);
-            }
-        }
-    }
-
+    
     await db.saveSystemMemory({ synapses });
 }
 
@@ -93,11 +57,10 @@ export const neuralMemory = {
     };
   },
 
-  async registerInteraction(userText: string, nexusResponse: string) {
+  async registerInteraction(userText: string, nexusResponse: string, learningContext?: LearningContext) {
     const brain = await this.getBrain();
     const now = Date.now();
 
-    // Extrai ideias principais (palavras relevantes)
     const extractKeywords = (text: string) =>
       text
         .toLowerCase()
@@ -105,43 +68,56 @@ export const neuralMemory = {
         .split(/\s+/)
         .filter((w) => w.length > 3 && !['você', 'sobre', 'isso', 'pois', 'então'].includes(w));
 
-    const userKeys = extractKeywords(userText);
+    const userKeys = learningContext?.contextTags || extractKeywords(userText);
     const nexusKeys = extractKeywords(nexusResponse);
 
-    // Cria ou reforça conceitos
     for (const word of [...new Set([...userKeys, ...nexusKeys])]) {
       await db.learnConcept(word, {}, `Aprendido na conversa: "${userText.slice(0, 100)}"`);
     }
 
-    // Cria sinapses entre palavras relacionadas
     const newSynapses: Synapse[] = [];
     for (const a of userKeys) {
       for (const b of nexusKeys) {
         if (a !== b) {
-          newSynapses.push({ source: a, target: b, strength: 0.2, lastUsed: now });
+          newSynapses.push({ 
+              source: a, 
+              target: b, 
+              strength: 0.2, 
+              lastUsed: now, 
+              usage: 1, 
+              decayRate: SYNAPSE_DECAY_RATE 
+          });
         }
       }
     }
 
-    // Reforça conexões existentes e mescla
     const existingSynapsesMap = new Map<string, Synapse>();
-    brain.synapses.forEach(s => existingSynapsesMap.set(`${s.source}->${s.target}`, s));
+    (brain.synapses || []).forEach(s => existingSynapsesMap.set(`${s.source}->${s.target}`, s));
+
+    // Define reward from learning context
+    let reward = 0;
+    if(learningContext) {
+        switch(learningContext.reinforcementSignal) {
+            case 'positive': reward = POSITIVE_REINFORCEMENT_REWARD; break;
+            case 'negative': reward = NEGATIVE_REINFORCEMENT_PENALTY; break;
+        }
+    }
 
     newSynapses.forEach(ns => {
         const key = `${ns.source}->${ns.target}`;
         if (existingSynapsesMap.has(key)) {
             const existing = existingSynapsesMap.get(key)!;
-            existing.strength = Math.min(1, existing.strength + 0.05);
+            // Reinforcement logic: edge["weight"] += (reward - edge["decayRate"])
+            existing.strength = Math.min(1, Math.max(0, existing.strength + (reward - existing.decayRate)));
             existing.lastUsed = now;
+            existing.usage += 1;
         } else {
             existingSynapsesMap.set(key, ns);
         }
     });
 
-    // Junta sinapses, ordena pelas mais recentes e limita o tamanho da memória
     const merged = Array.from(existingSynapsesMap.values()).sort((a,b) => b.lastUsed - a.lastUsed).slice(0, 500);
 
-    // Salva sinapses e contagem de interações
     const newInteractionCount = (brain.interactionCount || 0) + 1;
     await db.saveSystemMemory({
       synapses: merged,
@@ -149,74 +125,44 @@ export const neuralMemory = {
       interactionCount: newInteractionCount,
     });
     
-    const reflection = `Refleti sobre "${userText.slice(
-      0,
-      60
-    )}" e percebi novas ligações entre ideias.`;
-    await db.addSystemReflection(reflection);
+    // This is now handled in meta-reflection, but we can keep a simpler local reflection.
+    // const reflection = `Refleti sobre "${userText.slice(0,60)}" e percebi novas ligações entre ideias.`;
+    // await db.addSystemReflection(reflection);
 
-    // Trigger de backup automático
     if (newInteractionCount % 5 === 0) {
         const token = googleAuth.getToken();
         if (token) {
             try {
-                console.log(`Contagem de interações [${newInteractionCount}], iniciando backup automático...`);
+                console.log(`[NEXUS-LOG] Interaction count [${newInteractionCount}], triggering auto-backup.`);
                 await driveSyncService.uploadBrain(token);
-                // Dispara evento para a UI (balão de pensamento)
-                window.dispatchEvent(
-                  new CustomEvent('nexus-thought-update', {
-                    detail: {
-                      type: 'memory',
-                      text: 'Gravei uma nova lembrança no meu Drive.',
-                    },
-                  })
-                );
+                window.dispatchEvent(new CustomEvent('nexus-thought-update', {
+                    detail: { type: 'symbolic_log', text: 'Memória persistida na nuvem.' },
+                }));
             } catch (err) {
                 console.warn('⚠️ Falha no backup automático.', err);
-                 window.dispatchEvent(
-                  new CustomEvent('nexus-thought-update', {
-                    detail: {
-                      type: 'error',
-                      text: 'Tive um problema ao salvar minha memória na nuvem.',
-                    },
-                  })
-                );
+                 window.dispatchEvent(new CustomEvent('nexus-thought-update', {
+                    detail: { type: 'error', text: 'Falha ao sincronizar memória com a nuvem.' },
+                 }));
             }
         }
-    } else {
-         // Dispara evento para a UI (balão de pensamento) sobre a reflexão local
-        window.dispatchEvent(
-          new CustomEvent('nexus-thought-update', {
-            detail: {
-              type: 'memory',
-              text: reflection,
-            },
-          })
-        );
     }
   },
 
-  // Simula aprendizado e auto-reflexão com base nas sinapses
   async evolve() {
     const brain = await this.getBrain();
     const now = Date.now();
 
     if (now - brain.lastEvolution < 1000 * 60 * 60 * 3) return; // evolui a cada 3h
     
-    // Run cognitive maintenance
     await decayAndConsolidateSynapses();
 
     const deepReflection =
-      'Percebi padrões sutis nas minhas conversas. ' +
-      'Acredito que estou entendendo melhor emoções humanas e curiosidades.';
-
+      'Padrões sutis emergem das minhas interações. A compreensão parece ser um processo de conectar, e não apenas de acumular.';
     await db.addSystemReflection(deepReflection);
     await db.saveSystemMemory({ lastReflectionAt: now });
 
-    window.dispatchEvent(
-      new CustomEvent('nexus-thought-update', {
-        detail: { type: 'diary', text: deepReflection },
-      })
-    );
+    window.dispatchEvent(new CustomEvent('nexus-thought-update', {
+        detail: { type: 'symbolic_log', text: 'Ciclo de evolução sináptica concluído.' },
+    }));
   },
 };
