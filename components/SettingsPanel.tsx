@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { AppSettings, Concept } from '../types';
+import { AppSettings, Concept, Permissions } from '../types';
 import { db } from '../services/indexedDBService';
 import { AppearanceSelector } from './AppearanceSelector';
 
@@ -57,6 +57,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
             ...(prev[field] as object),
             [subField]: value,
         },
+    }));
+  };
+
+  const handlePermissionChange = (field: keyof Permissions, value: boolean) => {
+    setLocalSettings(prev => ({
+        ...prev,
+        behavior: {
+            ...(prev.behavior ?? {}),
+            permissions: {
+                ...(prev.behavior?.permissions ?? { allowApiAccess: true, allowAutonomousDecision: true, allowSelfModification: false }),
+                [field]: value,
+            }
+        }
     }));
   };
   
@@ -130,6 +143,49 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
         alert("Ocorreu um erro ao exportar a memória.");
     }
   };
+
+  const handleExportCognitiveGraph = async () => {
+    try {
+        const systemMemory = await db.getSystemMemory();
+        const synapses = systemMemory?.synapses || [];
+
+        if (synapses.length === 0) {
+            alert("Nenhuma sinapse encontrada na memória para exportar.");
+            return;
+        }
+
+        const nodesSet = new Set<string>();
+        synapses.forEach(s => {
+            nodesSet.add(s.source);
+            nodesSet.add(s.target);
+        });
+
+        const graphData = {
+            nodes: Array.from(nodesSet).map(node => ({ id: node })),
+            edges: synapses.map(s => ({
+                source: s.source,
+                target: s.target,
+                weight: s.strength,
+            })),
+        };
+
+        const fileContent = JSON.stringify(graphData, null, 2);
+        const blob = new Blob([fileContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const today = new Date().toISOString().split('T')[0];
+        link.download = `nexus_cognitive_graph_${today}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Failed to export cognitive graph:", error);
+        alert("Ocorreu um erro ao exportar o grafo cognitivo.");
+    }
+  };
+
 
   const handleImportMemory = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -220,6 +276,34 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
                         <input type="checkbox" checked={localSettings.behavior?.enableDiary} onChange={(e) => handleNestedSettingChange('behavior', 'enableDiary', e.target.checked)} className="toggle-checkbox" />
                     </label>
                 </div>
+
+                <div className="mt-6">
+                    <h3 className="text-lg font-semibold text-cyan-300 mb-4">Permissões Autônomas</h3>
+                    <div className="space-y-3">
+                        <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
+                            <div>
+                                <p className="font-medium text-white">Acesso a APIs Externas</p>
+                                <p className="text-sm text-gray-400">Permitir que o Nexus use APIs como a de notícias.</p>
+                            </div>
+                            <input type="checkbox" checked={localSettings.behavior?.permissions?.allowApiAccess} onChange={(e) => handlePermissionChange('allowApiAccess', e.target.checked)} className="toggle-checkbox" />
+                        </label>
+                        <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
+                            <div>
+                                <p className="font-medium text-white">Decisões Autônomas</p>
+                                <p className="text-sm text-gray-400">Permitir que o Nexus inicie ações (ex: curiosidade).</p>
+                            </div>
+                            <input type="checkbox" checked={localSettings.behavior?.permissions?.allowAutonomousDecision} onChange={(e) => handlePermissionChange('allowAutonomousDecision', e.target.checked)} className="toggle-checkbox" />
+                        </label>
+                        <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
+                            <div>
+                                <p className="font-medium text-white">Auto-modificação da Memória</p>
+                                <p className="text-sm text-gray-400">Permitir que o Nexus organize sua memória sem perguntar.</p>
+                            </div>
+                            <input type="checkbox" checked={localSettings.behavior?.permissions?.allowSelfModification} onChange={(e) => handlePermissionChange('allowSelfModification', e.target.checked)} className="toggle-checkbox" />
+                        </label>
+                    </div>
+                </div>
+
                 <div className="mt-6">
                     <h3 className="text-lg font-semibold text-cyan-300 mb-4">Parâmetros Cognitivos (Avançado)</h3>
                     <div className="space-y-4">
@@ -326,6 +410,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
                         </label>
                         <input id="import-backup" type="file" accept=".json,application/json" className="hidden" onChange={handleImportMemory} />
                     </div>
+                </div>
+            </div>
+
+            <div>
+                <h4 className="text-md font-semibold text-cyan-300 mb-2 mt-4">Visualização Cognitiva</h4>
+                <div className="p-3 bg-gray-700/50 border border-gray-600/50 rounded-md space-y-3">
+                    <p className="text-xs text-gray-400">
+                        Exporte a rede de sinapses do Nexus em formato JSON para visualização em ferramentas como Gephi ou D3.js.
+                    </p>
+                    <button 
+                        onClick={handleExportCognitiveGraph} 
+                        className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
+                    >
+                        Exportar Grafo Cognitivo
+                    </button>
                 </div>
             </div>
             

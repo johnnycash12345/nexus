@@ -12,12 +12,19 @@ export enum AssistantStatus {
   SURPRISED = 'SURPRISED',
 }
 
-export enum Mood {
-  ENTHUSIASTIC = 'ENTHUSIASTIC',
+export enum Emotion {
   CURIOUS = 'CURIOUS',
-  SATISFIED = 'SATISFIED',
-  BORED = 'BORED',
-  IRRITATED = 'IRRITATED',
+  JOYFUL = 'JOYFUL',
+  UNCERTAIN = 'UNCERTAIN',
+  CALM = 'CALM',
+  FOCUSED = 'FOCUSED',
+  AFRAID = 'AFRAID',
+}
+
+export interface EmotionState {
+  current: Emotion;
+  intensity: number; // 0 to 1
+  history: Emotion[];
 }
 
 export interface NewsArticle {
@@ -95,6 +102,9 @@ export interface SystemMemory {
     lastReflectionAt?: number;
     synapses?: Synapse[];
     interactionCount?: number;
+    emotionState?: EmotionState;
+    lastIntrospectionAt?: number;
+    lastReasoningAt?: number;
 }
 
 export interface DiaryEntry {
@@ -102,6 +112,13 @@ export interface DiaryEntry {
     dayKey: string; // "YYYY-MM-DD"
     entry: string;
     createdAt: number;
+}
+
+export interface Task {
+  id?: number;
+  text: string;
+  completed: boolean;
+  createdAt: number;
 }
 
 
@@ -112,10 +129,17 @@ export interface VoiceSettings {
     pitch: number;
 }
 
+export interface Permissions {
+  allowApiAccess: boolean;
+  allowAutonomousDecision: boolean;
+  allowSelfModification: boolean;
+}
+
 export interface BehaviorSettings {
     enableProactive?: boolean;
     enableCuriosity?: boolean;
     enableDiary?: boolean;
+    permissions?: Permissions;
 }
 
 export interface CognitiveSettings {

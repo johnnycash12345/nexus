@@ -1,10 +1,10 @@
 
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Mood, Personality } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task } from '../types';
 
 const DB_NAME = 'NexusDB';
-const DB_VERSION = 4; // Increment version for schema change
+const DB_VERSION = 5; // Increment version for schema change
 
 interface NexusDB extends DBSchema {
   concepts: {
@@ -38,7 +38,12 @@ interface NexusDB extends DBSchema {
       key: string; // YYYY-MM-DD
       value: DiaryEntry;
       indexes: { createdAt: number };
-  }
+  };
+  tasks: {
+    key: number;
+    value: Task;
+    indexes: { createdAt: number };
+  };
 }
 
 class IndexedDBService {
@@ -70,6 +75,10 @@ class IndexedDBService {
             const diaryStore = db.createObjectStore('diary', { keyPath: 'dayKey' });
             diaryStore.createIndex('createdAt', 'createdAt');
         }
+        if (oldVersion < 5) {
+            const taskStore = db.createObjectStore('tasks', { keyPath: 'id', autoIncrement: true });
+            taskStore.createIndex('createdAt', 'createdAt');
+        }
       },
     });
   }
@@ -91,14 +100,23 @@ class IndexedDBService {
               humor: 0.3,
           },
           reflections: [],
+          emotionState: {
+              current: Emotion.CALM,
+              intensity: 0.7,
+              history: [],
+          },
       };
       
       // Smart merge personality to handle partial updates
       const updatedPersonality = memory.personality 
           ? { ...(existing.personality || {}), ...memory.personality } 
           : existing.personality;
+      
+      const updatedEmotionState = memory.emotionState
+          ? { ...(existing.emotionState || {}), ...memory.emotionState }
+          : existing.emotionState;
 
-      await db.put('systemMemory', { ...existing, ...memory, personality: updatedPersonality, id: 1 });
+      await db.put('systemMemory', { ...existing, ...memory, personality: updatedPersonality, emotionState: updatedEmotionState, id: 1 });
   }
 
   addSystemReflection = async (reflection: string): Promise<void> => {
@@ -169,7 +187,16 @@ class IndexedDBService {
   getSettings = async (): Promise<AppSettings> => {
       const defaultSettings: AppSettings = {
           voice: { voiceURI: null, rate: 1, pitch: 1 },
-          behavior: { enableProactive: true, enableCuriosity: true, enableDiary: true },
+          behavior: {
+              enableProactive: true,
+              enableCuriosity: true,
+              enableDiary: true,
+              permissions: {
+                  allowApiAccess: true,
+                  allowAutonomousDecision: true,
+                  allowSelfModification: false, // Default to false for safety
+              }
+          },
           apiKeys: { deepseekApiKey: '', newsApiKey: '' },
           llmProvider: 'gemini',
           cognitive: {
@@ -186,7 +213,14 @@ class IndexedDBService {
             ...defaultSettings,
             ...stored,
             voice: { ...defaultSettings.voice, ...stored.voice },
-            behavior: { ...defaultSettings.behavior, ...stored.behavior },
+            behavior: {
+                ...defaultSettings.behavior,
+                ...stored.behavior,
+                permissions: {
+                    ...defaultSettings.behavior.permissions,
+                    ...(stored.behavior?.permissions || {}),
+                }
+            },
             apiKeys: { ...defaultSettings.apiKeys, ...stored.apiKeys },
             cognitive: { ...defaultSettings.cognitive, ...stored.cognitive },
          };
@@ -214,7 +248,7 @@ class IndexedDBService {
     const existing = await db.get('concepts', key);
 
     const updatedConcept: Concept = {
-        name: name,
+        name: key, // Use the normalized key as the name
         definition: metadata.definition || existing?.definition,
         confidence: Math.min(1.0, (existing?.confidence || 0.3) + confidenceBoost),
         related: [...new Set([...(existing?.related || []), ...(metadata.related || [])])],
@@ -224,6 +258,18 @@ class IndexedDBService {
     };
     
     await db.put('concepts', updatedConcept);
+  }
+
+  batchUpdateConcepts = async (concepts: Concept[]): Promise<void> => {
+    const db = await this.database;
+    const tx = db.transaction('concepts', 'readwrite');
+    await Promise.all(concepts.map(c => tx.store.put(c)));
+    await tx.done;
+  }
+
+  getConceptsByNames = async (names: string[]): Promise<(Concept | undefined)[]> => {
+    const db = await this.database;
+    return Promise.all(names.map(name => db.get('concepts', name.toLowerCase().trim())));
   }
 
   getAllConcepts = async (): Promise<Concept[]> => {
@@ -287,9 +333,35 @@ class IndexedDBService {
     await tx.done;
   }
 
+  // --- Tasks ---
+  addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'completed'> & { completed?: boolean }): Promise<void> => {
+      const db = await this.database;
+      await db.add('tasks', {
+          ...task,
+          completed: task.completed ?? false,
+          createdAt: Date.now(),
+      });
+  }
+
+  getAllTasks = async (): Promise<Task[]> => {
+      const db = await this.database;
+      if (!(await db.objectStoreNames.contains('tasks'))) return [];
+      return db.getAllFromIndex('tasks', 'createdAt');
+  }
+
+  updateTask = async (task: Task): Promise<void> => {
+      const db = await this.database;
+      await db.put('tasks', task);
+  }
+
+  deleteTask = async (id: number): Promise<void> => {
+      const db = await this.database;
+      await db.delete('tasks', id);
+  }
+
   resetNexusMemory = async (): Promise<void> => {
       const db = await this.database;
-      const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary'], 'readwrite');
+      const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks'], 'readwrite');
       await Promise.all([
           tx.objectStore('concepts').clear(),
           tx.objectStore('userProfile').clear(),
@@ -297,6 +369,7 @@ class IndexedDBService {
           tx.objectStore('chatHistory').clear(),
           tx.objectStore('systemMemory').clear(),
           tx.objectStore('diary').clear(),
+          tx.objectStore('tasks').clear(),
       ]);
       await tx.done;
   }
@@ -308,38 +381,42 @@ class IndexedDBService {
 
     const db = await this.database;
     const tx = db.transaction(['concepts', 'userProfile', 'systemMemory', 'diary'], 'readwrite');
+    
+    const conceptsStore = tx.objectStore('concepts');
+    const userProfileStore = tx.objectStore('userProfile');
+    const systemMemoryStore = tx.objectStore('systemMemory');
+    const diaryStore = tx.objectStore('diary');
 
-    // Clear existing data
+    // Clear existing data first
     await Promise.all([
-        tx.objectStore('concepts').clear(),
-        tx.objectStore('userProfile').clear(),
-        tx.objectStore('systemMemory').clear(),
-        tx.objectStore('diary').clear(),
+        conceptsStore.clear(),
+        userProfileStore.clear(),
+        systemMemoryStore.clear(),
+        diaryStore.clear(),
     ]);
     
-    await tx.done;
-    
-    const writeTx = db.transaction(['concepts', 'userProfile', 'systemMemory', 'diary'], 'readwrite');
+    // Import new data within the same transaction
+    const importPromises: Promise<any>[] = [];
 
-    // Import new data
     if (backupData.userProfile) {
-        await writeTx.objectStore('userProfile').put({ ...backupData.userProfile, id: 1 });
+        importPromises.push(userProfileStore.put({ ...backupData.userProfile, id: 1 }));
     }
     if (backupData.systemMemory) {
-        await writeTx.objectStore('systemMemory').put({ ...backupData.systemMemory, id: 1 });
+        importPromises.push(systemMemoryStore.put({ ...backupData.systemMemory, id: 1 }));
     }
     if (Array.isArray(backupData.concepts)) {
         for (const concept of backupData.concepts) {
-            await writeTx.objectStore('concepts').put(concept);
+            importPromises.push(conceptsStore.put(concept));
         }
     }
     if (backupData.diary) { // Assuming diary is an object of entries
         for (const entry of Object.values(backupData.diary)) {
-            await writeTx.objectStore('diary').put(entry as DiaryEntry);
+            importPromises.push(diaryStore.put(entry as DiaryEntry));
         }
     }
 
-    await writeTx.done;
+    await Promise.all(importPromises);
+    await tx.done;
   }
 
   // RLHF Data

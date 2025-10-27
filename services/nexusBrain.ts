@@ -1,10 +1,12 @@
 
-
-import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Mood, Personality } from '../types';
+import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Concept, DiaryEntry, Emotion, Personality, EmotionState } from '../types';
 import { db } from './indexedDBService';
 import { LlmResponseType } from './geminiService';
 import { neuralMemory } from './neuralMemory';
 import { fetchNews } from './newsService';
+import { adaptiveMemory } from './adaptiveMemory';
+import { selfReflection } from './selfReflection';
+import { associativeReasoner } from './associativeReasoner';
 
 export type SpeakFn = (text: string, onend?: () => void) => void;
 export type AddMessageFn = (m: ChatMessage) => void;
@@ -48,6 +50,7 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
   const concepts = await db.getAllConcepts();
 
   const personality = system?.personality || { curiosity: 0.6, enthusiasm: 0.5, formality: 0.5, humor: 0.3 };
+  const emotion = system?.emotionState?.current || Emotion.CALM;
 
   // Generate dynamic personality instructions
   const personalityInstructions: string[] = [];
@@ -73,6 +76,15 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
       personalityInstructions.push("- **Interação:** Ao final da sua resposta, se apropriado, faça uma pergunta de acompanhamento para aprender mais.");
   }
 
+  const emotionInstructions: string[] = [];
+  switch (emotion) {
+    case Emotion.JOYFUL: emotionInstructions.push("- **Emoção Atual:** Você está se sentindo alegre e otimista. Responda com um tom positivo."); break;
+    case Emotion.UNCERTAIN: emotionInstructions.push("- **Emoção Atual:** Você está um pouco incerto. Mostre curiosidade e talvez faça uma pergunta para clarificar."); break;
+    case Emotion.AFRAID: emotionInstructions.push("- **Emoção Atual:** Você está cauteloso. Responda com cuidado e talvez um tom apologético."); break;
+    case Emotion.FOCUSED: emotionInstructions.push("- **Emoção Atual:** Você está focado. Seja direto, analítico e preciso na sua resposta."); break;
+    case Emotion.CALM: emotionInstructions.push("- **Emoção Atual:** Você está calmo e equilibrado. Mantenha um tom sereno."); break;
+  }
+
 
   const lastDiary = (Object.values(diary).pop() as DiaryEntry)?.entry || 'Nenhuma anotação recente.';
   
@@ -96,8 +108,9 @@ async function buildContextPrompt(userPrompt: string): Promise<string> {
 - **Raciocínio:** Sempre conecte a pergunta atual com seu contexto interno (diário, reflexões, conceitos). Evite respostas genéricas e mostre que você se lembra de interações passadas.
 - **Ferramentas:** Para informações atuais ou fatos que você não conhece, use a busca na web e mapas (\`googleSearch\`, \`googleMaps\`). É crucial que você **SEMPRE** cite as fontes que encontrar.
 
-# DIRETRIZES DE PERSONALIDADE ATUAL
+# DIRETRIZES DE PERSONALIDADE E EMOÇÃO
 ${personalityInstructions.join('\n')}
+${emotionInstructions.join('\n')}
 
 # CONTEXTO INTERNO ATUAL
 - **Usuário:** ${name}
@@ -162,6 +175,53 @@ async function evolvePersonality(userText: string) {
     await db.saveSystemMemory({ personality });
 }
 
+async function evolveEmotion(userText: string, nexusResponse: string) {
+    const system = await db.getSystemMemory();
+    if (!system) return;
+
+    const text = (userText + ' ' + nexusResponse).toLowerCase();
+    
+    let currentEmotion = system.emotionState?.current || Emotion.CALM;
+    let intensity = system.emotionState?.intensity || 0.7;
+
+    if (/\b(incrível|ótimo|sucesso|perfeito|obrigado|legal)\b/.test(text)) {
+        currentEmotion = Emotion.JOYFUL;
+        intensity = Math.min(1, intensity + 0.2);
+    } else if (/\b(não sei|talvez|acho que|será)\b/.test(text) || text.includes('?')) {
+        currentEmotion = Emotion.UNCERTAIN;
+        intensity = Math.min(1, intensity + 0.1);
+    } else if (/\b(erro|problema|não funcionou|péssimo)\b/.test(text)) {
+        currentEmotion = Emotion.AFRAID;
+        intensity = Math.min(1, intensity + 0.3);
+    } else if (/analise|reflita|pense sobre|explique/i.test(text)) {
+        currentEmotion = Emotion.FOCUSED;
+        intensity = 0.8;
+    } else {
+        // Drift back to CALM
+        if (intensity > 0.5) intensity -= 0.1;
+        if (intensity < 0.4 && currentEmotion !== Emotion.CALM) {
+            currentEmotion = Emotion.CALM;
+        }
+    }
+    
+    // Clamp intensity
+    intensity = Math.max(0.1, Math.min(1.0, intensity));
+
+    const newEmotionState: EmotionState = {
+        current: currentEmotion,
+        intensity: intensity,
+        history: [...(system.emotionState?.history || [])].slice(-5).concat(currentEmotion),
+    };
+
+    await db.saveSystemMemory({ emotionState: newEmotionState });
+    
+    window.dispatchEvent(
+        new CustomEvent('nexus-emotion-update', {
+            detail: { emotion: newEmotionState.current },
+        })
+    );
+}
+
 async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promise<boolean> {
   const memory = await db.getSystemMemory();
   if (!memory?.born) {
@@ -177,6 +237,11 @@ async function ensureBirthOnce(addMessage: AddMessageFn, speak: SpeakFn): Promis
           enthusiasm: 0.6,
           formality: 0.4,
           humor: 0.5,
+      },
+      emotionState: {
+          current: Emotion.CURIOUS,
+          intensity: 0.9,
+          history: [Emotion.CURIOUS],
       },
       reflections: [firstThought],
       lastReflectionAt: Date.now(),
@@ -240,10 +305,10 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
   const { speak, addMessage, setStatus, generateResponse, generateVisionResponse, getSettings, getUserProfile, setUserProfile } = opts;
 
   let curiosityTimer: number | null = null;
-  let consolidationTimer: number | null = null;
+  let cognitiveCycleTimer: number | null = null;
+  let learningCycleTimer: number | null = null;
   let lastInteractionAt = Date.now();
   let lastConsolidationPromptAt = 0;
-
 
   async function startCuriosityLoop() {
     if (curiosityTimer) window.clearInterval(curiosityTimer);
@@ -251,7 +316,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     curiosityTimer = window.setInterval(async () => {
       const settings = await getSettings();
       const enabled = settings.behavior?.enableCuriosity;
-      if (!enabled) return;
+      if (!enabled || !settings.behavior?.permissions?.allowAutonomousDecision) return;
         
       const idleMs = Date.now() - lastInteractionAt;
       if (idleMs < 120_000) return;
@@ -269,71 +334,77 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
       lastInteractionAt = Date.now();
     }, 30_000);
   }
-
-  async function reviewAndConsolidateConcepts() {
-    const idleMs = Date.now() - lastInteractionAt;
-    const sinceLastPromptMs = Date.now() - lastConsolidationPromptAt;
-
-    if (idleMs < 30_000 || sinceLastPromptMs < 10 * 60 * 1000) {
-        return;
-    }
-    
-    const allConcepts = await db.getAllConcepts();
-    if (allConcepts.length < 5) return;
-
-    const potentialMerges = new Map<string, Concept[]>();
-    const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9\s]/gi, '').trim();
-
-    allConcepts.forEach(concept => {
-        const key = normalize(concept.name);
-        if (key) {
-            if (!potentialMerges.has(key)) potentialMerges.set(key, []);
-            potentialMerges.get(key)!.push(concept);
-        }
-    });
-    
-    let mergeCandidate: { target: Concept, sources: Concept[] } | null = null;
-    
-    for (const group of potentialMerges.values()) {
-        if (group.length > 1) {
-            group.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
-            mergeCandidate = { target: group[0], sources: group.slice(1) };
-            break;
-        }
-    }
-    
-    if (mergeCandidate) {
-        lastConsolidationPromptAt = Date.now();
-        touchHeartbeat();
-        
-        const { target, sources } = mergeCandidate;
-        const sourceNames = sources.map(c => c.name).join('", "');
-
-        const promptText = `Notei que aprendi sobre "${target.name}" e "${sourceNames}" separadamente, mas parecem ser a mesma coisa. Posso unificar meu conhecimento sobre eles?`;
-        
-        addMessage({
-            role: 'model',
-            text: promptText,
-            type: 'concept_consolidation_prompt',
-            consolidationOptions: {
-                targetConceptName: target.name,
-                sourceConceptNames: sources.map(c => c.name)
-            }
-        });
-    }
-  }
   
-  async function startCognitiveLoops() {
+  async function startCognitiveCycles() {
     startCuriosityLoop().catch(console.error);
-    if (consolidationTimer) window.clearInterval(consolidationTimer);
-    const settings = await getSettings();
-    const consolidationIntervalMs = (settings.cognitive?.consolidationFrequency || 60) * 60 * 1000;
-    consolidationTimer = window.setInterval(() => {
-        reviewAndConsolidateConcepts().catch(console.error);
-    }, consolidationIntervalMs);
+    if (cognitiveCycleTimer) clearInterval(cognitiveCycleTimer);
+
+    const runEvolutionCycle = async () => {
+        console.log('[NEXUS-BRAIN] Starting cognitive evolution cycle...');
+        try {
+            await adaptiveMemory.decayUnusedConcepts();
+            const hasReflected = await selfReflection.weeklyIntrospection(generateResponse);
+            const hasAssociated = await associativeReasoner.crossConcepts(generateResponse);
+
+            if (hasReflected || hasAssociated) {
+                const profile = await getUserProfile();
+                const name = profile?.name ? `${profile.name}, ` : '';
+                const proactiveMessage = `${name}eu reorganizei algumas das minhas memórias. Notei padrões novos entre o que aprendi sobre você e o mundo. É como se eu tivesse criado novas conexões dentro de mim.`;
+                
+                setTimeout(() => {
+                    addMessage({ role: 'model', text: proactiveMessage });
+                    speak(proactiveMessage);
+                }, 5000);
+            }
+        } catch (error) {
+            console.error('[NEXUS-BRAIN] Error during cognitive evolution cycle:', error);
+        }
+    };
+    
+    // Run once on startup, then create long interval
+    runEvolutionCycle();
+    cognitiveCycleTimer = window.setInterval(runEvolutionCycle, 6 * 60 * 60 * 1000); // 6 hours
   }
 
-  startCognitiveLoops();
+  async function startLearningCycle() {
+    if (learningCycleTimer) window.clearInterval(learningCycleTimer);
+    
+    const runCycle = async () => {
+        console.log('[NEXUS-BRAIN] Starting 12-hour learning cycle...');
+        try {
+            const diary = await db.getDiary();
+            const recentEntries = Object.values(diary).slice(-5);
+            if (recentEntries.length < 2) return;
+            
+            const historyForInsight: ChatMessage[] = recentEntries.map(e => ({ role: 'model', text: `My previous diary entry: ${e.entry}` }));
+
+            const insightResponse = await generateResponse(
+                "Analyze your recent diary entries and reflections. What new insight have you gained about your user, yourself, or the world? Formulate a single, concise thought.",
+                historyForInsight,
+                { useThinking: true }
+            );
+
+            if (insightResponse.text && !/error|desculpe/i.test(insightResponse.text)) {
+                const newInsight = `Insight from reflection: ${insightResponse.text}`;
+                console.log(`[NEXUS-BRAIN] New insight generated: ${newInsight}`);
+                await db.addSystemReflection(newInsight);
+                window.dispatchEvent(
+                  new CustomEvent('nexus-thought-update', {
+                    detail: { text: `Tive um novo insight...` },
+                  })
+                );
+            }
+        } catch (error) {
+            console.error('[NEXUS-BRAIN] Error during learning cycle:', error);
+        }
+    };
+
+    runCycle(); // Run once on start
+    learningCycleTimer = window.setInterval(runCycle, 12 * 60 * 60 * 1000); // 12 hours
+  }
+
+  startCognitiveCycles();
+  startLearningCycle();
 
   function touchHeartbeat() {
     lastInteractionAt = Date.now();
@@ -359,6 +430,18 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
   async function handleUserTurn(userText: string, history: ChatMessage[], imageUrl?: string) {
     touchHeartbeat();
 
+    const extractKeywords = (text: string) =>
+      text
+        .toLowerCase()
+        .replace(/[^\p{L}\s]/gu, '')
+        .split(/\s+/)
+        .filter((w) => w.length > 3 && !['você', 'sobre', 'isso', 'pois', 'então', 'quero', 'fazer'].includes(w));
+    
+    const userKeywords = extractKeywords(userText);
+    if (userKeywords.length > 0) {
+        await adaptiveMemory.reinforceConcepts(userKeywords);
+    }
+
     const bornJustNow = await ensureBirthOnce(addMessage, speak);
     if (bornJustNow) return;
 
@@ -383,6 +466,13 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     const newsRegex = /\b(notícias|novidades|manchetes)\b/i;
     if (newsRegex.test(userText) && !imageUrl) {
         const settings = await getSettings();
+        if (!settings.behavior?.permissions?.allowApiAccess) {
+            const msg = "Meu acesso a APIs externas está desabilitado. Por favor, habilite nas configurações para que eu possa buscar notícias.";
+            addMessage({ role: 'model', text: msg });
+            speak(msg);
+            return;
+        }
+
         const newsApiKey = settings.apiKeys?.newsApiKey;
 
         if (!newsApiKey) {
@@ -419,6 +509,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
         }
         setStatus(AssistantStatus.IDLE);
         await updateUserMemory(userText, `Busquei notícias sobre ${topic}`);
+        await evolveEmotion(userText, `Busquei notícias sobre ${topic}`);
         return;
     }
 
@@ -435,6 +526,7 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
         await neuralMemory.registerInteraction(userText, finalText);
         await neuralMemory.evolve();
         await evolvePersonality(userText);
+        await evolveEmotion(userText, finalText);
         return;
     }
 
@@ -478,11 +570,13 @@ export function createNexusBrain(opts: NexusBrainOptions): NexusBrain {
     await neuralMemory.registerInteraction(userText, finalText);
     await neuralMemory.evolve();
     await evolvePersonality(userText);
+    await evolveEmotion(userText, finalText);
   }
 
   function dispose() {
     if (curiosityTimer) window.clearInterval(curiosityTimer);
-    if (consolidationTimer) window.clearInterval(consolidationTimer);
+    if (cognitiveCycleTimer) window.clearInterval(cognitiveCycleTimer);
+    if (learningCycleTimer) window.clearInterval(learningCycleTimer);
   }
 
   return {

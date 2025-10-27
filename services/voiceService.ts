@@ -1,3 +1,4 @@
+
 // FIX: Removed `LiveSession` as it is not an exported member of `@google/genai`.
 import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
 
@@ -26,7 +27,10 @@ async function decodeAudioData(
     sampleRate: number,
     numChannels: number,
 ): Promise<AudioBuffer> {
-    const dataInt16 = new Int16Array(data.buffer);
+    // FIX: A Uint8Array pode ser uma visualização de um ArrayBuffer maior.
+    // Usar data.buffer diretamente pode ler dados incorretos. Especificar
+    // o byteOffset e o byteLength garante que apenas os dados relevantes sejam lidos.
+    const dataInt16 = new Int16Array(data.buffer, data.byteOffset, data.byteLength / 2);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
 
@@ -121,6 +125,9 @@ export class VoiceService {
                 responseModalities: [Modality.AUDIO],
                 inputAudioTranscription: {},
                 outputAudioTranscription: {},
+                speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+                },
                 systemInstruction: `Você é Nexus, uma IA assistente com personalidade curiosa e empática. Seja breve e natural em suas respostas faladas.`,
             },
         });
@@ -128,6 +135,11 @@ export class VoiceService {
 
     private async handleAudioPlayback(message: LiveServerMessage) {
         if (!this.outputAudioContext) return;
+
+        // Adicionado para garantir que o contexto de áudio seja retomado se suspenso pelo navegador
+        if (this.outputAudioContext.state === 'suspended') {
+            await this.outputAudioContext.resume();
+        }
         
         const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
         if (base64EncodedAudioString) {

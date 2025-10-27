@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AssistantStatus, ChatMessage, AppSettings } from './types';
+import { AssistantStatus, ChatMessage, AppSettings, Emotion } from './types';
 import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
 import { useLlm } from './hooks/useLlm';
 import { db } from './services/indexedDBService';
@@ -11,6 +11,9 @@ import { createNexusBrain, NexusBrain } from './services/nexusBrain';
 import { CameraView } from './components/CameraView';
 import { StartScreen } from './components/StartScreen';
 import { useGoogleSync } from './hooks/useGoogleSync';
+import { useSpeech } from './hooks/useSpeech';
+import { TodoList } from './components/TodoList';
+import { InternalMap } from './components/InternalMap';
 
 
 const App: React.FC = () => {
@@ -25,13 +28,27 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isStarted, setIsStarted] = useState(false);
   const [thought, setThought] = useState<string | null>(null);
+  const [isTodoListVisible, setIsTodoListVisible] = useState(false);
+  const [isInternalMapVisible, setIsInternalMapVisible] = useState(false);
 
   const { token, status: syncStatus, login, logout } = useGoogleSync();
+  const { speak: unstableSpeak, stop } = useSpeech(settings, status);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const brainRef = useRef<NexusBrain | null>(null);
   const isChatVisibleRef = useRef(isChatVisible);
+
+  // Create a ref to hold the latest version of the speak function
+  const speakRef = useRef(unstableSpeak);
+  useEffect(() => {
+    speakRef.current = unstableSpeak;
+  }, [unstableSpeak]);
+
+  // Create a stable version of the speak function that we can pass to dependencies
+  const speak = useCallback((text: string, onEnd?: () => void) => {
+    speakRef.current(text, onEnd);
+  }, []);
 
   useEffect(() => {
     isChatVisibleRef.current = isChatVisible;
@@ -53,6 +70,36 @@ const App: React.FC = () => {
         window.removeEventListener('nexus-thought-update', handleThoughtUpdate as EventListener);
     };
   }, []);
+
+  // Listen for emotion changes from the brain
+  useEffect(() => {
+    const handleEmotionUpdate = (event: CustomEvent) => {
+        const { emotion } = event.detail as { emotion: Emotion };
+        
+        // Only change status if assistant is in a passive state
+        if ([AssistantStatus.IDLE, AssistantStatus.SLEEPY, AssistantStatus.SUCCESS, AssistantStatus.ERROR, AssistantStatus.CURIOUS].includes(status)) {
+            const emotionToStatusMap: Partial<Record<Emotion, AssistantStatus>> = {
+                [Emotion.JOYFUL]: AssistantStatus.SUCCESS,
+                [Emotion.UNCERTAIN]: AssistantStatus.CURIOUS,
+                [Emotion.AFRAID]: AssistantStatus.ERROR,
+                [Emotion.FOCUSED]: AssistantStatus.IDLE, // Focused is an internal state, visually idle is fine
+                [Emotion.CURIOUS]: AssistantStatus.CURIOUS,
+                [Emotion.CALM]: AssistantStatus.IDLE,
+            };
+            const newStatus = emotionToStatusMap[emotion];
+            if (newStatus && newStatus !== status) {
+                setStatus(newStatus);
+            }
+        }
+    };
+
+    window.addEventListener('nexus-emotion-update', handleEmotionUpdate as EventListener);
+
+    return () => {
+        window.removeEventListener('nexus-emotion-update', handleEmotionUpdate as EventListener);
+    };
+  }, [status]);
+
 
   // Auto-start app after successful sync
   useEffect(() => {
@@ -111,17 +158,8 @@ const App: React.FC = () => {
   useEffect(() => {
       if (isInitializing || !settings || !isStarted) return;
 
-      // The speak function for text-based responses
-      const textSpeak = (text: string, onEnd?: () => void) => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        // Basic voice selection, can be enhanced
-        utterance.lang = 'pt-BR';
-        utterance.onend = () => onEnd?.();
-        window.speechSynthesis.speak(utterance);
-      };
-
       const brain = createNexusBrain({
-        speak: textSpeak, // Use basic speech synth for text turn
+        speak, // Use speak from the useSpeech hook
         addMessage,
         setStatus,
         generateResponse,
@@ -140,9 +178,10 @@ const App: React.FC = () => {
       }
 
       return () => {
+        stop(); // Stop any speaking on cleanup
         brain.dispose();
       };
-  }, [isInitializing, isStarted, settings, addMessage, generateResponse, generateVisionResponse, messages.length]);
+  }, [isInitializing, isStarted, settings, addMessage, generateResponse, generateVisionResponse, messages.length, speak, stop]);
 
 
   useEffect(() => {
@@ -160,7 +199,11 @@ const App: React.FC = () => {
             setStatus(AssistantStatus.LISTENING);
         }
     } else if (!thinking) {
-        setStatus(AssistantStatus.IDLE);
+        // This logic is complex because emotion can also set status.
+        // Let's prevent this effect from overriding a recent emotional status update.
+        if (status !== AssistantStatus.SUCCESS && status !== AssistantStatus.ERROR && status !== AssistantStatus.CURIOUS) {
+            setStatus(AssistantStatus.IDLE);
+        }
     }
   }, [isSessionActive, isNexusSpeaking, status]);
 
@@ -292,7 +335,7 @@ const App: React.FC = () => {
             aria-label="Abrir configurações"
             className="absolute top-4 right-4 z-30 p-2 bg-gray-700/50 rounded-full text-gray-300 hover:bg-gray-600/80 transition-colors"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066 2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           </button>
 
           <AvatarLayer 
@@ -304,6 +347,30 @@ const App: React.FC = () => {
           {thought && !isChatVisible && (
             <div className="absolute top-1/2 -translate-y-[12rem] left-1/2 -translate-x-1/2 z-30 p-3 bg-gray-700/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-out max-w-xs text-center border border-gray-600">
                 <p className="text-sm text-gray-300 italic">💭 {thought}</p>
+            </div>
+          )}
+
+          {!isChatVisible && (
+            <div className="absolute bottom-6 left-6 z-30 flex flex-col gap-3">
+               <button
+                  onClick={() => setIsInternalMapVisible(true)}
+                  aria-label="Abrir mapa interno"
+                  className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+              </button>
+              <button
+                onClick={() => setIsTodoListVisible(true)}
+                aria-label="Abrir lista de tarefas"
+                className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </button>
             </div>
           )}
           
@@ -426,6 +493,8 @@ const App: React.FC = () => {
       
       {isSettingsVisible && <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} onClose={() => setIsSettingsVisible(false)} token={token} onLogout={logout} />}
       {isStarted && isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onSend={handleVisionSubmit} />}
+      {isStarted && <TodoList isVisible={isTodoListVisible} onClose={() => setIsTodoListVisible(false)} />}
+      {isStarted && <InternalMap isVisible={isInternalMapVisible} onClose={() => setIsInternalMapVisible(false)} />}
     </div>
   );
 };

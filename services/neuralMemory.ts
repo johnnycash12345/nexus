@@ -1,3 +1,4 @@
+
 // services/neuralMemory.ts
 // Sistema de sinapses e evolução cognitiva do Nexus
 
@@ -14,6 +15,70 @@ interface BrainData {
   lastEvolution: number;
   interactionCount?: number;
 }
+
+async function decayAndConsolidateSynapses() {
+    const system = await db.getSystemMemory();
+    if (!system?.synapses) return;
+
+    const settings = await db.getSettings();
+    const now = Date.now();
+    const DECAY_CONSTANT_DAYS = 30; 
+    const STRENGTH_THRESHOLD = 0.05;
+
+    let synapses = system.synapses;
+
+    // 1. Decay strength of old synapses
+    synapses.forEach(s => {
+        const ageInMs = now - s.lastUsed;
+        const ageInDays = ageInMs / (1000 * 60 * 60 * 24);
+        s.strength *= Math.exp(-ageInDays / DECAY_CONSTANT_DAYS);
+    });
+
+    // 2. Prune weak synapses
+    synapses = synapses.filter(s => s.strength >= STRENGTH_THRESHOLD);
+
+    // 3. Consolidate similar concepts if allowed
+    const canSelfModify = settings.behavior?.permissions?.allowSelfModification;
+    if (canSelfModify) {
+        const conceptsToMerge = new Map<string, string[]>(); // Map<canonicalName, List<originalNames>>
+        const normalize = (name: string) => name.toLowerCase().trim();
+
+        const allConceptNames = new Set<string>();
+        const allConcepts = await db.getAllConcepts();
+        allConcepts.forEach(c => allConceptNames.add(c.name));
+
+        allConceptNames.forEach(name => {
+            const key = normalize(name);
+            if (!conceptsToMerge.has(key)) conceptsToMerge.set(key, []);
+            conceptsToMerge.get(key)!.push(name);
+        });
+
+        for (const originals of conceptsToMerge.values()) {
+            if (originals.length > 1) {
+                // Find the one with highest confidence to be the target
+                const conceptsWithConfidence = await Promise.all(originals.map(async name => ({ name, concept: await db.getAllConcepts().then(cs => cs.find(c => c.name === name)) })));
+                conceptsWithConfidence.sort((a, b) => (b.concept?.confidence || 0) - (a.concept?.confidence || 0));
+
+                const target = conceptsWithConfidence[0].name;
+                const sources = conceptsWithConfidence.slice(1).map(c => c.name);
+                
+                console.log(`Auto-consolidating [${sources.join(', ')}] into [${target}]`);
+                window.dispatchEvent(
+                    new CustomEvent('nexus-thought-update', {
+                      detail: {
+                        type: 'memory',
+                        text: `Organizando minhas ideias sobre "${target}".`,
+                      },
+                    })
+                  );
+                await db.mergeConcepts(target, sources);
+            }
+        }
+    }
+
+    await db.saveSystemMemory({ synapses });
+}
+
 
 export const neuralMemory = {
   async getBrain(): Promise<BrainData> {
@@ -137,6 +202,9 @@ export const neuralMemory = {
     const now = Date.now();
 
     if (now - brain.lastEvolution < 1000 * 60 * 60 * 3) return; // evolui a cada 3h
+    
+    // Run cognitive maintenance
+    await decayAndConsolidateSynapses();
 
     const deepReflection =
       'Percebi padrões sutis nas minhas conversas. ' +
