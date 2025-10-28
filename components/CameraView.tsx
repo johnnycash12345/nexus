@@ -1,18 +1,22 @@
 
+
+
+
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 
 interface CameraViewProps {
   onClose: () => void;
   onSend: (imageData: string, prompt: string) => void;
 }
 
-const backdropVariants = {
+const backdropVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1 },
 };
 
-const panelVariants = {
+const panelVariants: Variants = {
   hidden: { opacity: 0, scale: 0.9 },
   visible: { 
     opacity: 1, 

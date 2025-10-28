@@ -1,6 +1,10 @@
 
+
+
+
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
+import { motion, type Variants } from 'framer-motion';
 import { db } from '../services/indexedDBService';
 import { Task } from '../types';
 
@@ -9,12 +13,12 @@ interface TodoListProps {
   isVisible: boolean;
 }
 
-const backdropVariants = {
+const backdropVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1 },
 };
 
-const panelVariants = {
+const panelVariants: Variants = {
   hidden: { x: "-100%" },
   visible: { 
     x: "0%",
@@ -22,7 +26,7 @@ const panelVariants = {
   },
 };
 
-const listVariants = {
+const listVariants: Variants = {
   hidden: {},
   visible: {
     transition: {
@@ -31,7 +35,7 @@ const listVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,

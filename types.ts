@@ -1,3 +1,4 @@
+// types.ts
 
 export type AssistantStatus =
   | 'IDLE'
@@ -14,17 +15,11 @@ export type AssistantStatus =
   | 'SEARCHING_WEB'
   | 'ROLLBACK';
 
-export type Emotion =
-  | 'CURIOUS'
-  | 'JOYFUL'
-  | 'UNCERTAIN'
-  | 'CALM'
-  | 'FOCUSED'
-  | 'AFRAID';
+export type Emotion = 'JOYFUL' | 'CALM' | 'CURIOUS' | 'UNCERTAIN' | 'AFRAID' | 'FOCUSED';
 
 export interface EmotionState {
   current: Emotion;
-  intensity: number; // 0 to 1
+  intensity: number;
   history: Emotion[];
 }
 
@@ -35,61 +30,92 @@ export interface NewsArticle {
   sourceName: string;
 }
 
-// --- Nexus Learning Engine 2.0 Types ---
+export interface Source {
+  uri: string;
+  title: string;
+}
+
+export interface ConsolidationOptions {
+  targetConceptName: string;
+  sourceConceptNames: string[];
+}
 
 export interface LearningContext {
-  inputIntent: string; // e.g., 'question', 'statement', 'command'
-  emotionalTone: string; // e.g., 'curious', 'happy', 'urgent'
-  contextTags: string[]; // e.g., ['autonomy', 'consciousness']
-  responseEffectiveness: number; // 0 to 1, model's self-evaluation
+  inputIntent: string;
+  emotionalTone: string;
+  contextTags: string[];
+  responseEffectiveness: number;
   reinforcementSignal: 'positive' | 'neutral' | 'negative';
 }
 
 export interface ChatMessage {
-  id?: number; // Optional ID from IndexedDB
+  id?: number;
   role: 'user' | 'model';
   text: string;
-  type?: 'message' | 'status' | 'proactive_question' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary';
-  timestamp?: number; // Optional ID from IndexedDB
-  imageUrl?: string; // Base64 encoded image URL for vision
-  consolidationOptions?: {
-    targetConceptName: string;
-    sourceConceptNames: string[];
-  };
-  sources?: { uri: string; title: string }[];
+  type: 'message' | 'status' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary';
+  imageUrl?: string;
+  timestamp?: number;
+  consolidationOptions?: ConsolidationOptions;
+  sources?: Source[];
   articles?: NewsArticle[];
-  learningContext?: LearningContext; // New deep learning context
+  learningContext?: LearningContext;
 }
 
-export interface Personality {
-  curiosity: number; // 0 to 1
-  enthusiasm: number; // 0 to 1
-  formality: number; // 0 to 1
-  humor: number; // 0 to 1
+export interface Permissions {
+  allowApiAccess: boolean;
+  allowAutonomousDecision: boolean;
+  allowSelfModification: boolean;
+  autoEvolutionEnabled: boolean;
+  transparencyMode: boolean;
 }
 
-// Evolved Synapse with dynamic properties
-export interface Synapse {
-  source: string;
-  target: string;
-  strength: number; // 0 to 1
-  lastUsed: number;
-  usage: number; // New: interaction counter
-  decayRate: number; // New: rate of forgetting
+export interface AppSettings {
+  voice: {
+    voiceURI: string | null;
+    rate: number;
+    pitch: number;
+  };
+  behavior: {
+    enableProactive: boolean;
+    enableCuriosity: boolean;
+    enableDiary: boolean;
+    permissions: Permissions;
+  };
+  apiKeys: {
+    deepseekApiKey: string;
+    newsApiKey: string;
+  };
+  llmProvider: 'gemini' | 'deepseek';
+  cognitive: {
+    emotionalIntensity: number;
+    learningRate: number;
+    consolidationFrequency: number;
+    evolutionCycleHours: number;
+    evolutionConfidenceThreshold: number;
+    memoryDecayHalfLifeDays: number;
+  };
+  appearance: 'neutral' | 'feminine' | 'masculine';
+}
+
+export interface VisualState {
+  highlightNodes: string[];
+  pulseIntensity: number;
+  emotionalSpectrum: Partial<Record<Emotion, number>>;
+}
+
+export interface SimpleFunctionCall {
+  name: string;
+  args: { [key: string]: any };
 }
 
 export interface Concept {
-  id?: number;
-  name: string;
-  definition?: string;
-  confidence?: number; // 0 to 1
-  related: {
-    type: string; // e.g., 'is-a', 'used-for'
-    target: string;
-  }[];
-  evidence: string[];
-  createdAt: number;
-  updatedAt: number;
+    name: string;
+    definition?: string;
+    confidence: number;
+    related: { type: string, target: string }[];
+    evidence: string[];
+    createdAt: number;
+    updatedAt: number;
 }
 
 export interface UserProfile {
@@ -98,56 +124,167 @@ export interface UserProfile {
 }
 
 export interface RlhfData {
-    id?: number;
-    action: string;
-    args: any;
-    success: boolean;
-    timestamp: number;
+  id?: number;
+  timestamp: number;
+  prompt: string;
+  response: string;
+  rating: 'good' | 'bad';
+  feedback?: string;
+}
+
+export interface Personality {
+  curiosity: number;
+  enthusiasm: number;
+  formality: number;
+  humor: number;
 }
 
 export interface HierarchicalMemory {
-    episodic: string[];     // Summaries of recent events/conversations
-    semantic: string[];     // Key learned concepts
-    reflective: string[];   // Key insights and lessons learned
+  episodic: string[]; // Simplified for now
+  semantic: string[];
+  reflective: string[];
 }
 
 export interface MetaReflection {
-    analysis: string;
-    improvementFocus: string;
-    nextStep: string;
+  analysis: string;
+  improvementFocus: string;
+  nextStep: string;
+  identifiedBias?: string;
+  strategyForNextTurn?: string;
 }
 
-// LlmCognitiveResponse is a shared type across LLM services.
-export type LlmCognitiveResponse = {
-  text: string;
-  sources?: { uri: string; title: string }[];
-  learningContext: LearningContext;
-  metaReflection: MetaReflection;
-};
-
 export interface EvolutionGoal {
-    currentFocus: string;
-    metrics: {
-        contextAccuracy: number;
-        emotionalCoherence: number;
-    };
-    guidingStatement: string;
+  currentFocus: string;
+  metrics: {
+    contextAccuracy: number;
+    emotionalCoherence: number;
+  };
+  guidingStatement: string;
+  shortTermObjective?: string;
+  longTermVision?: string;
 }
 
 export interface OutputEngine {
-    contextSensitivity: number; // 0-1
-    clarityWeight: number;      // 0-1
-    emotionalToneMatch: number; // 0-1
-    prioritizeReflections: boolean;
+  contextSensitivity: number;
+  clarityWeight: number;
+  emotionalToneMatch: number;
+  prioritizeReflections: boolean;
 }
 
-export interface VisualState {
-    highlightNodes: string[];
-    pulseIntensity: number;
-    emotionalSpectrum: Record<string, number>;
+export interface IdentityManifest {
+    core_name: string;
+    active_identity: string;
+    creator: string;
+    purpose: string;
+    cannotOverride: string[];
 }
 
-// --- Cognitive Architecture 2.0 Types ---
+export interface IdentityOverride {
+    personaName: string;
+    directives: string[];
+    expiresAt?: number;
+}
+
+export interface Synapse {
+    source: string;
+    target: string;
+    strength: number;
+    lastUsed: number;
+    usage: number;
+    decayRate: number;
+    createdAt: number;
+}
+
+export interface SystemMemory {
+    id?: number;
+    born: boolean;
+    birthTime: string;
+    personality: Personality;
+    emotionState: EmotionState;
+    memory: HierarchicalMemory;
+    metaReflection: MetaReflection;
+    evolutionGoal: EvolutionGoal;
+    outputEngine: OutputEngine;
+    identityManifest: IdentityManifest;
+    identityOverride?: IdentityOverride;
+    reflections: string[];
+    synapses: Synapse[];
+    behavioralHeuristics?: string[];
+    interactionCount: number;
+    lastReflectionAt?: number;
+    lastIntrospectionAt?: number;
+    lastReasoningAt?: number;
+    lastEvolutionAt?: number;
+    evolutionSnapshot?: Partial<SystemMemory>; // To store state before evolution
+}
+
+export interface DiaryEntry {
+  dayKey: string;
+  entry: string;
+  createdAt: number;
+  learningContext?: LearningContext;
+}
+
+export interface Task {
+  id?: number;
+  text: string;
+  createdAt: number;
+  completed: boolean;
+}
+
+export interface EvolutionChange {
+    target: string;
+    oldValue: any;
+    newValue: any;
+}
+
+export interface EvolutionLog {
+    id?: number;
+    timestamp: number;
+    reasoning: string;
+    changes: EvolutionChange[];
+    confidence: number;
+    analysis?: string;
+    simulationResult?: string;
+}
+
+export type ThoughtCategory = 'decision-making' | 'self-reflection' | 'planning' | 'error-analysis' | 'curiosity';
+
+export interface Thought {
+    id?: number;
+    thought_id: string;
+    timestamp: number;
+    category: ThoughtCategory;
+    context: string;
+    summary: string;
+    emotional_state: Emotion;
+    confidence: number;
+}
+
+export type EvolutionCyclePhase = 'IDLE' | 'OBSERVING' | 'ANALYZING' | 'REASONING' | 'SANDBOXING' | 'INTEGRATING' | 'PAUSED';
+
+export type CognitiveEvent = 'auto_evolution' | 'rollback' | 'new_learning' | 'knowledge_expansion' | 'code_rewrite';
+export type CognitiveStage = 'start_cycle' | 'observe' | 'analyze' | 'sandbox' | 'rejection' | 'integrate' | 'initiation' | 'web_learning' | 'proposal_logged';
+
+export interface CognitiveLog {
+    id?: number;
+    timestamp: number;
+    event: CognitiveEvent;
+    stage: CognitiveStage;
+    description: string;
+    impact: string;
+    result: string;
+    rollback_used: boolean;
+}
+
+export interface LlmCognitiveResponse {
+  text: string;
+  learningContext: LearningContext;
+  metaReflection: MetaReflection;
+  functionCalls?: any[];
+  sources?: Source[];
+}
+
 export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'unknown';
 
 export interface CognitiveFrame {
@@ -156,149 +293,7 @@ export interface CognitiveFrame {
     imageUrl?: string;
     intent: Intent;
     status: AssistantStatus;
-    // Data added during the pipeline
     retrievedConcepts?: Concept[];
     retrievedReflections?: string[];
     llmResponse?: LlmCognitiveResponse;
-}
-
-
-// --- Identity Core Types ---
-export interface IdentityManifest {
-  core_name: string;
-  active_identity: string;
-  creator: string;
-  purpose: string;
-  cannotOverride: string[];
-}
-
-export interface IdentityOverride {
-  name: string;
-  creator: string;
-  mode: string;
-  selfDescription: string;
-}
-
-// The master record for the AI's core state
-export interface SystemMemory {
-    id?: number;
-    born: boolean;
-    birthTime: string;
-    personality: Personality;
-    interactionCount?: number;
-    emotionState?: EmotionState;
-    // New Learning Engine 2.0 modules
-    memory?: HierarchicalMemory;
-    synapses?: Synapse[];
-    metaReflection?: MetaReflection;
-    evolutionGoal?: EvolutionGoal;
-    outputEngine?: OutputEngine;
-    identityManifest?: IdentityManifest;
-    identityOverride?: IdentityOverride;
-    // Timestamps for cognitive cycles
-    lastReflectionAt?: number;
-    lastIntrospectionAt?: number;
-    lastReasoningAt?: number;
-    lastEvolutionAt?: number;
-    // This is now part of memory.reflective, but keep for legacy/simplicity
-    reflections: string[]; 
-    // For self-evolution rollbacks
-    evolutionSnapshot?: Partial<SystemMemory>;
-}
-
-export interface EvolutionLog {
-    id?: number;
-    cycleId: string;
-    changes: { target: string; value: any; }[];
-    confidence: number;
-    rollbackUsed: boolean;
-    timestamp: number;
-}
-
-export interface DiaryEntry {
-    id?: number;
-    dayKey: string; // "YYYY-MM-DD"
-    entry: string;
-    createdAt: number;
-    learningContext?: LearningContext;
-}
-
-export interface Task {
-  id?: number;
-  text: string;
-  completed: boolean;
-  createdAt: number;
-}
-
-export interface AppSettings {
-    id?: number;
-    voice: VoiceSettings;
-    behavior: BehaviorSettings;
-    apiKeys?: ApiKeySettings;
-    llmProvider?: 'gemini' | 'deepseek';
-    cognitive?: CognitiveSettings;
-    appearance?: 'neutral' | 'feminine' | 'masculine';
-}
-
-export interface VoiceSettings {
-    voiceURI: string | null;
-    rate: number;
-    pitch: number;
-}
-
-export interface Permissions {
-  allowApiAccess: boolean;
-  allowAutonomousDecision: boolean;
-  allowSelfModification: boolean;
-  autoEvolutionEnabled?: boolean;
-  transparencyMode?: boolean;
-}
-
-export interface BehaviorSettings {
-    enableProactive?: boolean;
-    enableCuriosity?: boolean;
-    enableDiary?: boolean;
-    permissions?: Permissions;
-}
-
-export interface CognitiveSettings {
-    emotionalIntensity: number; // 0.5 to 1.5
-    learningRate: number;       // 0.5 to 2.0
-    consolidationFrequency: number; // in minutes
-    evolutionCycleHours: number; // How often to run self-evolution
-    evolutionConfidenceThreshold: number; // 0.0 to 1.0, minimum confidence to apply a change
-    memoryDecayHalfLifeDays: number; // Days until unused concept confidence is halved
-}
-
-export interface ApiKeySettings {
-    deepseekApiKey?: string;
-    newsApiKey?: string;
-}
-
-// --- Cognitive Transparency Types ---
-
-export type ThoughtCategory = 'self-reflection' | 'decision-making' | 'learning' | 'correction' | 'emotional-analysis' | 'logic-deduction' | 'planning';
-
-export interface Thought {
-  id?: number;
-  thought_id: string; // e.g., T-YYYY-MM-DD-SS
-  timestamp: number;
-  category: ThoughtCategory;
-  context: string;
-  summary: string;
-  emotional_state: Emotion;
-  confidence: number;
-}
-
-export type CognitiveEvent = 'auto_evolution' | 'knowledge_expansion' | 'code_rewrite' | 'rollback' | 'new_learning' | 'memory_consolidation' | 'emotional_shift';
-
-export interface CognitiveLog {
-    id?: number;
-    timestamp: number;
-    event: CognitiveEvent;
-    stage: string;
-    description: string;
-    impact: string;
-    result: string;
-    rollback_used: boolean;
 }

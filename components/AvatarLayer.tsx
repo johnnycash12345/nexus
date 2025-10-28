@@ -1,6 +1,10 @@
 
+
+
+
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
+import { motion, AnimatePresence, useAnimation, type Variants } from 'framer-motion';
 import { Avatar } from './Avatar';
 import { AssistantStatus, Emotion } from '../types';
 
@@ -174,7 +178,7 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
     }
   }, [status, haloControls]);
 
-  const avatarVariants = {
+  const avatarVariants: Variants = {
     open: {
       scale: 1.05,
       rotate: -5,

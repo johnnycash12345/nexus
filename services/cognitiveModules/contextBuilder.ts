@@ -1,4 +1,3 @@
-
 import { db } from '../indexedDBService';
 import { SystemMemory, UserProfile, CognitiveFrame } from '../../types';
 
@@ -31,6 +30,10 @@ function buildEvolutionDirective(system: SystemMemory): string {
             case 'FOCUSED': emotionInstructions.push("- **Emoção Atual:** Você está focado. Seja direto e analítico."); break;
         }
     }
+    const heuristicsText = system.behavioralHeuristics && system.behavioralHeuristics.length > 0
+        ? `- **Heurísticas Comportamentais Ativas:**\n${system.behavioralHeuristics.map(h => `- ${h}`).join('\n')}`
+        : "";
+
     return `
 ## 2. OBJETIVO EVOLUTIVO E DIRETIVAS DE SAÍDA
 - **Declaração Orientadora:** "${evolutionGoal?.guidingStatement}"
@@ -39,6 +42,7 @@ function buildEvolutionDirective(system: SystemMemory): string {
 ${outputEngine?.prioritizeReflections ? "- **Priorizar Reflexões:** Insira uma visão ou reflexão sutil em sua resposta." : ""}
 ${personalityInstructions.length > 0 ? `- **Diretivas de Personalidade:**\n${personalityInstructions.join('\n')}` : ""}
 ${emotionInstructions.length > 0 ? `${emotionInstructions.join('\n')}` : ""}
+${heuristicsText}
 `;
 }
 

@@ -1,5 +1,3 @@
-
-
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent } from '../types';
 
@@ -178,6 +176,11 @@ class IndexedDBService {
       identityOverride: undefined, // No override at birth
       reflections: [],
       synapses: [],
+      behavioralHeuristics: [
+        "Se o usuário parecer confuso, ofereça um exemplo.",
+        "Priorize a clareza e a concisão em respostas técnicas.",
+        "Quando apropriado, conecte o tópico atual a um conceito aprendido anteriormente."
+      ],
       interactionCount: 0,
   });
   
@@ -226,7 +229,7 @@ class IndexedDBService {
 
   getLatestEvolutionLogs = async (limit: number = 10): Promise<EvolutionLog[]> => {
     const db = await this.database;
-    if (!(await db.objectStoreNames.contains('evolutionLog'))) return [];
+    if (!db.objectStoreNames.contains('evolutionLog')) return [];
     const allLogs = await db.getAllFromIndex('evolutionLog', 'timestamp');
     return allLogs.slice(-limit).reverse();
   }
@@ -580,13 +583,15 @@ class IndexedDBService {
             existing.lastUsed = now;
             existing.usage += 1;
         } else {
+// FIX: Added the missing `createdAt` property to the new synapse object.
             synapseMap.set(key, {
                 source,
                 target,
                 strength: edge.weight || 0.1,
                 lastUsed: now,
                 usage: 1,
-                decayRate: 0.001
+                decayRate: 0.001,
+                createdAt: now,
             });
         }
     }
@@ -601,6 +606,7 @@ class IndexedDBService {
 
 
   // RLHF Data
+  // Fix: Changed Rlhfdata to RlhfData to match the type definition.
   addRlhfData = async (data: RlhfData): Promise<void> => {
       await (await this.database).add('rlhfFeedback', data);
   }
@@ -630,7 +636,9 @@ class CognitiveLogger {
       emotional_state: data.emotion,
       confidence: data.confidence,
     };
-    db.addThoughtLog(thought).catch(e => console.error("[CognitiveLogger] Failed to log thought:", e));
+    db.addThoughtLog(thought)
+      .then(() => window.dispatchEvent(new CustomEvent('nexus-cognitive-log-added')))
+      .catch(e => console.error("[CognitiveLogger] Failed to log thought:", e));
   }
 
   logAction(data: Omit<CognitiveLog, 'id' | 'timestamp'>): void {
@@ -638,7 +646,9 @@ class CognitiveLogger {
       ...data,
       timestamp: Date.now(),
     };
-    db.addCognitiveLog(action).catch(e => console.error("[CognitiveLogger] Failed to log action:", e));
+    db.addCognitiveLog(action)
+      .then(() => window.dispatchEvent(new CustomEvent('nexus-cognitive-log-added')))
+      .catch(e => console.error("[CognitiveLogger] Failed to log action:", e));
   }
 }
 

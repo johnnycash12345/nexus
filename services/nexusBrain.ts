@@ -1,4 +1,5 @@
 
+
 import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Emotion, EmotionState, VisualState, LearningContext, SystemMemory, Concept } from '../types';
 import { db, cognitiveLogger } from './indexedDBService';
 import { LlmCognitiveResponse } from '../types';
@@ -194,7 +195,7 @@ export class NexusBrain implements INexusBrain {
         
         if (thoughts.length === 0 && actions.length === 0) {
             const msg = "Estou em um estado calmo, sem nenhum processo ativo no momento.";
-            addMessage({ role: 'model', text: msg });
+            addMessage({ role: 'model', text: msg, type: 'message' });
             speak(msg, () => setStatus('IDLE'));
             return;
         }
@@ -213,13 +214,13 @@ export class NexusBrain implements INexusBrain {
         const response = await generateResponse(context, [], { useThinking: true });
         const explanation = response.text || "Estive processando algumas informações e aprendendo com nossas últimas interações.";
         
-        addMessage({ role: 'model', text: explanation });
+        addMessage({ role: 'model', text: explanation, type: 'message' });
         speak(explanation, () => setStatus('IDLE'));
 
     } catch (error) {
         console.error("[NEXUS-BRAIN] Failed to explain cognition:", error);
         const fallback = "Tive um problema ao tentar resumir meus pensamentos. Parece que estou um pouco confuso agora.";
-        addMessage({ role: 'model', text: fallback });
+        addMessage({ role: 'model', text: fallback, type: 'message' });
         speak(fallback, () => setStatus('IDLE'));
     }
   }
@@ -231,11 +232,11 @@ export class NexusBrain implements INexusBrain {
     try {
         await db.mergeConcepts(options.targetConceptName, options.sourceConceptNames);
         const confirmationText = `Entendido. Unifiquei meu conhecimento sobre "${options.targetConceptName}". Agradeço a ajuda!`;
-        addMessage({ role: 'model', text: confirmationText });
+        addMessage({ role: 'model', text: confirmationText, type: 'message' });
         speak(confirmationText, () => setStatus('IDLE'));
     } catch (error) {
         console.error("Failed to merge concepts:", error);
-        addMessage({ role: 'model', text: "Ocorreu um erro ao tentar unificar os conceitos." });
+        addMessage({ role: 'model', text: "Ocorreu um erro ao tentar unificar os conceitos.", type: 'status' });
         setStatus('ERROR');
     }
   }
@@ -423,7 +424,6 @@ export class NexusBrain implements INexusBrain {
       const errorMessage = 'Ocorreu um erro inesperado em meu cérebro. Estou tentando me recuperar.';
       addMessage({ role: 'model', text: errorMessage, type: 'status'});
       speak(errorMessage, () => setStatus('IDLE'));
-      setStatus('ERROR');
       throw error; // Re-throw for App.tsx to handle potential rollbacks
     }
   }

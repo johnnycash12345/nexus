@@ -1,8 +1,10 @@
 
+
 import { db, cognitiveLogger } from '../indexedDBService';
 import { CognitiveFrame, VisualState } from '../../types';
 import { neuralMemory } from '../neuralMemory';
 import { analyzeAndEvolveEmotion } from '../emotionalEngine';
+import { associativeReasoner } from '../associativeReasoner';
 
 export async function updateCognitiveState(frame: CognitiveFrame): Promise<void> {
     if (!frame.llmResponse) {
@@ -41,4 +43,9 @@ export async function updateCognitiveState(frame: CognitiveFrame): Promise<void>
         };
         window.dispatchEvent(new CustomEvent('nexus-visual-state-update', { detail: visualState }));
     }
+    
+    // 6. Trigger associative reasoning to form new connections (don't await, let it run in background)
+    associativeReasoner.generateNewSynapses(frame).catch(err => {
+        console.warn("[CognitiveUpdater] Associative reasoning process failed:", err);
+    });
 }

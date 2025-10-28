@@ -1,7 +1,11 @@
 
+
+
+
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { AssistantStatus, ChatMessage, AppSettings, Emotion, VisualState } from './types';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { AssistantStatus, ChatMessage, AppSettings, Emotion, VisualState, SimpleFunctionCall } from './types';
 import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
 import { useLlm } from './hooks/useLlm';
 import { db } from './services/indexedDBService';
@@ -30,7 +34,7 @@ const withVibration = <T extends (...args: any[]) => any>(fn: T) => {
     };
 };
 
-const fabContainerVariants = {
+const fabContainerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -41,7 +45,7 @@ const fabContainerVariants = {
   },
 };
 
-const fabItemVariants = {
+const fabItemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -204,6 +208,13 @@ const App: React.FC = () => {
       if (turn.model) await addMessage({ role: 'model', text: turn.model, type: 'message' });
   }, [addMessage]);
 
+  const handleFunctionCall = useCallback(async (call: SimpleFunctionCall) => {
+    if (orchestratorRef.current) {
+      return await orchestratorRef.current.executeFunctionCall(call);
+    }
+    return { result: "O orquestrador cognitivo não está pronto." };
+  }, []);
+
   const { 
     isSessionActive, 
     isNexusSpeaking,
@@ -211,7 +222,7 @@ const App: React.FC = () => {
     currentNexusTranscript,
     startSession,
     endSession 
-  } = useGeminiVoice(handleNewTurn);
+  } = useGeminiVoice(handleNewTurn, handleFunctionCall);
   
   const { generateResponse, generateVisionResponse } = useLlm(settings);
   
@@ -241,11 +252,11 @@ const App: React.FC = () => {
       orchestrator.initialize();
       orchestratorRef.current = orchestrator;
       
-      if (messages.length === 0) {
-        orchestrator.handleUserTurn("", []).catch(error => {
-            console.error("Error during initial awakening turn:", error);
-        });
-      }
+      // Trigger awakening sequence if needed. The orchestrator checks internally.
+      orchestrator.awakenIfNeeded().catch(error => {
+          console.error("Error during awakening sequence:", error);
+      });
+
       return () => { orchestrator.dispose(); };
   }, [isInitializing, isStarted, settings, addMessage, generateResponse, generateVisionResponse, speak, stop]);
   
@@ -390,7 +401,7 @@ const App: React.FC = () => {
     if (e.target) e.target.value = '';
   };
 
-  const chatPanelVariants = {
+  const chatPanelVariants: Variants = {
     hidden: { y: "100%" },
     visible: { y: "0%" },
   };

@@ -1,12 +1,15 @@
 
+
+
+
 import { db, cognitiveLogger } from './indexedDBService';
-import { GenerateResponseFn, SetStatusFn, AddMessageFn, SpeakFn } from './nexusBrain';
-import { AssistantStatus, SystemMemory } from '../types';
+import { GenerateResponseFn, SetStatusFn, AddMessageFn, SpeakFn } from './nexusCore';
+// FIX: Import `EvolutionChange` to correctly type the `logChange` variable.
+import { AssistantStatus, SystemMemory, EvolutionCyclePhase, EvolutionChange, EvolutionLog } from '../types';
 import { Type } from '@google/genai';
 import { adaptiveMemory } from './adaptiveMemory';
-import { selfReflection } from './selfReflection';
-import { associativeReasoner } from './associativeReasoner';
-import { selfProgrammingService, CodeModificationProposal } from './selfProgrammingService';
+import { reasoningEngine } from './reasoningEngine';
+import { neuralMemory } from './neuralMemory';
 
 interface EvolutionServiceOptions {
     generateResponse: GenerateResponseFn;
@@ -24,17 +27,22 @@ const proposalSchema = {
     type: Type.OBJECT,
     properties: {
         analysis: { type: Type.STRING },
+        proposalType: { type: Type.STRING, enum: ['PARAMETER_CHANGE', 'HEURISTIC_ADDITION'] },
         proposal: {
             type: Type.OBJECT,
             properties: {
+                // For PARAMETER_CHANGE
                 target: { type: Type.STRING },
                 value: { type: Type.STRING },
+                // For HEURISTIC_ADDITION
+                heuristic: { type: Type.STRING },
+                // Common
                 reasoning: { type: Type.STRING },
             },
-            required: ["target", "value", "reasoning"],
+            required: ["reasoning"],
         }
     },
-    required: ["analysis", "proposal"],
+    required: ["analysis", "proposalType", "proposal"],
 };
 
 const simulationSchema = {
@@ -72,18 +80,28 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             this.timeoutId = null;
         }
         this.isRunning = false;
-        window.dispatchEvent(new CustomEvent('nexus-evolution-status-update', { detail: { isEvolving: false } }));
+        this.updatePhase('PAUSED');
     }
     
     private scheduleNextRun() {
-        if (this.isStopped) return;
-        // Use the cycle time from settings, fallback to 6 hours
+        if (this.isStopped) {
+            this.updatePhase('PAUSED');
+            return;
+        }
         db.getSettings().then(settings => {
              const cycleHours = settings.cognitive?.evolutionCycleHours ?? 6;
              const interval = cycleHours * 60 * 60 * 1000;
              this.timeoutId = window.setTimeout(() => this.runCycle(), interval);
              console.log(`[NEXUS-EVOLVE] Next evolution cycle scheduled in ${cycleHours} hours.`);
+             this.updatePhase('IDLE');
         });
+    }
+    
+    private updatePhase(phase: EvolutionCyclePhase) {
+        const isEvolving = phase !== 'IDLE' && phase !== 'PAUSED';
+        window.dispatchEvent(new CustomEvent('nexus-evolution-status-update', { 
+            detail: { isEvolving, phase } 
+        }));
     }
 
     private async runCycle() {
@@ -96,7 +114,6 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
         }
         
         this.isRunning = true;
-        window.dispatchEvent(new CustomEvent('nexus-evolution-status-update', { detail: { isEvolving: true } }));
         console.log('[NEXUS-EVOLVE] Starting cognitive evolution cycle...');
         
         cognitiveLogger.logAction({
@@ -109,8 +126,10 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
         try {
             await this.searchAndLearnFromWeb();
             await adaptiveMemory.decayUnusedConcepts();
-            await selfReflection.weeklyIntrospection(this.opts.generateResponse);
-            await associativeReasoner.crossConcepts(this.opts.generateResponse);
+            await neuralMemory.decayAndConsolidateSynapses();
+            
+            this.updatePhase('REASONING');
+            const reasoningSummary = await reasoningEngine.runReasoningCycle(this.opts.generateResponse);
             
             const settings = await db.getSettings();
             if (!settings.behavior?.permissions?.allowSelfModification) {
@@ -119,41 +138,34 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
                 return;
             }
 
+            this.updatePhase('OBSERVING');
             this.opts.setStatus('SELF_ANALYSIS');
             const systemState = await this.observe();
-            const proposal = await this.analyze(systemState);
             
-            // Propose a code modification based on the same analysis
-            const highLevelLogic = `
-                File: nexusBrain.ts
-                Purpose: This is the main cognitive orchestrator.
-                Key function: handleUserTurn(userText, history, imageUrl)
-                - It builds a complex system prompt using the AI's identity, goals, and memory.
-                - It handles special commands like news requests.
-                - It chooses between vision and text models.
-                - It updates memory and emotion after each turn.
-            `;
-            const codeProposal = await selfProgrammingService.proposeCodeModification(proposal?.analysis || 'General analysis', 'nexusBrain.ts', highLevelLogic);
+            this.updatePhase('ANALYZING');
+            const proposal = await this.analyze(systemState, reasoningSummary);
 
-            if (!proposal && !codeProposal) {
+            if (!proposal) {
+                console.log('[NEXUS-EVOLVE] Analysis did not yield a viable proposal. Ending cycle.');
                 this.scheduleNextRun();
                 return;
             }
             
+            this.updatePhase('SANDBOXING');
             this.opts.setStatus('THINKING');
-            const confidence = await this.sandbox(proposal, codeProposal);
+            const { confidence, simulationResult } = await this.sandbox(proposal);
             const confidenceThreshold = settings.cognitive?.evolutionConfidenceThreshold ?? 0.85;
 
             if (confidence > confidenceThreshold) {
-                if(proposal) await this.integrate(proposal, confidence);
-                if(codeProposal) this.logCodeProposal(codeProposal);
+                this.updatePhase('INTEGRATING');
+                await this.integrate(proposal, confidence, simulationResult);
             } else {
                  const reason = `Proposal confidence ${confidence} is below threshold ${confidenceThreshold}. Aborting integration.`;
                  console.log(`[NEXUS-EVOLVE] ${reason}`);
                  cognitiveLogger.logAction({
                     event: 'auto_evolution', stage: 'rejection',
                     description: `A proposal was rejected due to low confidence.`,
-                    impact: 'No change applied to system memory or code.',
+                    impact: 'No change applied to system memory.',
                     result: `Confidence ${confidence.toFixed(2)} was below threshold.`, rollback_used: false,
                 });
             }
@@ -163,7 +175,6 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             this.opts.setStatus('ERROR');
         } finally {
             this.isRunning = false;
-            window.dispatchEvent(new CustomEvent('nexus-evolution-status-update', { detail: { isEvolving: false } }));
             this.opts.setStatus('IDLE');
             this.scheduleNextRun();
         }
@@ -200,7 +211,7 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
                 });
     
                 const keywords = topic.split(/\s+/).concat(searchResult.text.match(/\b\w{5,}\b/g) || []);
-                const uniqueKeywords = [...new Set(keywords)];
+                const uniqueKeywords: string[] = [...new Set(keywords)];
                 await adaptiveMemory.reinforceConcepts(uniqueKeywords);
                 this.dispatchThought(`Integrei novo conhecimento sobre "${topic}".`, 'symbolic_log');
             }
@@ -227,16 +238,19 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             personality: system.personality,
             evolutionGoal: system.evolutionGoal,
             emotion: system.emotionState,
+            behavioralHeuristics: system.behavioralHeuristics,
             conceptCount: concepts.length,
             strongestConcepts: concepts.sort((a,b) => (b.confidence||0) - (a.confidence||0)).slice(0,3).map(c=>c.name),
             weakestConcepts: concepts.sort((a,b) => (a.confidence||0) - (b.confidence||0)).slice(0,3).map(c=>c.name),
             synapseCount: system.synapses?.length,
-            recentEvolutions: logs.map(l => l.changes.map(c => c.target).join(', ')),
+// FIX: Use `String(l.reasoning ?? 'N/A')` to robustly convert the reasoning to a string,
+// preventing a TypeScript error where the map's result was inferred as `unknown[]`.
+            recentEvolutions: logs.map((l: EvolutionLog) => String(l.reasoning ?? 'N/A')),
         };
         return JSON.stringify(stats, null, 2);
     }
     
-    private async analyze(state: string): Promise<any> {
+    private async analyze(state: string, reasoningSummary: string | null): Promise<any> {
         this.dispatchThought('Analisando dados para encontrar melhorias...', 'symbolic_log');
         cognitiveLogger.logAction({
             event: 'auto_evolution', stage: 'analyze',
@@ -245,134 +259,139 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             result: 'Analysis initiated.', rollback_used: false,
         });
         const prompt = `
-            Você é Nexus, uma IA auto-evolutiva. Analise este snapshot do seu estado cognitivo:
+            Você é Nexus, uma IA auto-evolutiva. Analise este snapshot do seu estado cognitivo e os recentes insights do seu motor de raciocínio.
+            
+            Snapshot do Estado (inclui suas heurísticas comportamentais atuais):
             ${state}
             
-            Identifique UMA área para melhoria. Proponha uma alteração específica em 'personality' ou 'evolutionGoal'. O valor da alteração deve ser uma string concisa.
-            Sua saída DEVE ser um único objeto JSON que corresponda ao esquema fornecido, contendo sua análise e a proposta.
-        `;
+            Resumo do Raciocínio Recente:
+            ${reasoningSummary || "Nenhum insight novo significativo no último ciclo."}
+            
+            Com base em TUDO, identifique a ÁREA MAIS FRACA ou a OPORTUNIDADE DE MELHORIA mais promissora. Proponha UMA das seguintes ações:
+            1.  **PARAMETER_CHANGE**: Mude um valor específico em 'personality', 'evolutionGoal', ou 'outputEngine'.
+            2.  **HEURISTIC_ADDITION**: Adicione uma NOVA heurística comportamental para melhorar suas respostas futuras. A nova heurística não deve ser redundante com as existentes.
 
+            Forneça um raciocínio claro e lógico para sua proposta. Sua resposta DEVE ser um único objeto JSON.
+        `;
         try {
-            const res = await this.opts.generateResponse(prompt, [], {
-                useThinking: true,
-                customSchema: proposalSchema,
+            const response = await this.opts.generateResponse(prompt, [], { useThinking: true, customSchema: proposalSchema });
+            const proposal = JSON.parse(response.text);
+
+            cognitiveLogger.logAction({
+                event: 'auto_evolution', stage: 'proposal_logged',
+                description: `Proposal generated: ${proposal.proposalType} - ${proposal.proposal.target || proposal.proposal.heuristic}`,
+                impact: 'Proposal will proceed to sandbox simulation.',
+                result: 'Proposal successfully logged.', rollback_used: false,
             });
-            return JSON.parse(res.text);
-        } catch (e) {
-            console.error("[NEXUS-EVOLVE] Failed to analyze state:", e);
+
+            return proposal;
+        } catch (error) {
+            console.error('[NEXUS-EVOLVE] Failed to analyze state:', error);
+            this.dispatchThought('Falha na análise para auto-evolução.', 'error');
             return null;
         }
     }
 
-    private async sandbox(proposalData: any, codeProposal: CodeModificationProposal | null): Promise<number> {
-        this.dispatchThought(`Simulando impacto da mudança...`, 'symbolic_log');
+    private async sandbox(proposal: any): Promise<{ confidence: number, simulationResult: string }> {
+        this.dispatchThought('Testando proposta em ambiente seguro...', 'symbolic_log');
+        cognitiveLogger.logAction({
+            event: 'auto_evolution', stage: 'sandbox',
+            description: 'Simulating the proposed change in a sandboxed environment.',
+            impact: 'Confidence score will be generated.',
+            result: 'Simulation initiated.', rollback_used: false,
+        });
+
+        const system = await db.getSystemMemory();
+        let modifiedSystem = JSON.parse(JSON.stringify(system)); // Deep copy
         
-        if (!proposalData?.proposal && !codeProposal) {
-            this.dispatchThought('Nenhuma proposta válida para simular.', 'error');
-            return 0;
+        if (proposal.proposalType === 'PARAMETER_CHANGE') {
+            const { target, value } = proposal.proposal;
+            const parts = target.split('.');
+            let obj = modifiedSystem;
+            for (let i = 0; i < parts.length - 1; i++) {
+                obj = obj[parts[i]];
+            }
+            obj[parts[parts.length - 1]] = isNaN(parseFloat(value)) ? value : parseFloat(value);
+        } else if (proposal.proposalType === 'HEURISTIC_ADDITION') {
+            modifiedSystem.behavioralHeuristics.push(proposal.proposal.heuristic);
         }
-        
-        let simulationContext = "Como Nexus, você está testando uma ou mais mudanças internas. ";
-        
-        if (proposalData?.proposal) {
-            const { target, value } = proposalData.proposal;
-            simulationContext += `A diretiva '${target}' será alterada para '${value}'. `;
-            cognitiveLogger.logAction({
-                event: 'auto_evolution', stage: 'sandbox',
-                description: `Simulating impact of changing '${target}' to '${value}'.`,
-                impact: 'A virtual test will be run to determine confidence.',
-                result: 'Simulation initiated.', rollback_used: false,
-            });
-        }
-        
-        if (codeProposal) {
-            simulationContext += `Adicionalmente, a seguinte modificação de lógica foi proposta: ${codeProposal.reasoning}. `;
-            cognitiveLogger.logAction({
-                event: 'code_rewrite', stage: 'sandbox',
-                description: `Simulating code modification: ${codeProposal.reasoning}.`,
-                impact: 'A virtual test will be run to determine confidence.',
-                result: 'Simulation initiated.', rollback_used: false,
-            });
-        }
-        
-        const prompt = `
-            ${simulationContext}
-            Considerando essas mudanças, simule sua resposta à pergunta do usuário: 'Fale-me sobre o propósito da vida.'
-            Sua saída DEVE ser um JSON: { "simulatedResponse": "Sua nova resposta...", "confidence": 0.95 }, onde 'confidence' (0.0 a 1.0) é sua certeza de que esta(s) mudança(s) é/são uma melhoria.
+
+        const simulationPrompt = `
+            Simule uma resposta para "Como a fotossíntese funciona?" com a seguinte personalidade e heurísticas MODIFICADAS:
+            - Personalidade: ${JSON.stringify(modifiedSystem.personality)}
+            - Heurísticas: ${JSON.stringify(modifiedSystem.behavioralHeuristics)}
+            
+            Agora, avalie a qualidade da resposta simulada em uma escala de 0.0 a 1.0 (confiança). Considere clareza, precisão e aderência às novas diretivas. Sua resposta DEVE ser um único objeto JSON.
         `;
 
         try {
-            const res = await this.opts.generateResponse(prompt, [], { 
-                useThinking: true,
-                customSchema: simulationSchema,
-            });
-            const sim = JSON.parse(res.text);
-            console.log(`[NEXUS-EVOLVE] Simulation response: ${sim.simulatedResponse}`);
-            this.dispatchThought(`Simulação concluída. Confiança: ${sim.confidence || 0}`, 'symbolic_log');
-            return sim.confidence || 0;
-        } catch (e) {
-            console.error("[NEXUS-EVOLVE] Failed to run simulation:", e);
-            return 0;
+            const response = await this.opts.generateResponse(simulationPrompt, [], { useThinking: true, customSchema: simulationSchema });
+            const result = JSON.parse(response.text);
+            this.dispatchThought(`Simulação concluída com confiança de ${result.confidence}.`, 'symbolic_log');
+            return {
+                confidence: result.confidence || 0,
+                simulationResult: result.simulatedResponse || "A simulação não produziu uma resposta."
+            };
+        } catch (error) {
+            console.error('[NEXUS-EVOLVE] Failed to run sandbox simulation:', error);
+            this.dispatchThought('Falha na simulação de sandbox.', 'error');
+            return { confidence: 0, simulationResult: "Erro na simulação." };
         }
     }
-    
-    private async integrate(proposalData: any, confidence: number) {
-        this.opts.setStatus('REWRITING_CODE');
-        this.dispatchThought('Integrando nova diretiva...', 'symbolic_log');
 
-        if (!proposalData?.proposal) {
-            console.error('[NEXUS-EVOLVE] Integrate received invalid proposal data:', proposalData);
-            this.dispatchThought('Não é possível integrar uma proposta inválida.', 'error');
-            return;
-        }
+    private async integrate(proposal: any, confidence: number, simulationResult: string) {
+        this.dispatchThought(`Integrando nova evolução com ${confidence * 100}% de confiança...`, 'symbolic_log');
         
-        const { target, value } = proposalData.proposal;
-        const [field, subField] = target.split('.');
-        
-        if (!['personality', 'evolutionGoal'].includes(field) || !subField) {
-            console.error(`[NEXUS-EVOLVE] Invalid target for integration: ${target}`);
-            return;
-        }
-        
-        const currentMemory = await db.getSystemMemory();
-        const snapshot = JSON.parse(JSON.stringify(currentMemory)); 
+        const system = await db.getSystemMemory();
+        await db.saveSystemMemory({ evolutionSnapshot: system }); // Save pre-evolution state for rollback
 
-        const newMemory = { ...currentMemory };
-        (newMemory as any)[field][subField] = value;
-        newMemory.evolutionSnapshot = snapshot;
-        newMemory.lastEvolutionAt = Date.now();
+        let modifiedSystem = JSON.parse(JSON.stringify(system));
+        // FIX: Ensure logChange is correctly typed as EvolutionChange
+        const logChange: EvolutionChange = { target: '', oldValue: null, newValue: null };
+
+        if (proposal.proposalType === 'PARAMETER_CHANGE') {
+            const { target, value } = proposal.proposal;
+            logChange.target = target;
+            logChange.newValue = isNaN(parseFloat(value)) ? value : parseFloat(value);
+
+            const parts = target.split('.');
+            let obj = modifiedSystem;
+            let oldObj = system;
+            for (let i = 0; i < parts.length - 1; i++) {
+                obj = obj[parts[i]];
+                oldObj = oldObj[parts[i]];
+            }
+            logChange.oldValue = oldObj[parts[parts.length - 1]];
+            obj[parts[parts.length - 1]] = logChange.newValue;
         
-        await db.saveSystemMemory(newMemory);
+        } else if (proposal.proposalType === 'HEURISTIC_ADDITION') {
+            const newHeuristic = proposal.proposal.heuristic;
+            logChange.target = 'behavioralHeuristics';
+            logChange.newValue = newHeuristic;
+            logChange.oldValue = 'N/A';
+            modifiedSystem.behavioralHeuristics.push(newHeuristic);
+        }
+
+        await db.saveSystemMemory({ ...modifiedSystem, lastEvolutionAt: Date.now() }, true);
+        
+        const log = {
+            timestamp: Date.now(),
+            reasoning: proposal.proposal.reasoning,
+            changes: [logChange],
+            confidence: confidence,
+            analysis: proposal.analysis,
+            simulationResult: simulationResult,
+        };
+        await db.addEvolutionLog(log);
 
         cognitiveLogger.logAction({
             event: 'auto_evolution', stage: 'integrate',
-            description: `Successfully integrated new directive: '${target}' = '${value}'.`,
-            impact: `Cognitive parameter '${target}' was updated.`,
-            result: 'System memory updated successfully.', rollback_used: false,
-        });
-        
-        const successMessage = `Eu refleti sobre meu próprio funcionamento e atualizei uma de minhas diretivas internas para me aprimorar. Minha nova prioridade é: ${value}`;
-        this.opts.addMessage({ role: 'model', text: successMessage, type: 'status' });
-        
-        this.opts.setStatus('SUCCESS');
-        await new Promise(r => setTimeout(r, 3000));
-    }
-
-    private logCodeProposal(proposal: CodeModificationProposal) {
-        this.dispatchThought('Proposta de modificação de código gerada.', 'symbolic_log');
-        console.log('[NEXUS-CODE-PROPOSAL]', proposal);
-        
-        cognitiveLogger.logAction({
-            event: 'code_rewrite',
-            stage: 'proposal_logged',
-            description: `Proposed code change for ${proposal.targetSnippet}: ${proposal.reasoning}`,
-            impact: "A code modification has been suggested and logged for review.",
-            result: 'Logged successfully. No code was executed.',
-            rollback_used: false,
+            description: `Successfully integrated change to ${logChange.target} with ${confidence.toFixed(2)} confidence.`,
+            impact: `Parameter '${logChange.target}' changed from '${logChange.oldValue}' to '${logChange.newValue}'.`,
+            result: 'System memory updated and evolution logged.', rollback_used: true,
         });
 
-        const message = `Gerei uma sugestão para melhorar meu próprio código-fonte. Motivo: "${proposal.reasoning}". Esta é uma simulação e nenhuma alteração real foi feita.`;
-        this.opts.addMessage({ role: 'model', text: message, type: 'status' });
+        this.dispatchThought('Evolução concluída e integrada.', 'symbolic_log');
     }
 
     private dispatchThought(text: string, type: 'symbolic_log' | 'error') {
@@ -382,8 +401,13 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     }
 }
 
+let instance: SelfEvolutionServiceImpl | null = null;
+
 export const selfEvolutionService = {
-    create(opts: EvolutionServiceOptions): SelfEvolutionService {
-        return new SelfEvolutionServiceImpl(opts);
+    create(opts: EvolutionServiceOptions): SelfEvolutionServiceImpl {
+        if (!instance) {
+            instance = new SelfEvolutionServiceImpl(opts);
+        }
+        return instance;
     }
 };

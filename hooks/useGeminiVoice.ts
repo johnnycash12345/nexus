@@ -7,7 +7,10 @@ export interface TranscriptionTurn {
     model: string;
 }
 
-export const useGeminiVoice = (onNewTurn: (turn: TranscriptionTurn) => void) => {
+export const useGeminiVoice = (
+    onNewTurn: (turn: TranscriptionTurn) => void,
+    onFunctionCall: (call: any) => Promise<any>
+) => {
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [isNexusSpeaking, setIsNexusSpeaking] = useState(false);
     const [currentUserTranscript, setCurrentUserTranscript] = useState('');
@@ -35,6 +38,15 @@ export const useGeminiVoice = (onNewTurn: (turn: TranscriptionTurn) => void) => 
 
         if (message.serverContent?.modelTurn) {
             setIsNexusSpeaking(true);
+        }
+
+        if (message.toolCall) {
+            for (const fc of message.toolCall.functionCalls) {
+                console.log("[NEXUS-VOICE] Received function call:", fc);
+                onFunctionCall(fc).then(result => {
+                    voiceServiceRef.current?.sendToolResponse(fc.id, fc.name, result);
+                });
+            }
         }
 
         if (message.serverContent?.turnComplete) {
@@ -71,7 +83,7 @@ export const useGeminiVoice = (onNewTurn: (turn: TranscriptionTurn) => void) => 
             console.error("Failed to connect voice service:", err);
             setIsSessionActive(false);
         });
-    }, [isSessionActive, onNewTurn]);
+    }, [isSessionActive, onNewTurn, onFunctionCall]);
 
     const endSession = useCallback(async () => {
         if (!isSessionActive || !voiceServiceRef.current) return;

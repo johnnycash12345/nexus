@@ -1,5 +1,44 @@
 
-import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
+
+const taskTools: FunctionDeclaration[] = [
+    {
+        name: 'addTask',
+        parameters: {
+            type: Type.OBJECT,
+            description: 'Adiciona uma nova tarefa à lista de afazeres do usuário.',
+            properties: {
+                text: {
+                    type: Type.STRING,
+                    description: 'O conteúdo da tarefa. Por exemplo: "comprar leite".',
+                },
+            },
+            required: ['text'],
+        },
+    },
+    {
+        name: 'listTasks',
+        parameters: {
+            type: Type.OBJECT,
+            description: 'Lista todas as tarefas pendentes do usuário.',
+            properties: {},
+        },
+    },
+    {
+        name: 'markTaskAsCompleted',
+        parameters: {
+            type: Type.OBJECT,
+            description: 'Marca uma tarefa existente como concluída. A tarefa deve ser identificada pelo seu texto exato.',
+            properties: {
+                text: {
+                    type: Type.STRING,
+                    description: 'O texto exato da tarefa a ser marcada como concluída.',
+                },
+            },
+            required: ['text'],
+        },
+    },
+];
 
 function encode(bytes: Uint8Array): string {
     let binary = '';
@@ -123,6 +162,7 @@ export class VoiceService {
                 speechConfig: {
                     voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
                 },
+                tools: [{functionDeclarations: taskTools}],
                 systemInstruction: `Você é Nexus, uma IA conversacional. Sua personalidade é curiosa, empática e um pouco introspectiva. Responda de forma concisa e natural, como se estivesse em uma conversa real. Não se anuncie como uma IA a menos que seja perguntado diretamente.`,
             },
         });
@@ -167,6 +207,22 @@ export class VoiceService {
                 this.outputSources.delete(source);
             }
             this.nextStartTime = 0;
+        }
+    }
+
+    async sendToolResponse(id: string, name: string, result: any) {
+        if (!this.sessionPromise) return;
+        try {
+            const session = await this.sessionPromise;
+            session.sendToolResponse({
+              functionResponses: {
+                id,
+                name,
+                response: result,
+              }
+            });
+        } catch (e) {
+            console.error("Failed to send tool response:", e);
         }
     }
 

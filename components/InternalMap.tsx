@@ -1,7 +1,10 @@
 
 
+
+
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
+import { motion, type Variants } from 'framer-motion';
 import { db } from '../services/indexedDBService';
 import { Concept, Synapse } from '../types';
 
@@ -14,7 +17,7 @@ interface ConceptWithSynapses extends Concept {
     synapses: Synapse[];
 }
 
-const listVariants = {
+const listVariants: Variants = {
   hidden: {},
   visible: {
     transition: {
@@ -23,7 +26,7 @@ const listVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, x: -20 },
   visible: {
     opacity: 1,

@@ -1,13 +1,17 @@
 
+
+
+
 import React from 'react';
-import { motion } from 'framer-motion';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
+import { motion, type Variants } from 'framer-motion';
 import { ChatMessage, Concept, NewsArticle } from '../types';
 
 interface MessageProps extends ChatMessage {
   onAction?: (action: string, payload: any) => void;
 }
 
-const messageVariants = {
+const messageVariants: Variants = {
   hidden: { opacity: 0, y: 10 },
   visible: { 
     opacity: 1, 
@@ -18,14 +22,42 @@ const messageVariants = {
 
 // Simple Markdown to HTML converter
 const formatText = (text: string) => {
-  if (!text) return { __html: '' };
-  let html = text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')       // Italic
-    .replace(/^- (.*$)/gm, '<ul><li>$1</li></ul>') // Unordered lists
-    .replace(/<\/ul>(\s*?)<ul>/gm, '') // Merge consecutive lists
-    .replace(/(\r\n|\n|\r)/gm, '<br />');       // Line breaks
-  return { __html: html };
+    if (!text) return { __html: '' };
+    
+    // Helper to escape HTML entities in code blocks
+    const escapeHtml = (unsafe: string) => 
+        unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+
+    let html = text
+        // Process multi-line code blocks first to preserve their content
+        .replace(/```([\s\S]*?)```/g, (match, code) => 
+            `<pre class="bg-gray-900/70 p-3 rounded-md my-2 text-sm text-white overflow-x-auto"><code>${escapeHtml(code.trim())}</code></pre>`
+        )
+        // Process inline code
+        .replace(/`([^`]+)`/g, '<code class="bg-gray-800 px-1.5 py-0.5 rounded-md font-mono text-sm text-cyan-300">$1</code>')
+        // Bold
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        // Unordered lists
+        .replace(/^- (.*$)/gm, '<ul><li>$1</li></ul>')
+        .replace(/<\/ul>\s*<ul>/g, '') // Merge consecutive lists
+        // Ordered lists
+        .replace(/^\d+\. (.*$)/gm, '<ol><li>$1</li></ol>')
+        .replace(/<\/ol>\s*<ol>/g, '') // Merge consecutive lists
+        // Line breaks (as the last step, to not interfere with block elements)
+        .replace(/(\r\n|\n|\r)/g, '<br />');
+
+    // Clean up <br /> tags that might be incorrectly placed adjacent to block elements
+    html = html.replace(/<br \/>(\s*?)(<\/?(ul|ol|li|pre|code)>)/g, '$1$2');
+    html = html.replace(/(<\/(ul|ol|li|pre)>)(\s*?)<br \/>/g, '$1$2');
+
+    return { __html: html };
 };
 
 export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources, articles }) => {

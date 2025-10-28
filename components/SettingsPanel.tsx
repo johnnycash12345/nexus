@@ -1,6 +1,10 @@
 
+
+
+
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { AppSettings, Concept, Permissions } from '../types';
 import { db } from '../services/indexedDBService';
 import { GeneralSettings } from './settings/GeneralSettings';
@@ -19,12 +23,12 @@ interface SettingsPanelProps {
 
 type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória';
 
-const backdropVariants = {
+const backdropVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1 },
 };
 
-const panelVariants = {
+const panelVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95, y: 20 },
   visible: { 
     opacity: 1, 
@@ -80,12 +84,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, setting
   };
 
   const handlePermissionChange = (field: keyof Permissions, value: boolean) => {
+    // FIX: Simplified the state update to be more direct and type-safe,
+    // removing unnecessary nullish coalescing that caused type errors.
     setLocalSettings(prev => ({
         ...prev,
         behavior: {
-            ...(prev.behavior ?? {}),
+            ...prev.behavior,
             permissions: {
-                ...(prev.behavior?.permissions ?? { allowApiAccess: true, allowAutonomousDecision: true, allowSelfModification: false }),
+                ...prev.behavior.permissions,
                 [field]: value,
             }
         }
