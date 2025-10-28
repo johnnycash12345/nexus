@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
-import { AppSettings, Concept, Permissions } from '@/types';
+import { AppSettings, Concept } from '@/types';
 import { db } from '@/services/indexedDBService';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { BrainSettings } from './settings/BrainSettings';
@@ -25,179 +25,137 @@ const backdropVariants: Variants = {
 };
 
 const panelVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95, y: 20 },
+  hidden: { opacity: 0, x: -100 },
   visible: { 
     opacity: 1, 
-    scale: 1, 
-    y: 0,
-    transition: { type: 'spring', stiffness: 120, damping: 15 }
+    x: 0,
+    transition: { type: 'spring', stiffness: 150, damping: 25, mass: 0.8 }
   },
+  exit: {
+    opacity: 0,
+    x: -100,
+    transition: { duration: 0.2 }
+  }
 };
+
+const contentVariants: Variants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
+
+const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'geral', label: 'Geral', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg> },
+    { id: 'cérebro', label: 'Cérebro', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg> },
+    { id: 'integrações', label: 'Integrações', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg> },
+    { id: 'memória', label: 'Dados', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7a8 8 0 0116 0" /></svg> },
+];
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, settings, onSettingsChange, onClose, token, onLogout, userId }) => {
   const [activeTab, setActiveTab] = useState<Tab>('geral');
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [concepts, setConcepts] = useState<Concept[]>([]);
 
-  useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
-  
-  useEffect(() => {
-    const fetchVoices = () => {
-      const availableVoices = window.speechSynthesis.getVoices();
-      if (availableVoices.length > 0) {
-        setVoices(availableVoices.filter(v => v.lang.startsWith('pt')));
-      }
-    };
-    
-    fetchVoices();
-    window.speechSynthesis.onvoiceschanged = fetchVoices;
-    
-    if (activeTab === 'memória') {
-        db.getAllConcepts(userId).then(setConcepts);
-    }
-  }, [activeTab, userId]);
-  
-  const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab);
-  }
-
-  const handleSettingChange = (field: keyof AppSettings, value: any) => {
-    setLocalSettings(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleNestedSettingChange = (field: keyof AppSettings, subField: string, value: any) => {
-    setLocalSettings(prev => ({
-        ...prev,
-        [field]: {
-            ...(prev[field] as object),
-            [subField]: value,
-        },
-    }));
-  };
-
-  const handlePermissionChange = (field: keyof Permissions, value: boolean) => {
-    setLocalSettings(prev => ({
-        ...prev,
-        behavior: {
-            ...prev.behavior,
-            permissions: {
-                ...prev.behavior.permissions,
-                [field]: value,
-            }
-        }
-    }));
-  };
+  useEffect(() => setLocalSettings(settings), [settings]);
   
   const handleSave = () => {
     setSaveStatus('saving');
     onSettingsChange(localSettings);
-    setSaveStatus('saved');
     setTimeout(() => {
-      setSaveStatus('idle');
-      onClose();
-    }, 1200);
+      setSaveStatus('saved');
+      setTimeout(() => {
+        setSaveStatus('idle');
+        onClose();
+      }, 1200);
+    }, 500);
   };
-
+  
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'geral':
-        return <GeneralSettings 
-                    settings={localSettings} 
-                    onSettingChange={handleSettingChange} 
-                    onNestedSettingChange={handleNestedSettingChange} 
-                    voices={voices} 
-                />;
-      case 'cérebro':
-        return <BrainSettings 
-                    settings={localSettings} 
-                    onNestedSettingChange={handleNestedSettingChange} 
-                    onPermissionChange={handlePermissionChange} 
-                />;
-      case 'integrações':
-        return <IntegrationsSettings 
-                    settings={localSettings} 
-                    onSettingChange={handleSettingChange} 
-                    onNestedSettingChange={handleNestedSettingChange} 
-                />;
-      case 'memória':
-        return <MemorySettings 
-                    userId={userId}
-                    token={token}
-                    onLogout={onLogout}
-                    concepts={concepts}
-                    setConcepts={setConcepts}
-                />;
+      case 'geral': return <GeneralSettings settings={localSettings} setSettings={setLocalSettings} />;
+      case 'cérebro': return <BrainSettings settings={localSettings} setSettings={setLocalSettings} />;
+      case 'integrações': return <IntegrationsSettings settings={localSettings} setSettings={setLocalSettings} />;
+      case 'memória': return <MemorySettings userId={userId} token={token} onLogout={onLogout} />;
+      default: return null;
     }
   };
 
   return (
-    <motion.div 
-      className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center backdrop-blur-sm" 
-      onClick={onClose}
-      variants={backdropVariants}
-      initial="hidden"
-      animate="visible"
-      exit="hidden"
-      transition={{ duration: 0.3 }}
-    >
-      <motion.div 
-        className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-md m-4 flex flex-col" 
-        onClick={e => e.stopPropagation()}
-        variants={panelVariants}
-      >
-        <style>{`
-            .toggle-checkbox {
-                appearance: none; width: 40px; height: 20px; background-color: #4a5568;
-                border-radius: 10px; position: relative; cursor: pointer; transition: background-color 0.2s;
-            }
-            .toggle-checkbox:checked { background-color: #22d3ee; }
-            .toggle-checkbox::before {
-                content: ''; position: absolute; width: 16px; height: 16px;
-                background-color: white; border-radius: 50%; top: 2px; left: 2px;
-                transition: transform 0.2s;
-            }
-            .toggle-checkbox:checked::before { transform: translateX(20px); }
-        `}</style>
-        <header className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white">Configurações</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </header>
-        
-        <nav className="flex-shrink-0 flex border-b border-gray-700">
-          <button onClick={() => handleTabChange('geral')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'geral' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Geral</button>
-          <button onClick={() => handleTabChange('cérebro')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'cérebro' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Cérebro</button>
-          <button onClick={() => handleTabChange('integrações')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'integrações' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Integrações</button>
-          <button onClick={() => handleTabChange('memória')} className={`flex-1 p-3 text-sm font-medium ${activeTab === 'memória' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}>Memória & Dados</button>
-        </nav>
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div 
+          className="fixed inset-0 bg-black/70 z-40 flex items-center justify-center backdrop-blur-sm p-4" 
+          onClick={onClose}
+          variants={backdropVariants} initial="hidden" animate="visible" exit="hidden"
+        >
+          <motion.div 
+            className="bg-gray-800/80 border border-gray-700/80 rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] max-h-[700px] flex overflow-hidden" 
+            onClick={e => e.stopPropagation()}
+            variants={panelVariants} initial="hidden" animate="visible" exit="exit"
+          >
+            {/* Sidebar */}
+            <nav className="w-56 bg-gray-900/50 p-4 border-r border-gray-700/50 flex flex-col">
+                <div className="flex items-center gap-3 mb-8">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 16v-2m8-8h2M4 12H2m15.364 6.364l-1.414-1.414M6.343 6.343l-1.414-1.414m12.728 0l-1.414 1.414M6.343 17.657l-1.414 1.414M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    </div>
+                    <h2 className="text-xl font-bold text-white">Nexus</h2>
+                </div>
+                <ul className="space-y-2">
+                    {navItems.map(item => (
+                        <li key={item.id}>
+                            <button
+                                onClick={() => setActiveTab(item.id)}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors relative ${
+                                    activeTab === item.id ? 'text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-white'
+                                }`}
+                            >
+                                {activeTab === item.id && (
+                                    <motion.div layoutId="active-nav-indicator" className="absolute inset-0 bg-cyan-500/20 rounded-md" />
+                                )}
+                                <span className="relative z-10">{item.icon}</span>
+                                <span className="relative z-10">{item.label}</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </nav>
 
-        <main className="p-4 flex-grow max-h-[70vh] overflow-y-auto">
-          {renderTabContent()}
-        </main>
-        
-        <footer className="flex-shrink-0 flex items-center justify-end p-4 border-t border-gray-700 gap-3">
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={onClose} 
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
-            >
-                Cancelar
-            </motion.button>
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={handleSave} 
-                disabled={saveStatus !== 'idle'}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 disabled:cursor-not-allowed rounded-md transition-colors text-sm font-medium w-36 text-center"
-            >
-                {saveStatus === 'idle' && 'Salvar Alterações'}
-                {saveStatus === 'saving' && 'Salvando...'}
-                {saveStatus === 'saved' && 'Salvo!'}
-            </motion.button>
-        </footer>
-      </motion.div>
-    </motion.div>
+            {/* Content */}
+            <div className="flex-1 flex flex-col">
+              <header className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-700/50 h-16">
+                <h2 className="text-xl font-bold text-white capitalize">{activeTab}</h2>
+                <button onClick={onClose} className="text-gray-400 hover:text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </header>
+              <main className="flex-grow p-6 overflow-y-auto">
+                <AnimatePresence mode="wait">
+                    <motion.div key={activeTab} variants={contentVariants} initial="hidden" animate="visible" exit="hidden">
+                        {renderTabContent()}
+                    </motion.div>
+                </AnimatePresence>
+              </main>
+              <footer className="flex-shrink-0 flex items-center justify-end p-4 border-t border-gray-700/50 gap-3 bg-gray-800/50 h-20">
+                  <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                      onClick={onClose} 
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
+                  >
+                      Cancelar
+                  </motion.button>
+                  <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                      onClick={handleSave} 
+                      disabled={saveStatus !== 'idle'}
+                      className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 disabled:cursor-not-allowed rounded-md transition-colors text-sm font-medium w-36 text-center"
+                  >
+                      {saveStatus === 'idle' && 'Salvar e Fechar'}
+                      {saveStatus === 'saving' && <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin mx-auto"></div>}
+                      {saveStatus === 'saved' && 'Salvo!'}
+                  </motion.button>
+              </footer>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
