@@ -7,7 +7,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      // FIX: Use __dirname to resolve path to 'src'. `process.cwd()` was causing a type error.
+      '@': path.resolve(__dirname, 'src'),
     },
   },
 });

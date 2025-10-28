@@ -2,6 +2,12 @@
 @keyframes motion-idle-keyframes { 0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);} }
 .motion-idle { animation: motion-idle-keyframes 4s ease-in-out infinite; }
 
+@keyframes motion-thinking-keyframes {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-5px) rotate(1.5deg); }
+}
+.motion-thinking { animation: motion-thinking-keyframes 4s ease-in-out infinite; }
+
 @keyframes motion-listening-keyframes { 0%,100%{transform:scale(1);}50%{transform:scale(1.02);} }
 .motion-listening { animation: motion-listening-keyframes 2.5s ease-in-out infinite; }
 
@@ -41,8 +47,17 @@
 .speak-wave .path2 { animation: speak-wave-path2 0.45s ease-in-out infinite; }
 
 
-@keyframes motion-speaking-keyframes { 0%,100%{filter:drop-shadow(0 0 5px #22d3ee);}50%{filter:drop-shadow(0 0 20px #22d3ee);} }
-.motion-speaking { animation: motion-speaking-keyframes 1s ease-in-out infinite; }
+@keyframes motion-speaking-keyframes { 
+  0%, 100% { 
+    transform: translateY(0);
+    filter: drop-shadow(0 0 5px #22d3ee);
+  }
+  50% { 
+    transform: translateY(-2px);
+    filter: drop-shadow(0 0 15px #22d3ee);
+  } 
+}
+.motion-speaking { animation: motion-speaking-keyframes 0.6s ease-in-out infinite; }
 
 
 /* --- Eyes --- */
@@ -92,6 +107,10 @@
 .antenna-curious { --c1:#facc15;--c2:#fde68a; animation: antenna-pulse-keyframes 2s ease-in-out infinite; }
 .antenna-sleepy { --c1:#94a3b8;--c2:#cbd5e1; animation: antenna-pulse-keyframes 5s ease-in-out infinite; }
 .antenna-surprised { --c1:#38bdf8;--c2:#7dd3fc; animation: antenna-pulse-keyframes .6s ease-in-out infinite; }
+.antenna-rewriting_code { --c1:#a78bfa;--c2:#d8b4fe; animation: antenna-pulse-keyframes .8s ease-in-out infinite; }
+.antenna-self_analysis { --c1:#93c5fd;--c2:#bfdbfe; animation: antenna-pulse-keyframes 2s ease-in-out infinite; }
+.antenna-searching_web { --c1:#38bdf8;--c2:#7dd3fc; animation: antenna-pulse-keyframes 1s ease-in-out infinite; }
+.antenna-rollback { --c1:#f472b6;--c2:#f9a8d4; animation: antenna-pulse-keyframes .5s linear infinite; }
 
 /* --- Cognitive Effects Animations --- */
 @keyframes spin-slow {

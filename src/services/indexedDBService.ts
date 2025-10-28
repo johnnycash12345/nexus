@@ -16,7 +16,6 @@ interface NexusDB extends DBSchema {
   };
   settings: {
     key: string; // userId
-// FIX: The value for the settings store must include the `userId` because it's used as the keyPath.
     value: AppSettings & { userId: string };
   };
   rlhfFeedback: {
@@ -461,7 +460,6 @@ class IndexedDBService {
         const stores: (keyof NexusDB)[] = ['concepts', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs', 'projects'];
         
         for (const storeName of stores) {
-// FIX: Using `as any` to work around TypeScript's inability to correctly infer types for object stores when using a variable for the store name in a loop.
             const tx = db.transaction(storeName as any, 'readwrite');
             const store = tx.objectStore(storeName as any);
             if (store.keyPath === 'userId' || (Array.isArray(store.keyPath) && store.keyPath.includes('userId'))) {
@@ -494,10 +492,8 @@ class IndexedDBService {
         await this.resetNexusMemory(userId);
         const db = await this.database;
         const stores = Object.keys(backupData).filter(k => k !== 'meta') as (keyof NexusDB)[];
-// FIX: Using `as any` to allow creating a transaction with a dynamic list of store names.
         const tx = db.transaction(stores as any, 'readwrite');
         for (const storeName of stores) {
-// FIX: Using `as any` to get the object store when the name is a variable.
             const store = tx.objectStore(storeName as any);
             if (!backupData[storeName]) continue;
             for (const item of backupData[storeName]) {

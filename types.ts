@@ -1,4 +1,3 @@
-
 // types.ts
 export type AssistantStatus =
   | 'IDLE'
@@ -200,6 +199,8 @@ export interface IdentityManifest {
     creator: string;
     purpose: string;
     cannotOverride: string[];
+    // FIX: Add missing property `system_role` to align with its usage in various services.
+    system_role?: string;
 }
 
 export interface IdentityOverride {
@@ -313,7 +314,8 @@ export interface LlmCognitiveResponse {
   sources?: Source[];
 }
 
-export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'project_start' | 'unknown';
+// FIX: Add missing `web_search` intent to handle web search delegation.
+export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'project_start' | 'web_search' | 'unknown';
 
 export interface CognitiveFrame {
     userInput: string;

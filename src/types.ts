@@ -199,7 +199,6 @@ export interface IdentityManifest {
     creator: string;
     purpose: string;
     cannotOverride: string[];
-    // FIX: Add optional `system_role` property to the `IdentityManifest` interface to resolve type errors.
     system_role?: string;
 }
 
@@ -314,7 +313,7 @@ export interface LlmCognitiveResponse {
   sources?: Source[];
 }
 
-export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'project_start' | 'unknown';
+export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'project_start' | 'web_search' | 'unknown';
 
 export interface CognitiveFrame {
     userInput: string;

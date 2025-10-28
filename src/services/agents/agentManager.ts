@@ -29,8 +29,15 @@ export class AgentManager {
         if (intent === 'command_news') {
             return this.researchAgent.handleNewsRequest(userInput);
         }
+        if (intent === 'web_search') {
+            return this.researchAgent.handleWebSearchRequest(userInput);
+        }
         if (intent === 'vision_query' && frame.imageUrl) {
             return this.researchAgent.handleVisionRequest(userInput, frame.imageUrl);
+        }
+        if (frame.llmResponse?.functionCalls?.length > 0) {
+            // Function calls are handled by the code agent for now
+            return this.codeAgent.executeFunctionCall(frame.llmResponse.functionCalls[0], frame.userContext);
         }
         
         // For general conversation, build context and use the core LLM
@@ -38,15 +45,6 @@ export class AgentManager {
         const useThinking = /complex|question/.test(intent);
         
         frame.llmResponse = await this.opts.generateResponse(contextPrompt, frame.history, { useThinking });
-
-        if (frame.llmResponse?.functionCalls?.length > 0) {
-            // Function calls are handled by the code agent for now
-            // We only need to add the result to chat, the orchestrator handles sending the result back
-            const response = await this.codeAgent.executeFunctionCall(frame.llmResponse.functionCalls[0], userContext);
-            this.opts.addMessage(response);
-            // Returning null because the primary response will be handled by the voice service flow
-            return null;
-        }
         
         const { text, sources, learningContext } = frame.llmResponse;
         const finalText = text?.trim() || 'Estou processando...';

@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, AnimatePresence, useAnimation, type Variants } from 'framer-motion';
 import { Avatar } from './Avatar';
 import { AssistantStatus, Emotion } from '@/types';
 
-// FIX: Add 'thought' prop to AvatarLayerProps to resolve the type error in App.tsx.
 interface AvatarLayerProps {
   isChatOpen: boolean;
   appearance: 'neutral' | 'feminine' | 'masculine';
@@ -147,7 +145,7 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
     const handleBoundary = () => {
       if (status === 'SPEAKING') {
         haloControls.start({
-          scale: [1, 1.2, 1],
+          scale: [1, 1.05, 1],
           opacity: [0.8, 1, 0.8],
           transition: { duration: 0.3, ease: 'easeInOut' },
         });
@@ -158,22 +156,16 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
   }, [status, haloControls]);
 
   useEffect(() => {
-    if (status === 'LISTENING') {
-        haloControls.start({
-          scale: [1, 1.3, 1],
-          opacity: [0.7, 1, 0.7],
-          transition: { duration: 1.5, ease: 'easeInOut', repeat: Infinity },
-        });
-    } else if (status === 'THINKING' || status === 'CURIOUS') {
+    if (status === 'THINKING' || status === 'CURIOUS' || status === 'LISTENING') {
       haloControls.start({
-        rotate: 360,
-        transition: { duration: 8, ease: 'linear', repeat: Infinity },
+        scale: [1, 1.03, 1],
+        opacity: [0.7, 0.9, 0.7],
+        transition: { duration: 2.5, ease: 'easeInOut', repeat: Infinity },
       });
     } else if (status === 'IDLE') {
        haloControls.start({
-        opacity: [0.7, 1, 0.7],
-        scale: [1, 1.02, 1],
-        rotate: 0,
+        scale: [1, 1.015, 1],
+        opacity: [0.6, 0.8, 0.6],
         transition: { repeat: Infinity, duration: 4, ease: "easeInOut" }
       });
     } else if (status !== 'SPEAKING') {
@@ -184,13 +176,13 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
 
   const avatarVariants: Variants = {
     open: {
-      scale: 1.05,
-      rotate: -5,
+      scale: 1.0,
+      y: -20,
       transition: { type: 'spring', stiffness: 80, damping: 10 },
     },
     closed: {
       scale: 1,
-      rotate: 0,
+      y: 0,
       transition: { type: 'spring', stiffness: 80, damping: 10 },
     },
   };
@@ -215,9 +207,8 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
         className={`absolute w-96 h-96 bg-gradient-radial rounded-full blur-3xl pointer-events-none to-transparent`} 
         animate={{ 
             '--tw-gradient-from': fromColor,
-            scale: status === 'IDLE' ? [1, 1.05, 1] : 1,
         } as any}
-        transition={{ duration: 1.5, ease: "easeInOut", ...(status === 'IDLE' && { repeat: Infinity, duration: 5 }) }}
+        transition={{ duration: 1.5, ease: "easeInOut" }}
       />
       
       <div className="absolute z-0 pointer-events-none flex items-center justify-center">
@@ -230,37 +221,35 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
       </div>
 
       <motion.div
-        className="absolute z-10 flex items-center justify-center pointer-events-auto"
+        className="absolute z-10 flex flex-col items-center justify-center pointer-events-auto"
         initial="closed"
         animate={isChatOpen ? 'open' : 'closed'}
         variants={avatarVariants}
       >
-        <div className="relative flex flex-col items-center justify-center">
-          <AnimatePresence>
+        <AnimatePresence>
             {thought && (
                 <motion.div
-                    key={thought.text}
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-                    className={`absolute bottom-full mb-4 px-3 py-1.5 max-w-xs text-center rounded-lg shadow-lg text-sm font-mono backdrop-blur-sm z-20 ${
-                        thought.type === 'error' ? 'bg-red-500/30 text-red-200 border border-red-500/50' : 'bg-gray-800/50 text-gray-300 border border-gray-700/50'
-                    }`}
+                    exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                    transition={{ type: 'spring', stiffness: 150, damping: 20 }}
+                    className={`absolute bottom-full mb-4 max-w-xs px-3 py-2 text-sm font-mono rounded-lg shadow-lg
+                        ${thought.type === 'error' ? 'bg-red-800/80 text-red-200 border border-red-500/50' : 'bg-gray-800/80 text-cyan-300 border border-gray-600/50'}
+                    `}
                 >
                     {thought.text}
                 </motion.div>
             )}
-          </AnimatePresence>
-          <div className="relative flex items-center justify-center">
+        </AnimatePresence>
+
+        <div className="relative flex items-center justify-center">
             <motion.div
               animate={haloControls}
-              className="absolute top-[-1rem] w-4 h-4 rounded-full bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.7)]"
+              className="absolute w-[110%] h-[110%] rounded-full border-2 border-cyan-400/80 shadow-[0_0_25px_rgba(0,255,255,0.5)]"
             />
             
             <Avatar appearance={appearance} status={status} intensity={intensity} />
           </div>
-        </div>
       </motion.div>
     </>
   );

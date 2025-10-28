@@ -48,11 +48,10 @@ const App: React.FC = () => {
 
   const handleNewTurn = useCallback(async (turn: TranscriptionTurn) => {
     if (turn.user) {
+        // Voice-based user messages are handled by the voice service, just update history.
         await addMessage({ role: 'user', text: turn.user, type: 'message' });
     }
-    if (turn.model) {
-        await addMessage({ role: 'model', text: turn.model, type: 'message' });
-    }
+    // Model's voice response text will be added to history via the orchestrator logic
   }, []);
 
   const handleFunctionCall = useCallback(async (call: SimpleFunctionCall) => {

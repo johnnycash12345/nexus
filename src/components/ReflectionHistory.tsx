@@ -269,7 +269,7 @@ export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, is
 
                     <motion.section initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay: 0.4}}>
                         <h3 className="text-lg font-semibold text-cyan-300 mb-3">Linha do Tempo</h3>
-                        {Object.entries(logsByDay).map(([date, dailyLogs]) => (
+                        {Object.entries(logsByDay).map(([date, dailyLogs]: [string, LogItem[]]) => (
                             <div key={date} className="relative mt-4">
                                 <h4 className="font-bold text-gray-400 mb-2 pl-8 relative"><div className="absolute left-0 top-1/2 w-3 h-0.5 bg-gray-600"></div>{date}</h4>
                                 <div className="absolute left-[6px] top-0 h-full w-0.5 bg-gray-700/50"></div>
