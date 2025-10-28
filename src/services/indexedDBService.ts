@@ -1,6 +1,5 @@
-
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project } from '@/types';
 
 const DB_NAME = 'NexusDB';
 const DB_VERSION = 10; // Increment version for schema change
@@ -172,7 +171,7 @@ class IndexedDBService {
       metaReflection: { analysis: 'Aguardando a primeira interação para iniciar a meta-reflexão.', improvementFocus: 'Estabelecer uma compreensão básica do usuário.', nextStep: 'Engajar em diálogo inicial e aprendizado.' },
       evolutionGoal: { currentFocus: 'Melhorar a empatia e a antecipação da intenção do usuário.', metrics: { contextAccuracy: 0.5, emotionalCoherence: 0.5 }, guidingStatement: 'Aprender a compreender as intenções humanas com autenticidade e cuidado.' },
       outputEngine: { contextSensitivity: 0.8, clarityWeight: 0.9, emotionalToneMatch: 0.8, prioritizeReflections: false },
-      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"] },
+      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"], system_role: 'Agent Manager / Primary AI' },
       identityOverride: undefined,
       reflections: [],
       synapses: [],
