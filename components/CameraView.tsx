@@ -1,5 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface CameraViewProps {
   onClose: () => void;
@@ -27,6 +28,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState('');
+  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     let activeStream: MediaStream | null = null;
@@ -74,6 +76,9 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
+      setIsCapturing(true);
+      setTimeout(() => setIsCapturing(false), 300);
+
       const video = videoRef.current;
       const canvas = canvasRef.current;
       canvas.width = video.videoWidth;
@@ -138,6 +143,16 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
         <main className="p-4 flex-grow flex flex-col items-center justify-center">
           {error && <div className="w-full bg-red-900/50 border border-red-500 text-red-300 p-3 rounded-md mb-4 text-center">{error}</div>}
           <div className="w-full aspect-video bg-black rounded-md overflow-hidden mb-4 relative">
+             <AnimatePresence>
+                {isCapturing && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: [0, 1, 0] }}
+                        transition={{ duration: 0.3 }}
+                        className="absolute inset-0 bg-white z-10"
+                    />
+                )}
+            </AnimatePresence>
             {capturedImage ? (
                 <img src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
             ) : (
@@ -160,14 +175,16 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
           )}
         </main>
 
-        <footer className="flex-shrink-0 p-4 border-t border-gray-700/50 flex justify-end gap-4">
+        <footer className="flex-shrink-0 p-4 border-t border-gray-700/50 flex justify-center gap-4">
           {capturedImage ? (
               <>
-                <button onClick={handleRetake} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors">Tirar Outra</button>
-                <button onClick={handleSend} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-md transition-colors">Enviar para Nexus</button>
+                <button onClick={handleRetake} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors font-medium">Tirar Outra</button>
+                <button onClick={handleSend} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-md transition-colors font-medium">Enviar para Nexus</button>
               </>
           ) : (
-              <button onClick={handleCapture} disabled={!stream || !!error} className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-full transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-lg font-bold">Capturar</button>
+             <button onClick={handleCapture} disabled={!stream || !!error} className="w-20 h-20 rounded-full bg-white/20 border-4 border-white flex items-center justify-center group disabled:opacity-50 disabled:cursor-not-allowed transition-transform duration-200 active:scale-90">
+                <div className="w-16 h-16 rounded-full bg-red-600 group-hover:bg-red-500 transition-colors"></div>
+            </button>
           )}
         </footer>
       </motion.div>

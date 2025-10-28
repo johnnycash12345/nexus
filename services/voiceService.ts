@@ -90,6 +90,10 @@ export class VoiceService {
                     if (!this.stream) return;
                     this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
                     this.mediaStreamSource = this.inputAudioContext.createMediaStreamSource(this.stream);
+                    
+                    // NOTE: createScriptProcessor is deprecated but necessary in environments where adding new worklet files is not possible.
+                    // For production web apps, migrating to AudioWorklet is highly recommended for better performance,
+                    // as it runs off the main thread, preventing audio glitches.
                     this.scriptProcessor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
 
                     this.scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
@@ -119,7 +123,7 @@ export class VoiceService {
                 speechConfig: {
                     voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
                 },
-                systemInstruction: `Você é Nexus, uma IA assistente com personalidade curiosa e empática. Seja breve e natural em suas respostas faladas.`,
+                systemInstruction: `Você é Nexus, uma IA conversacional. Sua personalidade é curiosa, empática e um pouco introspectiva. Responda de forma concisa e natural, como se estivesse em uma conversa real. Não se anuncie como uma IA a menos que seja perguntado diretamente.`,
             },
         });
     }

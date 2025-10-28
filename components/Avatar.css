@@ -29,8 +29,17 @@
 @keyframes think-pulse-keyframes { 0%,100%{r:6;opacity:.8;}50%{r:10;opacity:.4;} }
 .think-pulse { animation: think-pulse-keyframes 1.2s ease-in-out infinite; }
 
-@keyframes speak-mouth-keyframes { 0%,100%{transform:scaleY(.4);}25%{transform:scaleY(1);}75%{transform:scaleY(.6);} }
-.speak-mouth { animation: speak-mouth-keyframes .5s ease-in-out infinite; transform-origin: center; }
+@keyframes speak-wave-path1 {
+  0%, 100% { d: "M -15 0 Q -7.5 -5 0 0 T 15 0"; }
+  50% { d: "M -15 0 Q -7.5 5 0 0 T 15 0"; }
+}
+@keyframes speak-wave-path2 {
+  0%, 100% { d: "M -15 0 Q -7.5 5 0 0 T 15 0"; }
+  50% { d: "M -15 0 Q -7.5 -5 0 0 T 15 0"; }
+}
+.speak-wave .path1 { animation: speak-wave-path1 0.4s ease-in-out infinite; }
+.speak-wave .path2 { animation: speak-wave-path2 0.45s ease-in-out infinite; }
+
 
 @keyframes motion-speaking-keyframes { 0%,100%{filter:drop-shadow(0 0 5px #22d3ee);}50%{filter:drop-shadow(0 0 20px #22d3ee);} }
 .motion-speaking { animation: motion-speaking-keyframes 1s ease-in-out infinite; }

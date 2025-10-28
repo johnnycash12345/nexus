@@ -147,6 +147,22 @@ export interface VisualState {
     emotionalSpectrum: Record<string, number>;
 }
 
+// --- Cognitive Architecture 2.0 Types ---
+export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'unknown';
+
+export interface CognitiveFrame {
+    userInput: string;
+    history: ChatMessage[];
+    imageUrl?: string;
+    intent: Intent;
+    status: AssistantStatus;
+    // Data added during the pipeline
+    retrievedConcepts?: Concept[];
+    retrievedReflections?: string[];
+    llmResponse?: LlmCognitiveResponse;
+}
+
+
 // --- Identity Core Types ---
 export interface IdentityManifest {
   core_name: string;

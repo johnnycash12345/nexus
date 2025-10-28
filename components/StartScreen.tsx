@@ -2,7 +2,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Avatar } from './Avatar';
-import { AssistantStatus } from '../types';
 
 interface StartScreenProps {
   onStart: () => void;
@@ -16,6 +15,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStart, onOpenSetting
   const handleDownload = () => {
     alert('O download para Android estará disponível em breve!');
   };
+
+  const isSyncing = token && syncStatus.includes('Sincronizando');
+  const isAuthCheck = !token && syncStatus.includes('Verificando');
+  const startButtonDisabled = isSyncing || isAuthCheck;
 
   return (
     <motion.div 
@@ -40,15 +43,18 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStart, onOpenSetting
               Login com Google
             </motion.button>
         ) : (
-            <p className="text-lg text-cyan-300 transition-opacity duration-300">{syncStatus}</p>
+            <div className="text-lg text-cyan-300 transition-opacity duration-300 h-8 flex items-center justify-center">
+                {isSyncing && <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin mr-2"></div>}
+                <p>{syncStatus}</p>
+            </div>
         )}
 
         <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
           onClick={onStart}
-          disabled={!!token}
+          disabled={startButtonDisabled}
           className="w-full px-6 py-3 bg-gray-700 text-white font-semibold rounded-lg shadow-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Iniciar Nexus (Offline)
+          {token ? 'Despertar Nexus' : 'Iniciar Offline'}
         </motion.button>
         
         <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}

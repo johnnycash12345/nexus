@@ -16,6 +16,18 @@ const messageVariants = {
   }
 };
 
+// Simple Markdown to HTML converter
+const formatText = (text: string) => {
+  if (!text) return { __html: '' };
+  let html = text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')       // Italic
+    .replace(/^- (.*$)/gm, '<ul><li>$1</li></ul>') // Unordered lists
+    .replace(/<\/ul>(\s*?)<ul>/gm, '') // Merge consecutive lists
+    .replace(/(\r\n|\n|\r)/gm, '<br />');       // Line breaks
+  return { __html: html };
+};
+
 export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources, articles }) => {
   const isUser = role === 'user';
   
@@ -104,7 +116,7 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
         {imageUrl && (
             <img src={imageUrl} alt="User upload" className="rounded-lg mb-2 max-h-48 w-full object-cover" />
         )}
-        <p className="text-white whitespace-pre-wrap">{text}</p>
+        <div className="text-white" dangerouslySetInnerHTML={isUser ? {__html: text.replace(/(\r\n|\n|\r)/gm, '<br />')} : formatText(text)} />
         {sources && sources.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-600/50">
                 <h4 className="text-xs font-bold text-gray-300 mb-2">Fontes:</h4>
@@ -118,7 +130,7 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
                             className="text-cyan-300 hover:underline hover:text-cyan-200 flex items-center gap-1.5"
                             title={source.title}
                         >
-                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                            <span>{source.title}</span>
                         </a>
                     </li>

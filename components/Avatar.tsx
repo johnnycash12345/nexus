@@ -120,7 +120,10 @@ export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 
         {/* Mouth / Indicator */}
         <g transform="translate(100, 95)">
           {status === 'SPEAKING' ? (
-            <rect x="-15" y="-2.5" width="30" height="5" rx="2" fill={theme.accent} className="speak-mouth" />
+             <g className="speak-wave">
+                <path className="path1" stroke={theme.accent} fill="none" strokeWidth="2.5" strokeLinecap="round" />
+                <path className="path2" stroke={theme.accent} fill="none" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
+             </g>
           ) : status === 'THINKING' ? (
              <circle r="6" fill="#facc15" className="think-pulse" />
           ) : status === 'SUCCESS' ? (

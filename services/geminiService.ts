@@ -9,6 +9,15 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 let lastCallTimestamp = 0;
 const MIN_CALL_INTERVAL_MS = 2000; // 2s minimum between calls to be polite to the API
 
+// --- Types ---
+interface GenerateOptions {
+  useThinking?: boolean;
+  latLng?: { latitude: number; longitude: number };
+  customSchema?: any;
+  tools?: any[];
+}
+
+
 // --- Schema Estruturado ---
 const responseSchema = {
   type: Type.OBJECT,
@@ -48,7 +57,7 @@ const responseSchema = {
 export const generateGeminiResponse = async (
   prompt: string,
   history: ChatMessage[],
-  options?: { useThinking?: boolean; latLng?: { latitude: number; longitude: number }; customSchema?: any; }
+  options: GenerateOptions = {}
 ): Promise<LlmCognitiveResponse> => {
   const now = Date.now();
 
@@ -62,7 +71,7 @@ export const generateGeminiResponse = async (
   lastCallTimestamp = Date.now();
 
   try {
-    const model = options?.useThinking ? "gemini-2.5-pro" : "gemini-2.5-flash";
+    const model = options.useThinking ? "gemini-2.5-pro" : "gemini-2.5-flash";
 
     const contents = history
       .map((h) => ({
@@ -72,32 +81,49 @@ export const generateGeminiResponse = async (
       .concat([{ role: "user", parts: [{ text: prompt }] }]);
 
     const config: any = {
-      responseMimeType: "application/json",
-      responseSchema: options?.customSchema || responseSchema,
+      responseMimeType: options.tools ? undefined : "application/json",
+      responseSchema: options.tools ? undefined : (options.customSchema || responseSchema),
     };
-    if (options?.useThinking) config.thinkingConfig = { thinkingBudget: 32768 };
+    if (options.useThinking) config.thinkingConfig = { thinkingBudget: 32768 };
+    if (options.tools) config.tools = options.tools;
+
+    const toolConfig: any = {};
+    if (options.latLng) {
+      toolConfig.retrievalConfig = { latLng: options.latLng };
+    }
 
     const response = await ai.models.generateContent({
       model,
       contents,
       config,
+      toolConfig: Object.keys(toolConfig).length > 0 ? toolConfig : undefined,
     });
 
-    // Evita travamento por resposta não JSON
-    let parsedJson: any;
-    try {
-      parsedJson = JSON.parse(response.text);
-    } catch {
-      parsedJson = { responseText: response.text };
-    }
+    let parsedJson: any = {};
+    let responseText = response.text;
 
+    try {
+      // We only expect JSON if tools are not used
+      if (!options.tools) {
+        parsedJson = JSON.parse(responseText);
+        // For the default schema, the actual text is nested.
+        // For custom schemas, the whole JSON is the payload, so we return the raw string.
+        if (options.customSchema) {
+          responseText = JSON.stringify(parsedJson);
+        } else if (parsedJson.responseText) {
+          responseText = parsedJson.responseText;
+        }
+      }
+    } catch (e) {
+      // This happens if the model returns a non-JSON string, despite being asked for JSON.
+      // We'll treat the raw response as the text and continue.
+      console.warn("[NEXUS-GEMINI] A resposta não era um JSON válido, usando texto bruto.", responseText);
+    }
+    
     const cognitiveResponse: LlmCognitiveResponse = {
-      text: options?.customSchema ? response.text : (
-        parsedJson.responseText ||
-        "Não consegui formular uma resposta no momento."
-      ),
+      text: responseText || "Não consegui formular uma resposta no momento.",
       learningContext:
-        parsedJson.learningContext || {
+        parsedJson?.learningContext || {
           inputIntent: "generic",
           emotionalTone: "neutral",
           contextTags: ["general"],
@@ -105,7 +131,7 @@ export const generateGeminiResponse = async (
           reinforcementSignal: "neutral",
         },
       metaReflection:
-        parsedJson.metaReflection || {
+        parsedJson?.metaReflection || {
           analysis: "Sem análise adicional.",
           improvementFocus: "coerência",
           nextStep: "continuar aprendendo.",

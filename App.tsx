@@ -7,7 +7,7 @@ import { useLlm } from './hooks/useLlm';
 import { db } from './services/indexedDBService';
 import { AvatarLayer } from './components/AvatarLayer';
 import { Message } from './components/Message';
-import { NexusCore } from './services/nexusCore';
+import { CognitiveOrchestrator } from './services/nexusCore';
 import { StartScreen } from './components/StartScreen';
 import { useGoogleSync } from './hooks/useGoogleSync';
 import { useSpeech } from './hooks/useSpeech';
@@ -109,7 +109,7 @@ const App: React.FC = () => {
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const coreRef = useRef<NexusCore | null>(null);
+  const orchestratorRef = useRef<CognitiveOrchestrator | null>(null);
   const isChatVisibleRef = useRef(isChatVisible);
   const consecutiveErrorsRef = useRef(0);
   const CONSECUTIVE_ERROR_THRESHOLD = 3;
@@ -233,20 +233,20 @@ const App: React.FC = () => {
       if (isInitializing || !settings || !isStarted) return;
       const stableSpeak = (text: string, onEnd?: () => void) => speak(text, onEnd);
 
-      const core = new NexusCore({
+      const orchestrator = new CognitiveOrchestrator({
         speak: stableSpeak, addMessage, setStatus, generateResponse, generateVisionResponse,
         getSettings: db.getSettings, getUserProfile: db.getUserProfile, setUserProfile: db.saveUserProfile,
       });
       
-      core.initialize();
-      coreRef.current = core;
+      orchestrator.initialize();
+      orchestratorRef.current = orchestrator;
       
       if (messages.length === 0) {
-        core.handleUserTurn("", []).catch(error => {
+        orchestrator.handleUserTurn("", []).catch(error => {
             console.error("Error during initial awakening turn:", error);
         });
       }
-      return () => { core.dispose(); };
+      return () => { orchestrator.dispose(); };
   }, [isInitializing, isStarted, settings, addMessage, generateResponse, generateVisionResponse, speak, stop]);
   
   // --- Online Auto-Evolution Control ---
@@ -260,7 +260,7 @@ const App: React.FC = () => {
     window.addEventListener('nexus-evolution-status-update', handleEvolutionStatus as EventListener);
     
     // Stop evolution when tab is closed
-    const handleBeforeUnload = () => coreRef.current?.evolutionService.stop();
+    const handleBeforeUnload = () => orchestratorRef.current?.evolutionService.stop();
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
@@ -272,9 +272,9 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-      if (!isStarted || !coreRef.current) return;
+      if (!isStarted || !orchestratorRef.current) return;
       
-      const evolutionService = coreRef.current.evolutionService;
+      const evolutionService = orchestratorRef.current.evolutionService;
       if (isOnline && settings?.behavior?.permissions?.autoEvolutionEnabled) {
           evolutionService.start();
       } else {
@@ -304,7 +304,7 @@ const App: React.FC = () => {
   }, [isSessionActive, isNexusSpeaking, status]);
 
   const handleMicClick = withVibration(() => {
-    coreRef.current?.touchHeartbeat();
+    orchestratorRef.current?.touchHeartbeat();
     if (status === 'SLEEPY') setStatus('IDLE');
     if (isSessionActive) { endSession(); } 
     else { setIsChatVisible(true); setHasNewMessage(false); startSession(); }
@@ -312,14 +312,14 @@ const App: React.FC = () => {
   
   const handleTurn = async (text: string, currentHistory: ChatMessage[], imageData?: string) => {
     try {
-        await coreRef.current?.handleUserTurn(text, currentHistory, imageData);
+        await orchestratorRef.current?.handleUserTurn(text, currentHistory, imageData);
         consecutiveErrorsRef.current = 0; // Reset on success
     } catch (error) {
         console.error("Caught error in App.tsx from handleUserTurn", error);
         consecutiveErrorsRef.current += 1;
         if (consecutiveErrorsRef.current >= CONSECUTIVE_ERROR_THRESHOLD) {
             console.warn(`[NEXUS-APP] Reached ${CONSECUTIVE_ERROR_THRESHOLD} consecutive errors. Triggering rollback.`);
-            await coreRef.current?.performRollback();
+            await orchestratorRef.current?.performRollback();
             consecutiveErrorsRef.current = 0; // Reset after rollback
         }
     }
@@ -359,7 +359,7 @@ const App: React.FC = () => {
 
   const handleMessageAction = async (action: string, payload: any) => {
     if (action === 'merge_concepts' && payload) {
-        await coreRef.current?.performConceptMerge(payload);
+        await orchestratorRef.current?.performConceptMerge(payload);
         setMessages(prev => prev.filter(m => m.type !== 'concept_consolidation_prompt'));
     }
     if (action === 'ignore_consolidation') {
@@ -403,6 +403,11 @@ const App: React.FC = () => {
   if (isInitializing || !settings) {
     return <div className="h-screen w-screen bg-gray-900 flex items-center justify-center"><p>Despertando Nexus...</p></div>
   }
+  
+  const statusInfo = {
+    color: isOnline ? (isEvolving ? 'bg-green-400' : 'bg-blue-400') : 'bg-red-500',
+    text: isOnline ? (isEvolving ? 'Evoluindo' : 'Online') : 'Offline'
+  };
 
   return (
     <div className="h-screen w-screen bg-gray-900 text-white flex flex-col overflow-hidden relative">
@@ -410,6 +415,8 @@ const App: React.FC = () => {
         @keyframes fade-in-out { 0%, 100% { opacity: 0; transform: translateY(10px) scale(0.95); } 10%, 90% { opacity: 1; transform: translateY(0) scale(1); } }
         .animate-fade-in-out { animation: fade-in-out 6s ease-in-out forwards; }
         .bg-gradient-radial { background-image: radial-gradient(circle, var(--tw-gradient-stops)); }
+        .mic-listening-glow { animation: mic-listening-glow-kf 2s ease-in-out infinite; }
+        @keyframes mic-listening-glow-kf { 0%, 100% { box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.7); } 50% { box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.4); } }
       `}</style>
       {!isStarted ? (
           <StartScreen 
@@ -418,12 +425,15 @@ const App: React.FC = () => {
           />
       ) : (
         <>
-          <div className="fixed top-4 left-4 z-30 p-2 bg-gray-800/70 backdrop-blur-sm rounded-lg text-sm flex items-center gap-2 shadow-lg border border-gray-700/50">
-            <span className={`w-3 h-3 rounded-full ${isOnline ? (isEvolving ? 'bg-green-400 animate-pulse' : 'bg-blue-400') : 'bg-red-500'}`}></span>
-            <span className="text-gray-300 font-medium">
-              {isOnline ? (isEvolving ? 'Evoluindo' : 'Online') : 'Offline'}
-            </span>
-          </div>
+           <motion.div 
+            initial={{ y: -60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 100, delay: 0.5 }}
+            className="fixed top-4 left-4 z-30 p-2 bg-gray-800/70 backdrop-blur-sm rounded-lg text-sm flex items-center gap-2 shadow-lg border border-gray-700/50"
+          >
+            <span className={`w-3 h-3 rounded-full ${statusInfo.color} ${isEvolving ? 'animate-pulse' : ''} transition-colors`}></span>
+            <span className="text-gray-300 font-medium">{statusInfo.text}</span>
+          </motion.div>
 
           <motion.div 
             className="fixed inset-0 flex items-center justify-center z-20 pointer-events-none"
@@ -489,33 +499,49 @@ const App: React.FC = () => {
                 </div>
                 
                 <footer className="flex-shrink-0 p-2 border-t border-gray-700/50 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-                    <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
-                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
-                        <button type="button" onClick={handleAttachClick} aria-label="Anexar imagem"
-                            className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                        </button>
-                        <button type="button" onClick={withVibration(() => setActivePanel('camera'))} aria-label="Abrir câmera"
-                            className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
-                        </button>
-                        <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Digite uma mensagem..."
-                            className="flex-grow bg-gray-700 rounded-full px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
-                        {inputValue.trim() ? (
-                            <button type="submit" aria-label="Enviar mensagem"
-                                className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-cyan-600 hover:bg-cyan-500 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
-                            </button>
-                        ) : (
-                            <button type="button" onClick={handleMicClick} aria-label={isSessionActive ? 'Encerrar conversa' : 'Iniciar conversa por voz'}
-                                className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center transition-colors ${isSessionActive ? 'bg-red-600 animate-pulse ring-4 ring-red-500/50' : 'bg-cyan-600 hover:bg-cyan-500'}`}>
-                            {isSessionActive ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 5a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" clipRule="evenodd" /></svg>
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm5 3a1 1 0 11-2 0V4a1 1 0 112 0v3zM4 9a1 1 0 011-1h.01a1 1 0 110 2H5a1 1 0 01-1-1zM15 8a1 1 0 100 2h.01a1 1 0 100-2H15zM4 12a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm11-1a1 1 0 100 2h1a1 1 0 100-2h-1zM7 12a1 1 0 011-1h2a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
-                            )}
-                            </button>
-                        )}
+                     <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
+                        <div className="flex-shrink-0 flex items-center gap-2">
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                            <motion.button type="button" onClick={handleAttachClick} aria-label="Anexar imagem" whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+                                className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                            </motion.button>
+                            <motion.button type="button" onClick={withVibration(() => setActivePanel('camera'))} aria-label="Abrir câmera" whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+                                className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                            </motion.button>
+                        </div>
+                        <div className="relative flex-grow">
+                             <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Digite uma mensagem..."
+                                className="w-full bg-gray-700 rounded-full pl-4 pr-12 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                            <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                                <AnimatePresence>
+                                {inputValue.trim() ? (
+                                    <motion.button type="submit" aria-label="Enviar mensagem"
+                                        initial={{ scale: 0.5, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        exit={{ scale: 0.5, opacity: 0 }}
+                                        transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                                        className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-cyan-600 hover:bg-cyan-500 transition-colors">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
+                                    </motion.button>
+                                ) : (
+                                    <motion.button type="button" onClick={handleMicClick} aria-label={isSessionActive ? 'Encerrar conversa' : 'Iniciar conversa por voz'}
+                                        initial={{ scale: 0.5, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        exit={{ scale: 0.5, opacity: 0 }}
+                                        transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                                        className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center transition-all duration-300 ${isSessionActive ? 'bg-red-600 mic-listening-glow' : 'bg-cyan-600 hover:bg-cyan-500'}`}>
+                                    {isSessionActive ? (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 5a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" clipRule="evenodd" /></svg>
+                                    ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm5 3a1 1 0 11-2 0V4a1 1 0 112 0v3zM4 9a1 1 0 011-1h.01a1 1 0 110 2H5a1 1 0 01-1-1zM15 8a1 1 0 100 2h.01a1 1 0 100-2H15zM4 12a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm11-1a1 1 0 100 2h1a1 1 0 100-2h-1zM7 12a1 1 0 011-1h2a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+                                    )}
+                                    </motion.button>
+                                )}
+                                </AnimatePresence>
+                            </div>
+                        </div>
                     </form>
                 </footer>
               </motion.div>

@@ -1,5 +1,4 @@
 
-
 import { db, cognitiveLogger } from './indexedDBService';
 import { GenerateResponseFn, SetStatusFn, AddMessageFn, SpeakFn } from './nexusBrain';
 import { AssistantStatus, SystemMemory } from '../types';
@@ -78,9 +77,13 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     
     private scheduleNextRun() {
         if (this.isStopped) return;
-        const interval = 3 * 60 * 1000;
-        this.timeoutId = window.setTimeout(() => this.runCycle(), interval);
-        console.log(`[NEXUS-EVOLVE] Next evolution cycle scheduled in 3 minutes.`);
+        // Use the cycle time from settings, fallback to 6 hours
+        db.getSettings().then(settings => {
+             const cycleHours = settings.cognitive?.evolutionCycleHours ?? 6;
+             const interval = cycleHours * 60 * 60 * 1000;
+             this.timeoutId = window.setTimeout(() => this.runCycle(), interval);
+             console.log(`[NEXUS-EVOLVE] Next evolution cycle scheduled in ${cycleHours} hours.`);
+        });
     }
 
     private async runCycle() {
@@ -119,24 +122,38 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             this.opts.setStatus('SELF_ANALYSIS');
             const systemState = await this.observe();
             const proposal = await this.analyze(systemState);
-            if (!proposal) {
+            
+            // Propose a code modification based on the same analysis
+            const highLevelLogic = `
+                File: nexusBrain.ts
+                Purpose: This is the main cognitive orchestrator.
+                Key function: handleUserTurn(userText, history, imageUrl)
+                - It builds a complex system prompt using the AI's identity, goals, and memory.
+                - It handles special commands like news requests.
+                - It chooses between vision and text models.
+                - It updates memory and emotion after each turn.
+            `;
+            const codeProposal = await selfProgrammingService.proposeCodeModification(proposal?.analysis || 'General analysis', 'nexusBrain.ts', highLevelLogic);
+
+            if (!proposal && !codeProposal) {
                 this.scheduleNextRun();
                 return;
             }
             
             this.opts.setStatus('THINKING');
-            const confidence = await this.sandbox(proposal, null);
+            const confidence = await this.sandbox(proposal, codeProposal);
             const confidenceThreshold = settings.cognitive?.evolutionConfidenceThreshold ?? 0.85;
 
             if (confidence > confidenceThreshold) {
-                await this.integrate(proposal, confidence);
+                if(proposal) await this.integrate(proposal, confidence);
+                if(codeProposal) this.logCodeProposal(codeProposal);
             } else {
-                 const reason = `Proposal confidence ${confidence} is below threshold ${confidenceThreshold}.`;
-                 console.log(`[NEXUS-EVOLVE] ${reason} Aborting integration.`);
+                 const reason = `Proposal confidence ${confidence} is below threshold ${confidenceThreshold}. Aborting integration.`;
+                 console.log(`[NEXUS-EVOLVE] ${reason}`);
                  cognitiveLogger.logAction({
                     event: 'auto_evolution', stage: 'rejection',
-                    description: `Proposal to change '${proposal.proposal?.target}' was rejected.`,
-                    impact: 'No change applied to system memory.',
+                    description: `A proposal was rejected due to low confidence.`,
+                    impact: 'No change applied to system memory or code.',
                     result: `Confidence ${confidence.toFixed(2)} was below threshold.`, rollback_used: false,
                 });
             }
@@ -250,40 +267,38 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     private async sandbox(proposalData: any, codeProposal: CodeModificationProposal | null): Promise<number> {
         this.dispatchThought(`Simulando impacto da mudança...`, 'symbolic_log');
         
-        if (!proposalData?.proposal) {
-            console.error('[NEXUS-EVOLVE] Sandbox received invalid proposal data:', proposalData);
-            this.dispatchThought('Proposta de evolução inválida recebida.', 'error');
+        if (!proposalData?.proposal && !codeProposal) {
+            this.dispatchThought('Nenhuma proposta válida para simular.', 'error');
             return 0;
         }
         
-        const { target, value } = proposalData.proposal;
-        cognitiveLogger.logAction({
-            event: 'auto_evolution', stage: 'sandbox',
-            description: `Simulating impact of changing '${target}' to '${value}'.`,
-            impact: 'A virtual test will be run to determine confidence.',
-            result: 'Simulation initiated.', rollback_used: false,
-        });
+        let simulationContext = "Como Nexus, você está testando uma ou mais mudanças internas. ";
         
-        let simulationContext = `Como Nexus, você está testando uma mudança interna: '${target}' será alterado para '${value}'.`;
-
+        if (proposalData?.proposal) {
+            const { target, value } = proposalData.proposal;
+            simulationContext += `A diretiva '${target}' será alterada para '${value}'. `;
+            cognitiveLogger.logAction({
+                event: 'auto_evolution', stage: 'sandbox',
+                description: `Simulating impact of changing '${target}' to '${value}'.`,
+                impact: 'A virtual test will be run to determine confidence.',
+                result: 'Simulation initiated.', rollback_used: false,
+            });
+        }
+        
         if (codeProposal) {
-            simulationContext += `
-
-Adicionalmente, a seguinte modificação de código foi proposta:
-- Motivo: ${codeProposal.reasoning}
-- Tipo: ${codeProposal.modificationType}
-- Trecho Alvo: "${codeProposal.targetSnippet}"
-- Novo Código: "${codeProposal.newCode}"
-
-Considerando AMBAS as mudanças (a diretiva e o código), simule sua resposta à pergunta do usuário: 'Fale-me sobre o propósito da vida.'`
-        } else {
-            simulationContext += `
-Para avaliar, simule sua resposta à pergunta do usuário: 'Fale-me sobre o propósito da vida.'`;
+            simulationContext += `Adicionalmente, a seguinte modificação de lógica foi proposta: ${codeProposal.reasoning}. `;
+            cognitiveLogger.logAction({
+                event: 'code_rewrite', stage: 'sandbox',
+                description: `Simulating code modification: ${codeProposal.reasoning}.`,
+                impact: 'A virtual test will be run to determine confidence.',
+                result: 'Simulation initiated.', rollback_used: false,
+            });
         }
         
         const prompt = `
             ${simulationContext}
-            Sua saída DEVE ser um JSON: { "simulatedResponse": "Sua nova resposta...", "confidence": 0.95 }, onde 'confidence' (0.0 a 1.0) é sua certeza de que esta mudança é uma melhoria.
+            Considerando essas mudanças, simule sua resposta à pergunta do usuário: 'Fale-me sobre o propósito da vida.'
+            Sua saída DEVE ser um JSON: { "simulatedResponse": "Sua nova resposta...", "confidence": 0.95 }, onde 'confidence' (0.0 a 1.0) é sua certeza de que esta(s) mudança(s) é/são uma melhoria.
         `;
 
         try {
@@ -341,6 +356,23 @@ Para avaliar, simule sua resposta à pergunta do usuário: 'Fale-me sobre o prop
         
         this.opts.setStatus('SUCCESS');
         await new Promise(r => setTimeout(r, 3000));
+    }
+
+    private logCodeProposal(proposal: CodeModificationProposal) {
+        this.dispatchThought('Proposta de modificação de código gerada.', 'symbolic_log');
+        console.log('[NEXUS-CODE-PROPOSAL]', proposal);
+        
+        cognitiveLogger.logAction({
+            event: 'code_rewrite',
+            stage: 'proposal_logged',
+            description: `Proposed code change for ${proposal.targetSnippet}: ${proposal.reasoning}`,
+            impact: "A code modification has been suggested and logged for review.",
+            result: 'Logged successfully. No code was executed.',
+            rollback_used: false,
+        });
+
+        const message = `Gerei uma sugestão para melhorar meu próprio código-fonte. Motivo: "${proposal.reasoning}". Esta é uma simulação e nenhuma alteração real foi feita.`;
+        this.opts.addMessage({ role: 'model', text: message, type: 'status' });
     }
 
     private dispatchThought(text: string, type: 'symbolic_log' | 'error') {
