@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AssistantStatus, ChatMessage, AppSettings, Emotion, VisualState } from './types';
 import { useGeminiVoice, TranscriptionTurn } from './hooks/useGeminiVoice';
 import { useLlm } from './hooks/useLlm';
@@ -17,6 +19,7 @@ const TodoList = lazy(() => import('./components/TodoList').then(m => ({ default
 const ReflectionHistory = lazy(() => import('./components/ReflectionHistory').then(m => ({ default: m.ReflectionHistory })));
 const CognitiveStatus = lazy(() => import('./components/CognitiveStatus').then(m => ({ default: m.CognitiveStatus })));
 
+type ActivePanel = 'settings' | 'camera' | 'todo' | 'reflectionHistory' | 'cognitiveStatus' | null;
 
 const withVibration = <T extends (...args: any[]) => any>(fn: T) => {
     return (...args: Parameters<T>): ReturnType<T> => {
@@ -27,23 +30,79 @@ const withVibration = <T extends (...args: any[]) => any>(fn: T) => {
     };
 };
 
+const fabContainerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
+    },
+  },
+};
+
+const fabItemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: { type: 'spring', stiffness: 120 }
+  },
+};
+
+const FloatingActionButtons: React.FC<{ onOpenPanel: (panel: ActivePanel) => void, onOpenChat: () => void, hasNewMessage: boolean }> = React.memo(({ onOpenPanel, onOpenChat, hasNewMessage }) => (
+    <motion.div 
+      className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 z-30 flex flex-col items-end gap-3"
+      variants={fabContainerVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+    >
+        <motion.button variants={fabItemVariants} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+            onClick={withVibration(() => onOpenPanel('cognitiveStatus'))} aria-label="Abrir status cognitivo"
+            className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-colors"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
+            </svg>
+        </motion.button>
+        <motion.button variants={fabItemVariants} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+            onClick={withVibration(() => onOpenPanel('reflectionHistory'))} aria-label="Abrir monitor cognitivo"
+            className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-colors"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+        </motion.button>
+        <motion.button variants={fabItemVariants} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+            onClick={withVibration(() => onOpenPanel('todo'))} aria-label="Abrir lista de tarefas"
+            className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-colors"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+        </motion.button>
+        <motion.button variants={fabItemVariants} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+            onClick={withVibration(onOpenChat)} aria-label="Abrir chat"
+            className="w-16 h-16 bg-cyan-600 rounded-full flex items-center justify-center shadow-lg hover:bg-cyan-500 transition-colors"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+            {hasNewMessage && (<span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-500 border-2 border-white animate-pulse"></span>)}
+        </motion.button>
+    </motion.div>
+));
+
 const App: React.FC = () => {
-  const [status, setStatus] = useState<AssistantStatus>(AssistantStatus.IDLE);
+  const [status, setStatus] = useState<AssistantStatus>('IDLE');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState(false);
   const [hasNewMessage, setHasNewMessage] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isStarted, setIsStarted] = useState(false);
   const [thought, setThought] = useState<string | null>(null);
-  const [isTodoListVisible, setIsTodoListVisible] = useState(false);
-  const [isReflectionHistoryVisible, setIsReflectionHistoryVisible] = useState(false);
-  const [isCognitiveStatusVisible, setIsCognitiveStatusVisible] = useState(false);
+  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [emotionIntensity, setEmotionIntensity] = useState(1.0);
-  const [emotion, setEmotion] = useState<Emotion>(Emotion.CALM);
+  const [emotion, setEmotion] = useState<Emotion>('CALM');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isEvolving, setIsEvolving] = useState(false);
 
   const { token, status: syncStatus, login, logout } = useGoogleSync();
   const { speak: speakFromHook, stop } = useSpeech(settings, status);
@@ -101,14 +160,15 @@ const App: React.FC = () => {
         setEmotion(emotion);
         setEmotionIntensity(intensity ?? 1.0);
         
-        if ([AssistantStatus.IDLE, AssistantStatus.SLEEPY, AssistantStatus.SUCCESS, AssistantStatus.ERROR, AssistantStatus.CURIOUS].includes(status)) {
+        const nonEmotionalStatuses: AssistantStatus[] = ['IDLE', 'SLEEPY', 'SUCCESS', 'ERROR', 'CURIOUS'];
+        if (nonEmotionalStatuses.includes(status)) {
             const emotionToStatusMap: Partial<Record<Emotion, AssistantStatus>> = {
-                [Emotion.JOYFUL]: AssistantStatus.SUCCESS,
-                [Emotion.UNCERTAIN]: AssistantStatus.CURIOUS,
-                [Emotion.AFRAID]: AssistantStatus.ERROR,
-                [Emotion.FOCUSED]: AssistantStatus.IDLE,
-                [Emotion.CURIOUS]: AssistantStatus.CURIOUS,
-                [Emotion.CALM]: AssistantStatus.IDLE,
+                'JOYFUL': 'SUCCESS',
+                'UNCERTAIN': 'CURIOUS',
+                'AFRAID': 'ERROR',
+                'FOCUSED': 'IDLE',
+                'CURIOUS': 'CURIOUS',
+                'CALM': 'IDLE',
             };
             const newStatus = emotionToStatusMap[emotion];
             if (newStatus && newStatus !== status) setStatus(newStatus);
@@ -186,8 +246,41 @@ const App: React.FC = () => {
             console.error("Error during initial awakening turn:", error);
         });
       }
-      return () => { stop(); core.dispose(); };
+      return () => { core.dispose(); };
   }, [isInitializing, isStarted, settings, addMessage, generateResponse, generateVisionResponse, speak, stop]);
+  
+  // --- Online Auto-Evolution Control ---
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleEvolutionStatus = (event: CustomEvent) => setIsEvolving(event.detail.isEvolving);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('nexus-evolution-status-update', handleEvolutionStatus as EventListener);
+    
+    // Stop evolution when tab is closed
+    const handleBeforeUnload = () => coreRef.current?.evolutionService.stop();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+        window.removeEventListener('nexus-evolution-status-update', handleEvolutionStatus as EventListener);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+      if (!isStarted || !coreRef.current) return;
+      
+      const evolutionService = coreRef.current.evolutionService;
+      if (isOnline && settings?.behavior?.permissions?.autoEvolutionEnabled) {
+          evolutionService.start();
+      } else {
+          evolutionService.stop();
+      }
+  }, [isOnline, settings, isStarted]);
 
 
   useEffect(() => {
@@ -197,22 +290,22 @@ const App: React.FC = () => {
   }, [messages, isChatVisible, currentUserTranscript, currentNexusTranscript]);
 
   useEffect(() => {
-    const activeCognitiveStates = [
-        AssistantStatus.THINKING, AssistantStatus.REWRITING_CODE,
-        AssistantStatus.SELF_ANALYSIS, AssistantStatus.SEARCHING_WEB
-    ];
+    const activeCognitiveStates = new Set<AssistantStatus>([
+        'THINKING', 'REWRITING_CODE',
+        'SELF_ANALYSIS', 'SEARCHING_WEB'
+    ]);
     if (isSessionActive) {
-        setStatus(isNexusSpeaking ? AssistantStatus.SPEAKING : AssistantStatus.LISTENING);
-    } else if (!activeCognitiveStates.includes(status)) {
-        if (status !== AssistantStatus.SUCCESS && status !== AssistantStatus.ERROR && status !== AssistantStatus.CURIOUS && status !== AssistantStatus.ROLLBACK) {
-            setStatus(AssistantStatus.IDLE);
+        setStatus(isNexusSpeaking ? 'SPEAKING' : 'LISTENING');
+    } else if (!activeCognitiveStates.has(status)) {
+        if (status !== 'SUCCESS' && status !== 'ERROR' && status !== 'CURIOUS' && status !== 'ROLLBACK') {
+            setStatus('IDLE');
         }
     }
   }, [isSessionActive, isNexusSpeaking, status]);
 
   const handleMicClick = withVibration(() => {
     coreRef.current?.touchHeartbeat();
-    if (status === AssistantStatus.SLEEPY) setStatus(AssistantStatus.IDLE);
+    if (status === 'SLEEPY') setStatus('IDLE');
     if (isSessionActive) { endSession(); } 
     else { setIsChatVisible(true); setHasNewMessage(false); startSession(); }
   });
@@ -248,7 +341,7 @@ const App: React.FC = () => {
   
   const handleVisionSubmit = async (imageData: string, prompt: string) => {
       if(isSessionActive) endSession();
-      setIsCameraOpen(false);
+      setActivePanel(null); // Close camera panel
       const userMessage: ChatMessage = {
           role: 'user', text: prompt || 'O que você vê aqui?', type: 'message', imageUrl: imageData,
       };
@@ -297,6 +390,15 @@ const App: React.FC = () => {
     if (e.target) e.target.value = '';
   };
 
+  const chatPanelVariants = {
+    hidden: { y: "100%" },
+    visible: { y: "0%" },
+  };
+
+  const openChat = useCallback(() => {
+    setIsChatVisible(true);
+    setHasNewMessage(false);
+  }, []);
 
   if (isInitializing || !settings) {
     return <div className="h-screen w-screen bg-gray-900 flex items-center justify-center"><p>Despertando Nexus...</p></div>
@@ -307,20 +409,26 @@ const App: React.FC = () => {
       <style>{`
         @keyframes fade-in-out { 0%, 100% { opacity: 0; transform: translateY(10px) scale(0.95); } 10%, 90% { opacity: 1; transform: translateY(0) scale(1); } }
         .animate-fade-in-out { animation: fade-in-out 6s ease-in-out forwards; }
-        .animate-fade-in-slide-up { animation: fade-in-slide-up 0.3s ease-out forwards; }
-        @keyframes fade-in-slide-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .bg-gradient-radial { background-image: radial-gradient(circle, var(--tw-gradient-stops)); }
       `}</style>
       {!isStarted ? (
           <StartScreen 
-              onStart={() => setIsStarted(true)} onOpenSettings={() => setIsSettingsVisible(true)}
+              onStart={() => setIsStarted(true)} onOpenSettings={() => setActivePanel('settings')}
               token={token} syncStatus={syncStatus} onLogin={login}
           />
       ) : (
         <>
-          <div 
-            className="fixed inset-0 flex items-center justify-center z-20 pointer-events-none transition-transform duration-500 ease-in-out"
-            style={{ transform: isChatVisible ? 'translateY(-15vh)' : 'translateY(0)' }}
+          <div className="fixed top-4 left-4 z-30 p-2 bg-gray-800/70 backdrop-blur-sm rounded-lg text-sm flex items-center gap-2 shadow-lg border border-gray-700/50">
+            <span className={`w-3 h-3 rounded-full ${isOnline ? (isEvolving ? 'bg-green-400 animate-pulse' : 'bg-blue-400') : 'bg-red-500'}`}></span>
+            <span className="text-gray-300 font-medium">
+              {isOnline ? (isEvolving ? 'Evoluindo' : 'Online') : 'Offline'}
+            </span>
+          </div>
+
+          <motion.div 
+            className="fixed inset-0 flex items-center justify-center z-20 pointer-events-none"
+            animate={{ y: isChatVisible ? '-15vh' : '0vh' }}
+            transition={{ type: 'spring', stiffness: 100, damping: 15 }}
           >
             <AvatarLayer 
               isChatOpen={isChatVisible} appearance={settings?.appearance ?? 'neutral'}
@@ -331,118 +439,99 @@ const App: React.FC = () => {
                   <p className="text-sm text-gray-300 italic">{thought}</p>
               </div>
             )}
-          </div>
+          </motion.div>
 
-          <button 
-            onClick={withVibration(() => setIsSettingsVisible(true))} aria-label="Abrir configurações"
+          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}
+            onClick={withVibration(() => setActivePanel('settings'))} aria-label="Abrir configurações"
             className="fixed top-4 right-4 z-30 p-2 bg-gray-700/50 rounded-full text-gray-300 hover:bg-gray-600/80 transition-colors"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066 2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          </button>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          </motion.button>
           
-          <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 z-30 flex flex-col items-end gap-3">
+          <AnimatePresence>
             {!isChatVisible && (
-              <>
-                <button
-                    onClick={withVibration(() => setIsCognitiveStatusVisible(true))} aria-label="Abrir status cognitivo"
-                    className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
-                    </svg>
-                </button>
-                <button
-                    onClick={withVibration(() => setIsReflectionHistoryVisible(true))} aria-label="Abrir histórico de pensamentos"
-                    className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                </button>
-                <button
-                    onClick={withVibration(() => setIsTodoListVisible(true))} aria-label="Abrir lista de tarefas"
-                    className="w-16 h-16 bg-gray-700/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg hover:bg-gray-600 transition-all transform hover:scale-110"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                </button>
-                <button
-                    onClick={withVibration(() => { setIsChatVisible(true); setHasNewMessage(false); })} aria-label="Abrir chat"
-                    className="w-16 h-16 bg-cyan-600 rounded-full flex items-center justify-center shadow-lg hover:bg-cyan-500 transition-all transform hover:scale-110"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                    {hasNewMessage && (<span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-500 border-2 border-white animate-pulse"></span>)}
-                </button>
-             </>
+              <FloatingActionButtons 
+                  onOpenPanel={setActivePanel} 
+                  onOpenChat={openChat}
+                  hasNewMessage={hasNewMessage}
+              />
             )}
-          </div>
+          </AnimatePresence>
 
-          <div className={`fixed bottom-0 left-0 right-0 max-h-[70vh] bg-gray-800/85 backdrop-blur-md rounded-t-2xl shadow-[0_-10px_30px_rgba(0,0,0,0.5)] flex flex-col z-10 transition-transform duration-500 ease-in-out ${isChatVisible ? 'translate-y-0' : 'translate-y-full'}`}>
-            <header className="flex-shrink-0 p-2 border-b border-gray-700/50 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-300 pl-2">Nexus</h3>
-                <button type="button" onClick={withVibration(() => setIsChatVisible(false))} aria-label="Recolher chat"
-                    className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </button>
-            </header>
-            
-            <div ref={chatContainerRef} className="flex-grow p-4 overflow-y-auto scroll-smooth pb-[calc(4rem+env(safe-area-inset-bottom))]">
-              <div className="flex flex-col space-y-4">
-                {messages.map((msg, index) => <Message key={msg.id || index} {...msg} onAction={handleMessageAction} />)}
-                {currentUserTranscript && (
-                    <div className="flex items-end justify-end animate-fade-in-slide-up">
-                        <div className="max-w-xs md:max-w-md lg:max-w-lg px-4 py-3 rounded-2xl shadow-md bg-cyan-600/70 rounded-br-none opacity-70">
-                            <p className="text-white whitespace-pre-wrap italic">{currentUserTranscript}...</p>
-                        </div>
-                    </div>
-                )}
-                 {currentNexusTranscript && (
-                    <div className="flex items-end justify-start animate-fade-in-slide-up">
-                        <div className="max-w-xs md:max-w-md lg:max-w-lg px-4 py-3 rounded-2xl shadow-md bg-gray-700/70 rounded-bl-none opacity-70">
-                            <p className="text-white whitespace-pre-wrap italic">{currentNexusTranscript}...</p>
-                        </div>
-                    </div>
-                )}
-              </div>
-            </div>
-            
-            <footer className="flex-shrink-0 p-2 border-t border-gray-700/50 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-                <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
-                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
-                    <button type="button" onClick={handleAttachClick} aria-label="Anexar imagem"
-                        className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+          <AnimatePresence>
+            {isChatVisible && (
+              <motion.div 
+                className="fixed bottom-0 left-0 right-0 max-h-[70vh] bg-gray-800/85 backdrop-blur-md rounded-t-2xl shadow-[0_-10px_30px_rgba(0,0,0,0.5)] flex flex-col z-10"
+                variants={chatPanelVariants}
+                initial="hidden"
+                animate="visible"
+                exit="hidden"
+                transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+              >
+                <header className="flex-shrink-0 p-2 border-b border-gray-700/50 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-300 pl-2">Nexus</h3>
+                    <button type="button" onClick={withVibration(() => setIsChatVisible(false))} aria-label="Recolher chat"
+                        className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-700 hover:bg-gray-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
-                    <button type="button" onClick={withVibration(() => setIsCameraOpen(true))} aria-label="Abrir câmera"
-                        className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
-                    </button>
-                    <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Digite uma mensagem..."
-                        className="flex-grow bg-gray-700 rounded-full px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
-                    {inputValue.trim() ? (
-                        <button type="submit" aria-label="Enviar mensagem"
-                            className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-cyan-600 hover:bg-cyan-500 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
-                        </button>
-                    ) : (
-                        <button type="button" onClick={handleMicClick} aria-label={isSessionActive ? 'Encerrar conversa' : 'Iniciar conversa por voz'}
-                            className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center transition-colors ${isSessionActive ? 'bg-red-600 animate-pulse ring-4 ring-red-500/50' : 'bg-cyan-600 hover:bg-cyan-500'}`}>
-                        {isSessionActive ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 5a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" clipRule="evenodd" /></svg>
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm5 3a1 1 0 11-2 0V4a1 1 0 112 0v3zM4 9a1 1 0 011-1h.01a1 1 0 110 2H5a1 1 0 01-1-1zM15 8a1 1 0 100 2h.01a1 1 0 100-2H15zM4 12a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm11-1a1 1 0 100 2h1a1 1 0 100-2h-1zM7 12a1 1 0 011-1h2a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
-                        )}
-                        </button>
+                </header>
+                
+                <div ref={chatContainerRef} className="flex-grow p-4 overflow-y-auto scroll-smooth pb-[calc(4rem+env(safe-area-inset-bottom))]">
+                  <div className="flex flex-col space-y-4">
+                    {messages.map((msg, index) => <Message key={msg.id || index} {...msg} onAction={handleMessageAction} />)}
+                    {currentUserTranscript && (
+                         <Message role="user" text={`${currentUserTranscript}...`} type="message" />
                     )}
-                </form>
-            </footer>
-          </div>
+                    {currentNexusTranscript && (
+                        <Message role="model" text={`${currentNexusTranscript}...`} type="message" />
+                    )}
+                  </div>
+                </div>
+                
+                <footer className="flex-shrink-0 p-2 border-t border-gray-700/50 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+                    <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                        <button type="button" onClick={handleAttachClick} aria-label="Anexar imagem"
+                            className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                        </button>
+                        <button type="button" onClick={withVibration(() => setActivePanel('camera'))} aria-label="Abrir câmera"
+                            className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-600 hover:bg-gray-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                        </button>
+                        <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Digite uma mensagem..."
+                            className="flex-grow bg-gray-700 rounded-full px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                        {inputValue.trim() ? (
+                            <button type="submit" aria-label="Enviar mensagem"
+                                className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-cyan-600 hover:bg-cyan-500 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" /></svg>
+                            </button>
+                        ) : (
+                            <button type="button" onClick={handleMicClick} aria-label={isSessionActive ? 'Encerrar conversa' : 'Iniciar conversa por voz'}
+                                className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center transition-colors ${isSessionActive ? 'bg-red-600 animate-pulse ring-4 ring-red-500/50' : 'bg-cyan-600 hover:bg-cyan-500'}`}>
+                            {isSessionActive ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 5a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" clipRule="evenodd" /></svg>
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm5 3a1 1 0 11-2 0V4a1 1 0 112 0v3zM4 9a1 1 0 011-1h.01a1 1 0 110 2H5a1 1 0 01-1-1zM15 8a1 1 0 100 2h.01a1 1 0 100-2H15zM4 12a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm11-1a1 1 0 100 2h1a1 1 0 100-2h-1zM7 12a1 1 0 011-1h2a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+                            )}
+                            </button>
+                        )}
+                    </form>
+                </footer>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
       
       <Suspense fallback={null}>
-        {isSettingsVisible && <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} onClose={() => setIsSettingsVisible(false)} token={token} onLogout={logout} />}
-        {isStarted && isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onSend={handleVisionSubmit} />}
-        {isStarted && isTodoListVisible && <TodoList isVisible={isTodoListVisible} onClose={() => setIsTodoListVisible(false)} />}
-        {isStarted && isReflectionHistoryVisible && <ReflectionHistory isVisible={isReflectionHistoryVisible} onClose={() => setIsReflectionHistoryVisible(false)} />}
-        {isStarted && isCognitiveStatusVisible && <CognitiveStatus isVisible={isCognitiveStatusVisible} onClose={() => setIsCognitiveStatusVisible(false)} />}
+        <AnimatePresence>
+          {activePanel === 'settings' && <SettingsPanel isVisible={true} settings={settings} onSettingsChange={onSettingsChange} onClose={() => setActivePanel(null)} token={token} onLogout={logout} />}
+          {isStarted && activePanel === 'camera' && <CameraView onClose={() => setActivePanel(null)} onSend={handleVisionSubmit} />}
+          {isStarted && activePanel === 'todo' && <TodoList isVisible={activePanel === 'todo'} onClose={() => setActivePanel(null)} />}
+          {isStarted && activePanel === 'reflectionHistory' && <ReflectionHistory settings={settings} isVisible={activePanel === 'reflectionHistory'} onClose={() => setActivePanel(null)} />}
+          {isStarted && activePanel === 'cognitiveStatus' && <CognitiveStatus isVisible={activePanel === 'cognitiveStatus'} onClose={() => setActivePanel(null)} />}
+        </AnimatePresence>
       </Suspense>
     </div>
   );

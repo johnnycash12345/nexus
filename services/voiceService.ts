@@ -26,8 +26,6 @@ async function decodeAudioData(
     sampleRate: number,
     numChannels: number,
 ): Promise<AudioBuffer> {
-    // FIX: Using the buffer's byteOffset and byteLength is safer, as the Uint8Array
-    // might be a view into a larger ArrayBuffer.
     const dataInt16 = new Int16Array(data.buffer, data.byteOffset, data.byteLength / 2);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
@@ -56,8 +54,6 @@ function createBlob(data: Float32Array): Blob {
 
 export class VoiceService {
     private ai: GoogleGenAI;
-    // FIX: Replaced explicit `LiveSession` with an inferred type using `ReturnType`
-    // because `LiveSession` is not exported from the SDK. This maintains type safety.
     private sessionPromise: ReturnType<GoogleGenAI['live']['connect']> | null = null;
     
     private stream: MediaStream | null = null;
@@ -131,8 +127,8 @@ export class VoiceService {
     private async handleAudioPlayback(message: LiveServerMessage) {
         if (!this.outputAudioContext) return;
 
-        // FIX: Resume audio context if it was suspended by the browser,
-        // which can happen on page load or tab switching.
+        // Resume the audio context if it's suspended by the browser,
+        // which can happen on page load or when switching tabs.
         if (this.outputAudioContext.state === 'suspended') {
             await this.outputAudioContext.resume();
         }

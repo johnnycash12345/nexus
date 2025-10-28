@@ -1,14 +1,17 @@
+
 import { Type } from '@google/genai';
 import { db } from './indexedDBService';
 import { Emotion, EmotionState, LearningContext } from '../types';
 import { generateGeminiResponse } from "./geminiService";
+
+const EmotionValues: Emotion[] = ['CURIOUS', 'JOYFUL', 'UNCERTAIN', 'CALM', 'FOCUSED', 'AFRAID'];
 
 const emotionEvolutionSchema = {
     type: Type.OBJECT,
     properties: {
         newEmotion: { 
             type: Type.STRING,
-            enum: Object.values(Emotion),
+            enum: EmotionValues,
             description: "A emoção nova mais apropriada para a IA com base no contexto."
         },
         intensityChange: { 
@@ -64,9 +67,9 @@ export const analyzeAndEvolveEmotion = async (learningContext: LearningContext, 
         const newIntensity = Math.max(0.1, Math.min(1.0, currentIntensity + clampedChange));
 
         const newEmotionState: EmotionState = {
-            current: (newEmotion as Emotion) || system.emotionState.current,
+            current: newEmotion || system.emotionState.current,
             intensity: newIntensity,
-            history: [...(system.emotionState.history || [])].slice(-5).concat(newEmotion as Emotion),
+            history: [...(system.emotionState.history || [])].slice(-5).concat(newEmotion),
         };
 
         await db.saveSystemMemory({ emotionState: newEmotionState });

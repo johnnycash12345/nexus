@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { db } from '../services/indexedDBService';
 import { Task } from '../types';
 
@@ -6,6 +8,37 @@ interface TodoListProps {
   onClose: () => void;
   isVisible: boolean;
 }
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const panelVariants = {
+  hidden: { x: "-100%" },
+  visible: { 
+    x: "0%",
+    transition: { type: 'spring', stiffness: 120, damping: 20 }
+  },
+};
+
+const listVariants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.07,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 100 }
+  },
+};
 
 export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -15,18 +48,14 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
   useEffect(() => {
     if (isVisible) {
       loadTasks();
-      // Focus input when panel opens
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [isVisible]);
 
   const loadTasks = async () => {
     const allTasks = await db.getAllTasks();
-    // Sort tasks: incomplete first, then by creation date
     allTasks.sort((a, b) => {
-        if (a.completed !== b.completed) {
-            return a.completed ? 1 : -1;
-        }
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
         return b.createdAt - a.createdAt;
     });
     setTasks(allTasks);
@@ -57,7 +86,15 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
   };
 
   return (
-    <div className={`fixed inset-0 bg-black/60 z-30 flex justify-start backdrop-blur-sm transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}>
+    <motion.div 
+      className="fixed inset-0 bg-black/60 z-30 flex justify-start backdrop-blur-sm" 
+      onClick={onClose}
+      variants={backdropVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={{ duration: 0.3 }}
+    >
        <style>{`
           .task-checkbox-svg path {
               stroke-dasharray: 24;
@@ -76,17 +113,11 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
               color: #6b7280; /* text-gray-500 */
               text-decoration-color: #9ca3af; /* text-gray-400 */
           }
-          @keyframes fade-in-slide-up {
-              from { opacity: 0; transform: translateY(5px); }
-              to { opacity: 1; transform: translateY(0); }
-          }
-          .animate-fade-in-slide-up {
-              animation: fade-in-slide-up 0.3s ease-out forwards;
-          }
       `}</style>
-      <div 
-        className={`bg-gray-800/90 shadow-2xl w-full max-w-sm h-full flex flex-col transition-transform duration-300 ease-in-out ${isVisible ? 'translate-x-0' : '-translate-x-full'}`} 
+      <motion.div 
+        className="bg-gray-800/90 shadow-2xl w-full max-w-sm h-full flex flex-col" 
         onClick={e => e.stopPropagation()}
+        variants={panelVariants}
       >
         <header className="flex-shrink-0 p-4 border-b border-gray-700/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -108,9 +139,9 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
               <p className="text-sm">Adicione uma tarefa abaixo para começar.</p>
             </div>
           ) : (
-            <ul className="space-y-3">
+            <motion.ul className="space-y-3" variants={listVariants} initial="hidden" animate="visible">
               {tasks.map(task => (
-                <li key={task.id} className={`group flex items-center bg-gray-700/50 p-3 rounded-lg transition-colors duration-200 animate-fade-in-slide-up ${task.completed ? 'task-completed' : ''}`}>
+                <motion.li key={task.id} variants={itemVariants} className={`group flex items-center bg-gray-700/50 p-3 rounded-lg transition-colors duration-200 ${task.completed ? 'task-completed' : ''}`}>
                   <button onClick={() => handleToggleTask(task)} className={`flex-shrink-0 h-6 w-6 rounded-full border-2 flex items-center justify-center mr-3 cursor-pointer group-hover:border-cyan-400 transition-colors ${task.completed ? 'border-cyan-500 bg-cyan-500/30' : 'border-gray-500'}`}>
                     <svg className="task-checkbox-svg h-4 w-4 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -122,9 +153,9 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
                   <button onClick={() => handleDeleteTask(task.id)} className="flex-shrink-0 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
-                </li>
+                </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           )}
         </main>
         
@@ -148,7 +179,7 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
                 </button>
             </form>
         </footer>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

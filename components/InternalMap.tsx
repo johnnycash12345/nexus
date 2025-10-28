@@ -1,6 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { db } from '../services/indexedDBService';
 import { Concept, Synapse } from '../types';
 
@@ -12,6 +13,24 @@ interface InternalMapProps {
 interface ConceptWithSynapses extends Concept {
     synapses: Synapse[];
 }
+
+const listVariants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.07,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { type: 'spring', stiffness: 100 }
+  },
+};
 
 export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) => {
   const [concepts, setConcepts] = useState<ConceptWithSynapses[]>([]);
@@ -71,9 +90,9 @@ export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) 
               <p className="text-sm">Nenhum conceito aprendido ainda.</p>
             </div>
           ) : (
-            <ul className="space-y-3">
+            <motion.ul className="space-y-3" variants={listVariants} initial="hidden" animate="visible">
               {concepts.map(concept => (
-                <li key={concept.name} className="bg-gray-700/50 p-3 rounded-lg">
+                <motion.li key={concept.name} variants={itemVariants} className="bg-gray-700/50 p-3 rounded-lg">
                     <p className="font-semibold text-white capitalize">{concept.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                         <div className="w-full bg-gray-600 rounded-full h-2.5">
@@ -93,9 +112,9 @@ export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) 
                             </ul>
                         </div>
                     )}
-                </li>
+                </motion.li>
               ))}
-            </ul>
+            </motion.ul>
           )}
         </main>
       </div>

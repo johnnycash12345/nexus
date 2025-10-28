@@ -3,10 +3,28 @@
 import React from 'react';
 import { AppSettings, Permissions } from '../../types';
 
+interface ToggleSettingProps {
+    id: string;
+    title: string;
+    description: string;
+    checked: boolean | undefined;
+    onChange: (value: boolean) => void;
+}
+
+const ToggleSetting: React.FC<ToggleSettingProps> = ({ id, title, description, checked, onChange }) => (
+    <label htmlFor={id} className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
+        <div>
+            <p className="font-medium text-white">{title}</p>
+            <p className="text-sm text-gray-400">{description}</p>
+        </div>
+        <input id={id} type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} className="toggle-checkbox" />
+    </label>
+);
+
 interface BrainSettingsProps {
-  settings: AppSettings;
-  onNestedSettingChange: (field: keyof AppSettings, subField: string, value: any) => void;
-  onPermissionChange: (field: keyof Permissions, value: boolean) => void;
+    settings: AppSettings;
+    onNestedSettingChange: (field: keyof AppSettings, subField: string, value: any) => void;
+    onPermissionChange: (field: keyof Permissions, value: boolean) => void;
 }
 
 export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, onNestedSettingChange, onPermissionChange }) => {
@@ -14,53 +32,75 @@ export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, onNested
         <div>
             <h3 className="text-lg font-semibold text-cyan-300 mb-4">Comportamento e Personalidade</h3>
             <div className="space-y-3">
-                <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                    <div>
-                        <p className="font-medium text-white">Iniciativa Proativa</p>
-                        <p className="text-sm text-gray-400">Permitir que o Nexus inicie conversas.</p>
-                    </div>
-                    <input type="checkbox" checked={settings.behavior?.enableProactive} onChange={(e) => onNestedSettingChange('behavior', 'enableProactive', e.target.checked)} className="toggle-checkbox" />
-                </label>
-                <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                    <div>
-                        <p className="font-medium text-white">Curiosidade Autônoma</p>
-                        <p className="text-sm text-gray-400">Permitir que o Nexus faça perguntas quando ocioso.</p>
-                    </div>
-                    <input type="checkbox" checked={settings.behavior?.enableCuriosity} onChange={(e) => onNestedSettingChange('behavior', 'enableCuriosity', e.target.checked)} className="toggle-checkbox" />
-                </label>
-                <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                    <div>
-                        <p className="font-medium text-white">Diário e Reflexões</p>
-                        <p className="text-sm text-gray-400">Habilitar o Nexus para manter um diário sobre as interações.</p>
-                    </div>
-                    <input type="checkbox" checked={settings.behavior?.enableDiary} onChange={(e) => onNestedSettingChange('behavior', 'enableDiary', e.target.checked)} className="toggle-checkbox" />
-                </label>
+                <ToggleSetting
+                    id="enableProactive"
+                    title="Iniciativa Proativa"
+                    description="Permitir que o Nexus inicie conversas."
+                    checked={settings.behavior?.enableProactive}
+                    onChange={(v) => onNestedSettingChange('behavior', 'enableProactive', v)}
+                />
+                 <ToggleSetting
+                    id="enableCuriosity"
+                    title="Curiosidade Autônoma"
+                    description="Permitir que o Nexus faça perguntas quando ocioso."
+                    checked={settings.behavior?.enableCuriosity}
+                    onChange={(v) => onNestedSettingChange('behavior', 'enableCuriosity', v)}
+                />
+                <ToggleSetting
+                    id="enableDiary"
+                    title="Diário e Reflexões"
+                    description="Habilitar o Nexus para manter um diário sobre as interações."
+                    checked={settings.behavior?.enableDiary}
+                    onChange={(v) => onNestedSettingChange('behavior', 'enableDiary', v)}
+                />
+            </div>
+
+            <div className="mt-6">
+                <h3 className="text-lg font-semibold text-cyan-300 mb-4">Evolução Autônoma</h3>
+                 <ToggleSetting
+                    id="autoEvolutionEnabled"
+                    title="🧬 Autoevolução Online"
+                    description="Permitir que o Nexus aprenda e se aperfeiçoe sozinho."
+                    checked={settings.behavior?.permissions?.autoEvolutionEnabled}
+                    onChange={(v) => onPermissionChange('autoEvolutionEnabled', v)}
+                />
+            </div>
+            
+            <div className="mt-6">
+                 <h3 className="text-lg font-semibold text-cyan-300 mb-4">Transparência</h3>
+                 <ToggleSetting
+                    id="transparencyMode"
+                    title="🪞 Transparência Cognitiva"
+                    description="Exibir todos os pensamentos e processos internos em tempo real."
+                    checked={settings.behavior?.permissions?.transparencyMode}
+                    onChange={(v) => onPermissionChange('transparencyMode', v)}
+                />
             </div>
 
             <div className="mt-6">
                 <h3 className="text-lg font-semibold text-cyan-300 mb-4">Permissões Autônomas</h3>
                 <div className="space-y-3">
-                    <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                        <div>
-                            <p className="font-medium text-white">Acesso a APIs Externas</p>
-                            <p className="text-sm text-gray-400">Permitir que o Nexus use APIs como a de notícias.</p>
-                        </div>
-                        <input type="checkbox" checked={settings.behavior?.permissions?.allowApiAccess} onChange={(e) => onPermissionChange('allowApiAccess', e.target.checked)} className="toggle-checkbox" />
-                    </label>
-                    <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                        <div>
-                            <p className="font-medium text-white">Decisões Autônomas</p>
-                            <p className="text-sm text-gray-400">Permitir que o Nexus inicie ações (ex: curiosidade).</p>
-                        </div>
-                        <input type="checkbox" checked={settings.behavior?.permissions?.allowAutonomousDecision} onChange={(e) => onPermissionChange('allowAutonomousDecision', e.target.checked)} className="toggle-checkbox" />
-                    </label>
-                    <label className="flex items-center justify-between p-3 bg-gray-700 rounded-md cursor-pointer">
-                        <div>
-                            <p className="font-medium text-white">Auto-modificação da Memória</p>
-                            <p className="text-sm text-gray-400">Permitir que o Nexus organize e evolua sua memória.</p>
-                        </div>
-                        <input type="checkbox" checked={settings.behavior?.permissions?.allowSelfModification} onChange={(e) => onPermissionChange('allowSelfModification', e.target.checked)} className="toggle-checkbox" />
-                    </label>
+                    <ToggleSetting
+                        id="allowApiAccess"
+                        title="Acesso a APIs Externas"
+                        description="Permitir que o Nexus use APIs como a de notícias."
+                        checked={settings.behavior?.permissions?.allowApiAccess}
+                        onChange={(v) => onPermissionChange('allowApiAccess', v)}
+                    />
+                    <ToggleSetting
+                        id="allowAutonomousDecision"
+                        title="Decisões Autônomas"
+                        description="Permitir que o Nexus inicie ações (ex: curiosidade)."
+                        checked={settings.behavior?.permissions?.allowAutonomousDecision}
+                        onChange={(v) => onPermissionChange('allowAutonomousDecision', v)}
+                    />
+                    <ToggleSetting
+                        id="allowSelfModification"
+                        title="Auto-modificação da Memória"
+                        description="Permitir que o Nexus organize e evolua sua memória."
+                        checked={settings.behavior?.permissions?.allowSelfModification}
+                        onChange={(v) => onPermissionChange('allowSelfModification', v)}
+                    />
                 </div>
             </div>
 

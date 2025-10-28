@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { db } from '../services/indexedDBService';
 import { SystemMemory } from '../types';
 
@@ -10,14 +12,45 @@ interface CognitiveStatusProps {
 interface ModuleData {
     name: string;
     description: string;
-    // FIX: Replaced JSX.Element with React.ReactNode to resolve namespace issue.
     icon: React.ReactNode;
     metric?: string;
     value?: string | number;
 }
 
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const panelVariants = {
+  hidden: { x: "-100%" },
+  visible: { 
+    x: "0%",
+    transition: { type: 'spring', stiffness: 120, damping: 20 }
+  },
+};
+
+const listVariants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { type: 'spring', stiffness: 100 }
+  },
+};
+
 const ModuleCard: React.FC<ModuleData> = ({ name, description, icon, metric, value }) => (
-    <div className="bg-gray-700/50 p-4 rounded-lg flex items-start gap-4 animate-fade-in-slide-up">
+    <motion.div variants={itemVariants} className="bg-gray-700/50 p-4 rounded-lg flex items-start gap-4">
         <div className="flex-shrink-0 w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center text-cyan-400">
             {icon}
         </div>
@@ -30,7 +63,7 @@ const ModuleCard: React.FC<ModuleData> = ({ name, description, icon, metric, val
                 </p>
             )}
         </div>
-    </div>
+    </motion.div>
 );
 
 export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVisible }) => {
@@ -105,19 +138,19 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVis
   ];
 
   return (
-    <div className={`fixed inset-0 bg-black/60 z-30 flex justify-start backdrop-blur-sm transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}>
-        <style>{`
-            @keyframes fade-in-slide-up {
-                from { opacity: 0; transform: translateY(5px); }
-                to { opacity: 1; transform: translateY(0); }
-            }
-            .animate-fade-in-slide-up {
-                animation: fade-in-slide-up 0.4s ease-out forwards;
-            }
-        `}</style>
-      <div 
-        className={`bg-gray-800/90 shadow-2xl w-full max-w-sm h-full flex flex-col transition-transform duration-300 ease-in-out ${isVisible ? 'translate-x-0' : '-translate-x-full'}`} 
+    <motion.div 
+      className="fixed inset-0 bg-black/60 z-30 flex justify-start backdrop-blur-sm" 
+      onClick={onClose}
+      variants={backdropVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div 
+        className="bg-gray-800/90 shadow-2xl w-full max-w-sm h-full flex flex-col" 
         onClick={e => e.stopPropagation()}
+        variants={panelVariants}
       >
         <header className="flex-shrink-0 p-4 border-b border-gray-700/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -135,14 +168,14 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVis
               Carregando estado interno...
             </div>
           ) : (
-            <div className="space-y-4">
+            <motion.div className="space-y-4" variants={listVariants} initial="hidden" animate="visible">
                 {modules.map((mod, i) => (
                     <ModuleCard key={i} {...mod} />
                 ))}
-            </div>
+            </motion.div>
           )}
         </main>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

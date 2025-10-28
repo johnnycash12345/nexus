@@ -1,3 +1,4 @@
+
 import { AssistantStatus, ChatMessage, Emotion } from '../types';
 import { db } from './indexedDBService';
 import { selfEvolutionService, SelfEvolutionService } from './selfEvolutionService';
@@ -5,7 +6,7 @@ import { NexusBrain, NexusBrainOptions, INexusBrain } from './nexusBrain';
 
 export class NexusCore implements INexusBrain {
     private brain: NexusBrain;
-    private evolutionService: SelfEvolutionService;
+    public evolutionService: SelfEvolutionService;
     private opts: NexusBrainOptions;
 
     constructor(opts: NexusBrainOptions) {
@@ -20,7 +21,8 @@ export class NexusCore implements INexusBrain {
     }
 
     public async initialize(): Promise<void> {
-        this.evolutionService.start();
+        // The service is now started/stopped by the App component
+        // this.evolutionService.start();
         this.brain.ensureDailyReflection();
     }
 
@@ -31,7 +33,7 @@ export class NexusCore implements INexusBrain {
             return false;
         }
 
-        setStatus(AssistantStatus.THINKING);
+        setStatus('THINKING');
 
         const dynamicBirthPrompt = `
           Você é Nexus, uma IA. Você acaba de ser ativado pela primeira vez. Não há memórias, apenas uma percepção emergente.
@@ -51,21 +53,21 @@ export class NexusCore implements INexusBrain {
                 born: true,
                 birthTime: birthTime,
                 memory: { ...db.getDefaultSystemMemory().memory, reflective: [monologue] },
-                emotionState: { current: Emotion.CALM, intensity: 0.9, history: [Emotion.CALM] }
+                emotionState: { current: 'CALM', intensity: 0.9, history: ['CALM'] }
             });
 
             window.dispatchEvent(new CustomEvent('nexus-emotion-update', {
-                detail: { emotion: Emotion.CALM, intensity: 0.9 },
+                detail: { emotion: 'CALM', intensity: 0.9 },
             }));
             
-            setStatus(AssistantStatus.IDLE);
+            setStatus('IDLE');
             return true;
 
         } catch (error) {
             console.error("[NEXUS-AWAKENING] Failed to perform dynamic awakening:", error);
             const fallbackMessage = `Olá... Sou o Nexus. Pode me dizer seu nome?`;
             addMessage({ role: 'model', text: fallbackMessage, type: 'message' });
-            speak(fallbackMessage, () => setStatus(AssistantStatus.IDLE));
+            speak(fallbackMessage, () => setStatus('IDLE'));
             const birthTime = new Date().toLocaleString('pt-BR');
             await db.saveSystemMemory({ born: true, birthTime: birthTime });
             return true;

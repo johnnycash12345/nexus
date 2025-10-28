@@ -1,9 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
 
 interface CameraViewProps {
   onClose: () => void;
   onSend: (imageData: string, prompt: string) => void;
 }
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const panelVariants = {
+  hidden: { opacity: 0, scale: 0.9 },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    transition: { type: 'spring', stiffness: 120, damping: 15 }
+  },
+};
 
 export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -99,15 +114,20 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-fade-in-fast">
-        <style>{`
-            @keyframes fade-in-fast {
-                from { opacity: 0; }
-                to { opacity: 1; }
-            }
-            .animate-fade-in-fast { animation: fade-in-fast 0.3s ease-out forwards; }
-        `}</style>
-      <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-lg flex flex-col text-white relative" onClick={e => e.stopPropagation()}>
+    <motion.div 
+      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center backdrop-blur-sm p-4" 
+      onClick={onClose}
+      variants={backdropVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div 
+        className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-lg flex flex-col text-white relative" 
+        onClick={e => e.stopPropagation()}
+        variants={panelVariants}
+      >
         <header className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-xl font-bold">Visão do Nexus</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white">
@@ -150,7 +170,7 @@ export const CameraView: React.FC<CameraViewProps> = ({ onClose, onSend }) => {
               <button onClick={handleCapture} disabled={!stream || !!error} className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-full transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-lg font-bold">Capturar</button>
           )}
         </footer>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

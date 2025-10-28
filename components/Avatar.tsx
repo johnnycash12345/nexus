@@ -22,12 +22,12 @@ const useAvatarSound = (status: AssistantStatus) => {
     // This is a placeholder for sound playback.
     // In a real app, you would have sound files in /public/sounds/
     const soundMap: Partial<Record<AssistantStatus, string>> = {
-      [AssistantStatus.LISTENING]: 'listen.mp3',
-      [AssistantStatus.SUCCESS]: 'success.mp3',
-      [AssistantStatus.ERROR]: 'error.mp3',
-      [AssistantStatus.CURIOUS]: 'curious.mp3',
-      [AssistantStatus.SLEEPY]: 'sleepy.mp3',
-      [AssistantStatus.SURPRISED]: 'surprised.mp3',
+      'LISTENING': 'listen.mp3',
+      'SUCCESS': 'success.mp3',
+      'ERROR': 'error.mp3',
+      'CURIOUS': 'curious.mp3',
+      'SLEEPY': 'sleepy.mp3',
+      'SURPRISED': 'surprised.mp3',
     };
     const file = soundMap[status];
     // To prevent console errors if files don't exist, we won't play them in this environment.
@@ -44,15 +44,31 @@ export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 
   const theme = themeColors[appearance];
   
   // Modulate idle animation speed with intensity
-  const bodyStyle = status === AssistantStatus.IDLE ? {
+  const bodyStyle = status === 'IDLE' ? {
       animationDuration: `${4 / Math.max(0.5, intensity)}s`
   } : {};
+
+  const statusDescriptions: Record<AssistantStatus, string> = {
+    IDLE: "Nexus está ocioso.",
+    LISTENING: "Nexus está ouvindo.",
+    THINKING: "Nexus está pensando.",
+    SPEAKING: "Nexus está falando.",
+    SUCCESS: "Nexus concluiu a tarefa com sucesso.",
+    ERROR: "Nexus encontrou um erro.",
+    CURIOUS: "Nexus está curioso.",
+    SLEEPY: "Nexus está adormecido.",
+    SURPRISED: "Nexus está surpreso.",
+    REWRITING_CODE: "Nexus está se auto-aprimorando.",
+    SELF_ANALYSIS: "Nexus está em auto-análise.",
+    SEARCHING_WEB: "Nexus está pesquisando na web.",
+    ROLLBACK: "Nexus está revertendo para um estado anterior.",
+  };
 
   return (
     <div className={`relative ${className || 'w-64 h-64'}`}>
       <div className="absolute bottom-0 w-32 h-2 bg-cyan-400 rounded-full blur-xl opacity-40 shadow-xl animate-pulse"></div>
 
-      <svg viewBox="0 0 200 200" className={`w-full h-full transition-all duration-700 ${bodyMotion} drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)]`} style={bodyStyle}>
+      <svg viewBox="0 0 200 200" className={`w-full h-full transition-all duration-700 ${bodyMotion} drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)]`} style={bodyStyle} role="img" aria-label={statusDescriptions[status] || 'Avatar do Nexus'}>
         <defs>
           <radialGradient id="bodyGradient" cx="50%" cy="50%" r="80%">
             <stop offset="0%" stopColor="#6b7280" />
@@ -65,7 +81,7 @@ export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 
         </defs>
         
         {/* Thinking Waves */}
-        {status === AssistantStatus.THINKING && (
+        {status === 'THINKING' && (
           <g transform="translate(100, 80)">
             <circle className="thinking-wave wave-1" r="20" fill="none" stroke="#facc15" strokeWidth="1.5" />
             <circle className="thinking-wave wave-2" r="20" fill="none" stroke="#facc15" strokeWidth="1.5" />
@@ -92,7 +108,7 @@ export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 
               <circle cx="115" cy="75" r="10" fill="url(#eyeGlow)" />
               <circle cx="115" cy="75" r="3" fill={theme.eye} className="eye-reflect" />
             </g>
-            {status === AssistantStatus.LISTENING && (
+            {status === 'LISTENING' && (
               <g>
                 <circle cx="85" cy="75" r="5" fill={theme.accent} className="listen-pulse" />
                 <circle cx="115" cy="75" r="5" fill={theme.accent} className="listen-pulse" />
@@ -103,22 +119,22 @@ export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 
 
         {/* Mouth / Indicator */}
         <g transform="translate(100, 95)">
-          {status === AssistantStatus.SPEAKING ? (
+          {status === 'SPEAKING' ? (
             <rect x="-15" y="-2.5" width="30" height="5" rx="2" fill={theme.accent} className="speak-mouth" />
-          ) : status === AssistantStatus.THINKING ? (
+          ) : status === 'THINKING' ? (
              <circle r="6" fill="#facc15" className="think-pulse" />
-          ) : status === AssistantStatus.SUCCESS ? (
+          ) : status === 'SUCCESS' ? (
             <path d="M -10 -2 L 0 8 L 10 -2" stroke="#4ade80" strokeWidth="3" fill="none" strokeLinecap="round" />
-          ) : status === AssistantStatus.ERROR ? (
+          ) : status === 'ERROR' ? (
             <g transform="rotate(45)">
               <rect x="-10" y="-1.5" width="20" height="3" fill="#f87171" rx="1.5" />
               <rect x="-1.5" y="-10" width="3" height="20" fill="#f87171" rx="1.5" />
             </g>
-          ) : status === AssistantStatus.CURIOUS ? (
+          ) : status === 'CURIOUS' ? (
             <path d="M -8 -1 Q 0 6 8 -1" stroke="#facc15" strokeWidth="2" fill="none" strokeLinecap="round" />
-          ) : status === AssistantStatus.SLEEPY ? (
+          ) : status === 'SLEEPY' ? (
             <path d="M -8 0 Q 0 -3 8 0" stroke="#94a3b8" strokeWidth="2" fill="none" strokeLinecap="round" />
-          ) : status === AssistantStatus.SURPRISED ? (
+          ) : status === 'SURPRISED' ? (
             <circle r="5" fill={theme.accent} />
           ) : (
             <rect x="-10" y="-1" width="20" height="2" rx="1" fill={theme.accent} fillOpacity="0.6" />

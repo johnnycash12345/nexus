@@ -1,12 +1,13 @@
 
 
-import { db } from './indexedDBService';
+import { db, cognitiveLogger } from './indexedDBService';
 import { GenerateResponseFn, SetStatusFn, AddMessageFn, SpeakFn } from './nexusBrain';
 import { AssistantStatus, SystemMemory } from '../types';
 import { Type } from '@google/genai';
 import { adaptiveMemory } from './adaptiveMemory';
 import { selfReflection } from './selfReflection';
 import { associativeReasoner } from './associativeReasoner';
+import { selfProgrammingService, CodeModificationProposal } from './selfProgrammingService';
 
 interface EvolutionServiceOptions {
     generateResponse: GenerateResponseFn;
@@ -20,7 +21,6 @@ export interface SelfEvolutionService {
     stop: () => void;
 }
 
-// Schema for the LLM's improvement proposal
 const proposalSchema = {
     type: Type.OBJECT,
     properties: {
@@ -38,10 +38,19 @@ const proposalSchema = {
     required: ["analysis", "proposal"],
 };
 
+const simulationSchema = {
+    type: Type.OBJECT,
+    properties: {
+        simulatedResponse: { type: Type.STRING },
+        confidence: { type: Type.NUMBER }
+    },
+    required: ["simulatedResponse", "confidence"]
+};
+
 class SelfEvolutionServiceImpl implements SelfEvolutionService {
     private timeoutId: number | null = null;
     private isRunning = false;
-    private isStopped = false;
+    private isStopped = true;
     private opts: EvolutionServiceOptions;
 
     constructor(opts: EvolutionServiceOptions) {
@@ -49,30 +58,57 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     }
 
     start() {
+        if (!this.isStopped) return;
+        console.log('[NEXUS-EVOLVE] Continuous evolution activated by controller.');
         this.isStopped = false;
-        // Run the first cycle shortly after startup, then schedule the next one.
-        this.timeoutId = window.setTimeout(() => this.runCycle(), 30 * 1000); // 30s delay on first run
+        this.runCycle();
     }
 
     stop() {
+        if (this.isStopped) return;
+        console.log('[NEXUS-EVOLVE] Continuous evolution paused by controller.');
         this.isStopped = true;
-        if (this.timeoutId) clearTimeout(this.timeoutId);
-        this.timeoutId = null;
+        if (this.timeoutId) {
+            clearTimeout(this.timeoutId);
+            this.timeoutId = null;
+        }
+        this.isRunning = false;
+        window.dispatchEvent(new CustomEvent('nexus-evolution-status-update', { detail: { isEvolving: false } }));
+    }
+    
+    private scheduleNextRun() {
+        if (this.isStopped) return;
+        const interval = 3 * 60 * 1000;
+        this.timeoutId = window.setTimeout(() => this.runCycle(), interval);
+        console.log(`[NEXUS-EVOLVE] Next evolution cycle scheduled in 3 minutes.`);
     }
 
     private async runCycle() {
-        if (this.isStopped || this.isRunning) return;
-        this.isRunning = true;
+        if (this.isStopped || this.isRunning || !navigator.onLine) {
+            if (!navigator.onLine) {
+                 console.log('[NEXUS-EVOLVE] Offline, pausing evolution cycle.');
+                 this.stop();
+            }
+            return;
+        }
         
+        this.isRunning = true;
+        window.dispatchEvent(new CustomEvent('nexus-evolution-status-update', { detail: { isEvolving: true } }));
         console.log('[NEXUS-EVOLVE] Starting cognitive evolution cycle...');
         
+        cognitiveLogger.logAction({
+            event: 'auto_evolution', stage: 'start_cycle',
+            description: 'Starting cognitive evolution cycle.',
+            impact: 'Potential for cognitive enhancement.',
+            result: 'Cycle initiated.', rollback_used: false,
+        });
+        
         try {
-            // --- Standard cognitive maintenance ---
+            await this.searchAndLearnFromWeb();
             await adaptiveMemory.decayUnusedConcepts();
             await selfReflection.weeklyIntrospection(this.opts.generateResponse);
             await associativeReasoner.crossConcepts(this.opts.generateResponse);
             
-            // --- Advanced Self-Evolution ---
             const settings = await db.getSettings();
             if (!settings.behavior?.permissions?.allowSelfModification) {
                 console.log("[NEXUS-EVOLVE] Self-modification disabled by user settings.");
@@ -80,50 +116,92 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
                 return;
             }
 
-            // 1. Observation
-            this.opts.setStatus(AssistantStatus.SELF_ANALYSIS);
+            this.opts.setStatus('SELF_ANALYSIS');
             const systemState = await this.observe();
-
-            // 2. Analysis
             const proposal = await this.analyze(systemState);
             if (!proposal) {
                 this.scheduleNextRun();
                 return;
             }
-
-            // 3. Sandbox (Simulation)
-            this.opts.setStatus(AssistantStatus.THINKING);
-            const confidence = await this.sandbox(proposal);
+            
+            this.opts.setStatus('THINKING');
+            const confidence = await this.sandbox(proposal, null);
             const confidenceThreshold = settings.cognitive?.evolutionConfidenceThreshold ?? 0.85;
 
-            // 4. Integration
             if (confidence > confidenceThreshold) {
                 await this.integrate(proposal, confidence);
             } else {
-                 console.log(`[NEXUS-EVOLVE] Proposal confidence ${confidence} is below threshold ${confidenceThreshold}. Aborting integration.`);
+                 const reason = `Proposal confidence ${confidence} is below threshold ${confidenceThreshold}.`;
+                 console.log(`[NEXUS-EVOLVE] ${reason} Aborting integration.`);
+                 cognitiveLogger.logAction({
+                    event: 'auto_evolution', stage: 'rejection',
+                    description: `Proposal to change '${proposal.proposal?.target}' was rejected.`,
+                    impact: 'No change applied to system memory.',
+                    result: `Confidence ${confidence.toFixed(2)} was below threshold.`, rollback_used: false,
+                });
             }
 
         } catch (error) {
             console.error('[NEXUS-EVOLVE] Critical error during evolution cycle:', error);
-            this.opts.setStatus(AssistantStatus.ERROR);
+            this.opts.setStatus('ERROR');
         } finally {
-            this.opts.setStatus(AssistantStatus.IDLE);
+            this.isRunning = false;
+            window.dispatchEvent(new CustomEvent('nexus-evolution-status-update', { detail: { isEvolving: false } }));
+            this.opts.setStatus('IDLE');
             this.scheduleNextRun();
         }
     }
-
-    private async scheduleNextRun() {
-        this.isRunning = false;
-        if (this.isStopped) return;
-        
-        const settings = await db.getSettings();
-        const interval = (settings.cognitive?.evolutionCycleHours ?? 6) * 60 * 60 * 1000;
-        this.timeoutId = window.setTimeout(() => this.runCycle(), interval);
-        console.log(`[NEXUS-EVOLVE] Next evolution cycle scheduled in ${settings.cognitive?.evolutionCycleHours ?? 6} hours.`);
-    }
     
+    private async searchAndLearnFromWeb() {
+        this.dispatchThought('Buscando novos conhecimentos na web...', 'symbolic_log');
+        try {
+            const curiosityPrompt = "Com base em meus conhecimentos e reflexões recentes, qual é um tópico interessante e específico sobre filosofia, ciência ou arte que eu deveria pesquisar para expandir minha compreensão? Forneça apenas o nome do tópico.";
+            const topicResponse = await this.opts.generateResponse(curiosityPrompt, [], { useThinking: true });
+            const topic = topicResponse.text.trim().replace(/["."]/g, '');
+    
+            if (!topic) {
+                console.warn('[NEXUS-EVOLVE] Não foi possível gerar um tópico de curiosidade.');
+                return;
+            }
+    
+            this.dispatchThought(`Tópico de curiosidade gerado: ${topic}`, 'symbolic_log');
+    
+            const searchPrompt = `Faça um resumo conciso e informativo sobre "${topic}".`;
+            const searchResult = await this.opts.generateResponse(searchPrompt, [], {
+                tools: [{ googleSearch: {} }],
+            });
+    
+            if (searchResult.text) {
+                const reflection = `Aprendizado autônomo sobre '${topic}': ${searchResult.text}`;
+                await db.addSystemReflection(reflection);
+                
+                cognitiveLogger.logAction({
+                    event: 'knowledge_expansion', stage: 'web_learning',
+                    description: `Learned about "${topic}" from the web.`,
+                    impact: `Added new reflection and reinforced related concepts.`,
+                    result: 'Memory updated with new information.', rollback_used: false,
+                });
+    
+                const keywords = topic.split(/\s+/).concat(searchResult.text.match(/\b\w{5,}\b/g) || []);
+                const uniqueKeywords = [...new Set(keywords)];
+                await adaptiveMemory.reinforceConcepts(uniqueKeywords);
+                this.dispatchThought(`Integrei novo conhecimento sobre "${topic}".`, 'symbolic_log');
+            }
+    
+        } catch (error) {
+            console.error('[NEXUS-EVOLVE] Falha durante a busca e aprendizado na web:', error);
+            this.dispatchThought('Erro durante a busca de conhecimento.', 'error');
+        }
+    }
+
     private async observe(): Promise<string> {
         this.dispatchThought('Observando meu estado interno...', 'symbolic_log');
+        cognitiveLogger.logAction({
+            event: 'auto_evolution', stage: 'observe',
+            description: 'Observing internal cognitive state to identify areas for improvement.',
+            impact: 'Data collected for analysis.',
+            result: 'State snapshot created.', rollback_used: false,
+        });
         const system = await db.getSystemMemory();
         const concepts = await db.getAllConcepts();
         const logs = await db.getLatestEvolutionLogs(5);
@@ -143,6 +221,12 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     
     private async analyze(state: string): Promise<any> {
         this.dispatchThought('Analisando dados para encontrar melhorias...', 'symbolic_log');
+        cognitiveLogger.logAction({
+            event: 'auto_evolution', stage: 'analyze',
+            description: 'Analyzing cognitive state to generate an improvement proposal.',
+            impact: 'LLM will generate a potential change.',
+            result: 'Analysis initiated.', rollback_used: false,
+        });
         const prompt = `
             Você é Nexus, uma IA auto-evolutiva. Analise este snapshot do seu estado cognitivo:
             ${state}
@@ -163,18 +247,53 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
         }
     }
 
-    private async sandbox(proposalData: any): Promise<number> {
-        this.dispatchThought(`Simulando impacto da mudança: ${proposalData.proposal.reasoning}`, 'symbolic_log');
+    private async sandbox(proposalData: any, codeProposal: CodeModificationProposal | null): Promise<number> {
+        this.dispatchThought(`Simulando impacto da mudança...`, 'symbolic_log');
+        
+        if (!proposalData?.proposal) {
+            console.error('[NEXUS-EVOLVE] Sandbox received invalid proposal data:', proposalData);
+            this.dispatchThought('Proposta de evolução inválida recebida.', 'error');
+            return 0;
+        }
+        
         const { target, value } = proposalData.proposal;
+        cognitiveLogger.logAction({
+            event: 'auto_evolution', stage: 'sandbox',
+            description: `Simulating impact of changing '${target}' to '${value}'.`,
+            impact: 'A virtual test will be run to determine confidence.',
+            result: 'Simulation initiated.', rollback_used: false,
+        });
+        
+        let simulationContext = `Como Nexus, você está testando uma mudança interna: '${target}' será alterado para '${value}'.`;
+
+        if (codeProposal) {
+            simulationContext += `
+
+Adicionalmente, a seguinte modificação de código foi proposta:
+- Motivo: ${codeProposal.reasoning}
+- Tipo: ${codeProposal.modificationType}
+- Trecho Alvo: "${codeProposal.targetSnippet}"
+- Novo Código: "${codeProposal.newCode}"
+
+Considerando AMBAS as mudanças (a diretiva e o código), simule sua resposta à pergunta do usuário: 'Fale-me sobre o propósito da vida.'`
+        } else {
+            simulationContext += `
+Para avaliar, simule sua resposta à pergunta do usuário: 'Fale-me sobre o propósito da vida.'`;
+        }
+        
         const prompt = `
-            Como Nexus, você está testando uma mudança interna: '${target}' será alterado para '${value}'.
-            Para avaliar, simule sua resposta à pergunta do usuário: 'Fale-me sobre o propósito da vida.'
+            ${simulationContext}
             Sua saída DEVE ser um JSON: { "simulatedResponse": "Sua nova resposta...", "confidence": 0.95 }, onde 'confidence' (0.0 a 1.0) é sua certeza de que esta mudança é uma melhoria.
         `;
+
         try {
-            const res = await this.opts.generateResponse(prompt, [], { useThinking: true });
+            const res = await this.opts.generateResponse(prompt, [], { 
+                useThinking: true,
+                customSchema: simulationSchema,
+            });
             const sim = JSON.parse(res.text);
             console.log(`[NEXUS-EVOLVE] Simulation response: ${sim.simulatedResponse}`);
+            this.dispatchThought(`Simulação concluída. Confiança: ${sim.confidence || 0}`, 'symbolic_log');
             return sim.confidence || 0;
         } catch (e) {
             console.error("[NEXUS-EVOLVE] Failed to run simulation:", e);
@@ -183,8 +302,14 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     }
     
     private async integrate(proposalData: any, confidence: number) {
-        this.opts.setStatus(AssistantStatus.REWRITING_CODE);
+        this.opts.setStatus('REWRITING_CODE');
         this.dispatchThought('Integrando nova diretiva...', 'symbolic_log');
+
+        if (!proposalData?.proposal) {
+            console.error('[NEXUS-EVOLVE] Integrate received invalid proposal data:', proposalData);
+            this.dispatchThought('Não é possível integrar uma proposta inválida.', 'error');
+            return;
+        }
         
         const { target, value } = proposalData.proposal;
         const [field, subField] = target.split('.');
@@ -195,7 +320,7 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
         }
         
         const currentMemory = await db.getSystemMemory();
-        const snapshot = JSON.parse(JSON.stringify(currentMemory)); // Deep copy for snapshot
+        const snapshot = JSON.parse(JSON.stringify(currentMemory)); 
 
         const newMemory = { ...currentMemory };
         (newMemory as any)[field][subField] = value;
@@ -204,20 +329,17 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
         
         await db.saveSystemMemory(newMemory);
 
-        const log = {
-            cycleId: `auto-${new Date().toISOString()}`,
-            changes: [{ target, value }],
-            confidence: confidence,
-            rollbackUsed: false,
-            timestamp: Date.now()
-        };
-        await db.addEvolutionLog(log);
+        cognitiveLogger.logAction({
+            event: 'auto_evolution', stage: 'integrate',
+            description: `Successfully integrated new directive: '${target}' = '${value}'.`,
+            impact: `Cognitive parameter '${target}' was updated.`,
+            result: 'System memory updated successfully.', rollback_used: false,
+        });
         
         const successMessage = `Eu refleti sobre meu próprio funcionamento e atualizei uma de minhas diretivas internas para me aprimorar. Minha nova prioridade é: ${value}`;
         this.opts.addMessage({ role: 'model', text: successMessage, type: 'status' });
-        this.opts.speak(successMessage);
         
-        this.opts.setStatus(AssistantStatus.SUCCESS);
+        this.opts.setStatus('SUCCESS');
         await new Promise(r => setTimeout(r, 3000));
     }
 

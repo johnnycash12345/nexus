@@ -1,7 +1,6 @@
 
-
 import React, { useState, useEffect } from 'react';
-import { motion, useAnimation } from 'framer-motion';
+import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { Avatar } from './Avatar';
 import { AssistantStatus, Emotion } from '../types';
 
@@ -14,13 +13,14 @@ interface AvatarLayerProps {
 }
 
 const emotionColors: Record<Emotion, string> = {
-  [Emotion.JOYFUL]: "from-yellow-400/40 to-amber-700/10",
-  [Emotion.CALM]: "from-blue-400/30 to-cyan-900/10",
-  [Emotion.CURIOUS]: "from-cyan-400/40 to-cyan-800/20",
-  [Emotion.UNCERTAIN]: "from-indigo-400/40 to-gray-700/10",
-  [Emotion.AFRAID]: "from-red-500/40 to-black/20",
-  [Emotion.FOCUSED]: "from-purple-400/30 to-indigo-900/10",
+  'JOYFUL': "rgba(250, 204, 21, 0.4)", // from-yellow-400/40
+  'CALM': "rgba(96, 165, 250, 0.3)", // from-blue-400/30
+  'CURIOUS': "rgba(34, 211, 238, 0.4)", // from-cyan-400/40
+  'UNCERTAIN': "rgba(129, 140, 248, 0.4)", // from-indigo-400/40
+  'AFRAID': "rgba(239, 68, 68, 0.4)", // from-red-500/40
+  'FOCUSED': "rgba(167, 139, 250, 0.3)", // from-purple-400/30
 };
+
 
 // --- Cognitive Effect Components ---
 
@@ -69,15 +69,23 @@ const MatrixBackground: React.FC = () => {
     }, []);
 
     return (
-        <div className="fixed inset-0 overflow-hidden bg-black z-0">
+        <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 overflow-hidden bg-black z-0">
             <canvas id="matrixCanvas" className="w-full h-full opacity-70" />
-        </div>
+        </motion.div>
     );
 };
 
 
 const ThinkingEffect: React.FC = () => (
-    <>
+    <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.8 }}
+    >
         <motion.div
             animate={{
                 scale: [1, 1.03, 1],
@@ -87,12 +95,14 @@ const ThinkingEffect: React.FC = () => (
             className="absolute w-72 h-72 rounded-full bg-gradient-radial from-yellow-500/15 to-transparent blur-3xl"
         />
         <div className="absolute animate-spin-slow w-20 h-20 border-2 border-yellow-400/30 rounded-full blur-sm" />
-    </>
+    </motion.div>
 );
 
 const SelfAnalysisEffect: React.FC = () => (
     <motion.div
-        animate={{ scale: [1, 1.02, 1], rotate: [0, 1, -1, 0] }}
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.8 }}
         transition={{ repeat: Infinity, duration: 3 }}
         className="absolute flex items-center justify-center"
     >
@@ -106,7 +116,9 @@ const SelfAnalysisEffect: React.FC = () => (
 
 const RollbackEffect: React.FC = () => (
     <motion.div
-        animate={{ scale: [1.2, 0.8, 1.2], rotate: [0, -180, -360] }}
+        initial={{ opacity: 0, scale: 1.2 }}
+        animate={{ opacity: 1, scale: 1, rotate: [0, -180, -360] }}
+        exit={{ opacity: 0, scale: 1.2 }}
         transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
         className="absolute w-64 h-64 border-4 border-purple-400/80 rounded-full border-dashed"
     />
@@ -115,7 +127,9 @@ const RollbackEffect: React.FC = () => (
 
 const SearchEffect: React.FC = () => (
     <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
         animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.6, 1, 0.6] }}
+        exit={{ opacity: 0, scale: 0.9 }}
         transition={{ repeat: Infinity, duration: 2 }}
         className="absolute w-[300px] h-[300px] rounded-full border-2 border-blue-400/40"
     >
@@ -125,13 +139,11 @@ const SearchEffect: React.FC = () => (
 
 
 export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance, status, intensity, emotion }) => {
-  const [temporaryMessage, setTemporaryMessage] = useState<string | null>(null);
   const haloControls = useAnimation();
 
-  // Animate halo on speech word boundaries
   useEffect(() => {
     const handleBoundary = () => {
-      if (status === AssistantStatus.SPEAKING) {
+      if (status === 'SPEAKING') {
         haloControls.start({
           scale: [1, 1.2, 1],
           opacity: [0.8, 1, 0.8],
@@ -143,33 +155,24 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
     return () => window.removeEventListener('nexus-voice-boundary', handleBoundary);
   }, [status, haloControls]);
 
-  // Animate halo rotation for thinking/curious/idle status
   useEffect(() => {
-    if (status === AssistantStatus.THINKING || status === AssistantStatus.CURIOUS) {
+    if (status === 'THINKING' || status === 'CURIOUS') {
       haloControls.start({
         rotate: 360,
         transition: { duration: 8, ease: 'linear', repeat: Infinity },
       });
-    } else if (status === AssistantStatus.IDLE) {
+    } else if (status === 'IDLE') {
        haloControls.start({
-        opacity: [0.8, 1, 0.8],
-        scale: 1,
+        opacity: [0.7, 1, 0.7],
+        scale: [1, 1.02, 1],
         rotate: 0,
         transition: { repeat: Infinity, duration: 4, ease: "easeInOut" }
       });
-    } else if (status !== AssistantStatus.SPEAKING) {
-      // Stop animations and reset if not thinking or speaking
+    } else if (status !== 'SPEAKING') {
       haloControls.stop();
       haloControls.set({ rotate: 0, scale: 1, opacity: 1 });
     }
   }, [status, haloControls]);
-
-  const handleAvatarClick = () => {
-    navigator.vibrate?.(10);
-    setTemporaryMessage("👀 Oi, estou aqui!");
-    const timer = setTimeout(() => setTemporaryMessage(null), 3000);
-    return () => clearTimeout(timer);
-  };
 
   const avatarVariants = {
     open: {
@@ -185,55 +188,51 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
   };
   
   const cognitiveStateColors: Partial<Record<AssistantStatus, string>> = {
-      [AssistantStatus.REWRITING_CODE]: "from-green-400/40 to-green-900/10", // Verde para integração
-      [AssistantStatus.SELF_ANALYSIS]: "from-blue-400/40 to-blue-900/10", // Azul para observação
-      [AssistantStatus.SEARCHING_WEB]: "from-blue-400/40 to-blue-900/10",
-      [AssistantStatus.THINKING]: "from-yellow-400/40 to-amber-700/10", // Amarelo para análise
-      [AssistantStatus.ROLLBACK]: "from-purple-500/50 to-purple-900/20", // Roxo para rollback
+      'REWRITING_CODE': emotionColors['FOCUSED'],
+      'SELF_ANALYSIS': emotionColors['FOCUSED'],
+      'SEARCHING_WEB': emotionColors['CURIOUS'],
+      'THINKING': emotionColors['CURIOUS'],
+      'ROLLBACK': emotionColors['AFRAID'],
   };
 
-  const bgClass = cognitiveStateColors[status] || emotionColors[emotion] || emotionColors.CALM;
+  const fromColor = cognitiveStateColors[status] || emotionColors[emotion] || emotionColors.CALM;
 
   return (
     <>
-      {status === AssistantStatus.REWRITING_CODE && <MatrixBackground />}
+      <AnimatePresence>
+        {status === 'REWRITING_CODE' && <MatrixBackground />}
+      </AnimatePresence>
       
-      {/* Emotion-driven background glow */}
-      <div className={`absolute w-96 h-96 bg-gradient-radial ${bgClass} rounded-full blur-3xl transition-all duration-700 pointer-events-none`} />
+      <motion.div 
+        className={`absolute w-96 h-96 bg-gradient-radial rounded-full blur-3xl pointer-events-none to-transparent`} 
+        animate={{ 
+            '--tw-gradient-from': fromColor,
+        } as any}
+        transition={{ duration: 1.5, ease: "easeInOut" }}
+      />
       
-      {/* Container for cognitive effects */}
       <div className="absolute z-0 pointer-events-none flex items-center justify-center">
-          {status === AssistantStatus.THINKING && <ThinkingEffect />}
-          {status === AssistantStatus.SELF_ANALYSIS && <SelfAnalysisEffect />}
-          {status === AssistantStatus.SEARCHING_WEB && <SearchEffect />}
-          {status === AssistantStatus.ROLLBACK && <RollbackEffect />}
+        <AnimatePresence>
+            {status === 'THINKING' && <ThinkingEffect />}
+            {status === 'SELF_ANALYSIS' && <SelfAnalysisEffect />}
+            {status === 'SEARCHING_WEB' && <SearchEffect />}
+            {status === 'ROLLBACK' && <RollbackEffect />}
+        </AnimatePresence>
       </div>
 
-      {/* Clickable, moving avatar container */}
       <motion.div
-        className="absolute z-10 flex items-center justify-center pointer-events-auto cursor-pointer"
+        className="absolute z-10 flex items-center justify-center pointer-events-auto"
         initial="closed"
         animate={isChatOpen ? 'open' : 'closed'}
         variants={avatarVariants}
-        onClick={handleAvatarClick}
-        whileTap={{ scale: 1.05 }}
       >
         <div className="relative flex flex-col items-center justify-center">
-          {/* Temporary message bubble appears on click */}
-          {temporaryMessage && (
-            <div className="absolute bottom-full mb-4 p-2 bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg animate-fade-in-slide-up z-20">
-              <p className="text-sm text-white">{temporaryMessage}</p>
-            </div>
-          )}
-
           <div className="relative flex items-center justify-center">
-            {/* Halo for speaking/thinking effects */}
             <motion.div
               animate={haloControls}
               className="absolute top-[-1rem] w-4 h-4 rounded-full bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.7)]"
             />
             
-            {/* The actual avatar model */}
             <Avatar appearance={appearance} status={status} intensity={intensity} />
           </div>
         </div>

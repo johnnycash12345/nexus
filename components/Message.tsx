@@ -1,63 +1,56 @@
+
 import React from 'react';
+import { motion } from 'framer-motion';
 import { ChatMessage, Concept, NewsArticle } from '../types';
 
 interface MessageProps extends ChatMessage {
   onAction?: (action: string, payload: any) => void;
 }
 
-const MessageStyles: React.FC = () => (
-  <style>{`
-    @keyframes fade-in-slide-up {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    .animate-fade-in-slide-up {
-      animation: fade-in-slide-up 0.3s ease-out forwards;
-    }
-  `}</style>
-);
+const messageVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { type: 'spring', stiffness: 100, damping: 12 }
+  }
+};
 
 export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources, articles }) => {
   const isUser = role === 'user';
   
   if (type === 'status') {
     return (
-      <div className="flex justify-center animate-fade-in-slide-up">
+      <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-center">
         <p className="text-sm text-gray-400 italic">{text}</p>
-      </div>
+      </motion.div>
     );
   }
   
   if (type === 'diary_entry') {
       return (
-          <div className="flex justify-center animate-fade-in-slide-up my-2">
+          <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-center my-2">
               <div className="w-full max-w-md bg-gray-700/80 border border-cyan-500/30 rounded-lg p-4 shadow-lg backdrop-blur-sm">
                   <h3 className="font-bold text-cyan-400 mb-2">Diário do Nexus</h3>
                   <p className="text-gray-300 italic whitespace-pre-wrap">"{text}"</p>
               </div>
-          </div>
+          </motion.div>
       );
   }
   
   if (type === 'curiosity_prompt') {
       return (
-          <div className="flex justify-start animate-fade-in-slide-up">
+          <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-start">
               <div className="max-w-xs md:max-w-md lg:max-w-lg px-4 py-3 rounded-2xl shadow-md bg-yellow-600/80 rounded-bl-none border border-yellow-400/50">
                    <p className="text-white whitespace-pre-wrap"><span className="font-bold">Pergunta para você:</span> {text}</p>
               </div>
-          </div>
+          </motion.div>
       );
   }
 
   if (type === 'concept_consolidation_prompt') {
     return (
-      <div className="flex justify-start animate-fade-in-slide-up my-2">
+      <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-start my-2">
           <div className="w-full max-w-md bg-gray-700/80 border border-yellow-500/30 rounded-lg p-4 shadow-lg backdrop-blur-sm">
               <h3 className="font-bold text-yellow-400 mb-2">🧠 Organizando Ideias</h3>
               <p className="text-gray-300 mb-4">{text}</p>
@@ -76,13 +69,13 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
                   </button>
               </div>
           </div>
-      </div>
+      </motion.div>
     );
   }
 
   if (type === 'news_summary') {
     return (
-      <div className="flex justify-start animate-fade-in-slide-up my-2">
+      <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-start my-2">
         <div className="w-full max-w-md bg-gray-700/80 border border-gray-600/50 rounded-lg p-4 shadow-lg backdrop-blur-sm">
           <p className="text-gray-300 mb-4">{text}</p>
           <div className="space-y-3">
@@ -95,13 +88,12 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className={`flex items-end animate-fade-in-slide-up ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <MessageStyles />
+    <motion.div variants={messageVariants} initial="hidden" animate="visible" className={`flex items-end ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
         className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-3 rounded-2xl shadow-md ${
           isUser
@@ -135,6 +127,6 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
             </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };

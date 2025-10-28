@@ -1,27 +1,26 @@
-export enum AssistantStatus {
-  IDLE = 'IDLE',
-  LISTENING = 'LISTENING',
-  THINKING = 'THINKING',
-  SPEAKING = 'SPEAKING',
-  SUCCESS = 'SUCCESS',
-  ERROR = 'ERROR',
-  CURIOUS = 'CURIOUS',
-  SLEEPY = 'SLEEPY',
-  SURPRISED = 'SURPRISED',
-  REWRITING_CODE = 'REWRITING_CODE',
-  SELF_ANALYSIS = 'SELF_ANALYSIS',
-  SEARCHING_WEB = 'SEARCHING_WEB',
-  ROLLBACK = 'ROLLBACK',
-}
 
-export enum Emotion {
-  CURIOUS = 'CURIOUS',
-  JOYFUL = 'JOYFUL',
-  UNCERTAIN = 'UNCERTAIN',
-  CALM = 'CALM',
-  FOCUSED = 'FOCUSED',
-  AFRAID = 'AFRAID',
-}
+export type AssistantStatus =
+  | 'IDLE'
+  | 'LISTENING'
+  | 'THINKING'
+  | 'SPEAKING'
+  | 'SUCCESS'
+  | 'ERROR'
+  | 'CURIOUS'
+  | 'SLEEPY'
+  | 'SURPRISED'
+  | 'REWRITING_CODE'
+  | 'SELF_ANALYSIS'
+  | 'SEARCHING_WEB'
+  | 'ROLLBACK';
+
+export type Emotion =
+  | 'CURIOUS'
+  | 'JOYFUL'
+  | 'UNCERTAIN'
+  | 'CALM'
+  | 'FOCUSED'
+  | 'AFRAID';
 
 export interface EmotionState {
   current: Emotion;
@@ -118,7 +117,7 @@ export interface MetaReflection {
     nextStep: string;
 }
 
-// FIX: Exported LlmCognitiveResponse from here to be a shared type, resolving import errors.
+// LlmCognitiveResponse is a shared type across LLM services.
 export type LlmCognitiveResponse = {
   text: string;
   sources?: { uri: string; title: string }[];
@@ -235,6 +234,8 @@ export interface Permissions {
   allowApiAccess: boolean;
   allowAutonomousDecision: boolean;
   allowSelfModification: boolean;
+  autoEvolutionEnabled?: boolean;
+  transparencyMode?: boolean;
 }
 
 export interface BehaviorSettings {
@@ -256,4 +257,32 @@ export interface CognitiveSettings {
 export interface ApiKeySettings {
     deepseekApiKey?: string;
     newsApiKey?: string;
+}
+
+// --- Cognitive Transparency Types ---
+
+export type ThoughtCategory = 'self-reflection' | 'decision-making' | 'learning' | 'correction' | 'emotional-analysis' | 'logic-deduction' | 'planning';
+
+export interface Thought {
+  id?: number;
+  thought_id: string; // e.g., T-YYYY-MM-DD-SS
+  timestamp: number;
+  category: ThoughtCategory;
+  context: string;
+  summary: string;
+  emotional_state: Emotion;
+  confidence: number;
+}
+
+export type CognitiveEvent = 'auto_evolution' | 'knowledge_expansion' | 'code_rewrite' | 'rollback' | 'new_learning' | 'memory_consolidation' | 'emotional_shift';
+
+export interface CognitiveLog {
+    id?: number;
+    timestamp: number;
+    event: CognitiveEvent;
+    stage: string;
+    description: string;
+    impact: string;
+    result: string;
+    rollback_used: boolean;
 }

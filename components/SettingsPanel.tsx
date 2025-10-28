@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AppSettings, Concept, Permissions } from '../types';
 import { db } from '../services/indexedDBService';
 import { GeneralSettings } from './settings/GeneralSettings';
@@ -8,6 +9,7 @@ import { IntegrationsSettings } from './settings/IntegrationsSettings';
 import { MemorySettings } from './settings/MemorySettings';
 
 interface SettingsPanelProps {
+  isVisible: boolean;
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
   onClose: () => void;
@@ -17,7 +19,22 @@ interface SettingsPanelProps {
 
 type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória';
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChange, onClose, token, onLogout }) => {
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const panelVariants = {
+  hidden: { opacity: 0, scale: 0.95, y: 20 },
+  visible: { 
+    opacity: 1, 
+    scale: 1, 
+    y: 0,
+    transition: { type: 'spring', stiffness: 120, damping: 15 }
+  },
+};
+
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, settings, onSettingsChange, onClose, token, onLogout }) => {
   const [activeTab, setActiveTab] = useState<Tab>('geral');
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -117,8 +134,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-md m-4 flex flex-col" onClick={e => e.stopPropagation()}>
+    <motion.div 
+      className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center backdrop-blur-sm" 
+      onClick={onClose}
+      variants={backdropVariants}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div 
+        className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-md m-4 flex flex-col" 
+        onClick={e => e.stopPropagation()}
+        variants={panelVariants}
+      >
         <style>{`
             .toggle-checkbox {
                 appearance: none; width: 40px; height: 20px; background-color: #4a5568;
@@ -151,13 +180,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
         </main>
         
         <footer className="flex-shrink-0 flex items-center justify-end p-4 border-t border-gray-700 gap-3">
-            <button 
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={onClose} 
                 className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
             >
                 Cancelar
-            </button>
-            <button 
+            </motion.button>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={handleSave} 
                 disabled={saveStatus !== 'idle'}
                 className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 disabled:cursor-not-allowed rounded-md transition-colors text-sm font-medium w-36 text-center"
@@ -165,9 +194,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettin
                 {saveStatus === 'idle' && 'Salvar Alterações'}
                 {saveStatus === 'saving' && 'Salvando...'}
                 {saveStatus === 'saved' && 'Salvo!'}
-            </button>
+            </motion.button>
         </footer>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

@@ -1,10 +1,10 @@
 
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent } from '../types';
 
 const DB_NAME = 'NexusDB';
-const DB_VERSION = 7; // Increment version for schema change
+const DB_VERSION = 8; // Increment version for schema change
 
 interface NexusDB extends DBSchema {
   concepts: {
@@ -49,6 +49,16 @@ interface NexusDB extends DBSchema {
     value: EvolutionLog;
     indexes: { timestamp: number };
   };
+  thoughtLogs: {
+    key: number;
+    value: Thought;
+    indexes: { timestamp: number };
+  };
+  cognitiveLogs: {
+    key: number;
+    value: CognitiveLog;
+    indexes: { timestamp: number };
+  };
 }
 
 // Simple deep merge utility for our specific nested objects
@@ -56,8 +66,8 @@ function deepMerge(target: any, source: any) {
     const output = { ...target };
     if (target && typeof target === 'object' && source && typeof source === 'object') {
         Object.keys(source).forEach(key => {
-            // FIX: Added a check to prevent merging arrays as objects. If the source property
-            // is an array, we overwrite the target property with it directly.
+            // If the source property is an array, it overwrites the target property directly.
+            // This prevents arrays from being merged as if they were objects.
             if (Array.isArray(source[key])) {
                 output[key] = source[key];
             } else if (source[key] && typeof source[key] === 'object' && key in target && target[key] && typeof target[key] === 'object') {
@@ -111,6 +121,13 @@ class IndexedDBService {
             evolutionLogStore.createIndex('timestamp', 'timestamp');
             console.log("Upgrading DB to v7 for Self-Evolution Engine.");
         }
+        if (oldVersion < 8) {
+            const thoughtStore = db.createObjectStore('thoughtLogs', { keyPath: 'id', autoIncrement: true });
+            thoughtStore.createIndex('timestamp', 'timestamp');
+            const cognitiveLogStore = db.createObjectStore('cognitiveLogs', { keyPath: 'id', autoIncrement: true });
+            cognitiveLogStore.createIndex('timestamp', 'timestamp');
+            console.log("Upgrading DB to v8 for Cognitive Transparency Engine.");
+        }
       },
     });
   }
@@ -126,7 +143,7 @@ class IndexedDBService {
           humor: 0.3,
       },
       emotionState: {
-          current: Emotion.CALM,
+          current: 'CALM',
           intensity: 0.7,
           history: [],
       },
@@ -177,7 +194,7 @@ class IndexedDBService {
       const db = await this.database;
       if (overwrite) {
           // For rollback, we completely replace the memory state.
-          // FIX: The `memory` object from a rollback snapshot is a complete SystemMemory object,
+          // The `memory` object from a rollback snapshot is a complete SystemMemory object,
           // but typed as Partial. Asserting the type to satisfy the `put` method's requirement.
           await db.put('systemMemory', { ...memory, id: 1 } as SystemMemory);
       } else {
@@ -212,6 +229,29 @@ class IndexedDBService {
     if (!(await db.objectStoreNames.contains('evolutionLog'))) return [];
     const allLogs = await db.getAllFromIndex('evolutionLog', 'timestamp');
     return allLogs.slice(-limit).reverse();
+  }
+
+  // --- Cognitive Transparency Logs ---
+  addThoughtLog = async (log: Omit<Thought, 'id'>): Promise<void> => {
+    const db = await this.database;
+    await db.add('thoughtLogs', log);
+  }
+
+  getThoughtLogs = async (limit: number = 50): Promise<Thought[]> => {
+    const db = await this.database;
+    if (!db.objectStoreNames.contains('thoughtLogs')) return [];
+    return db.getAllFromIndex('thoughtLogs', 'timestamp').then(logs => logs.slice(-limit).reverse());
+  }
+  
+  addCognitiveLog = async (log: Omit<CognitiveLog, 'id'>): Promise<void> => {
+    const db = await this.database;
+    await db.add('cognitiveLogs', log);
+  }
+
+  getCognitiveLogs = async (limit: number = 50): Promise<CognitiveLog[]> => {
+    const db = await this.database;
+    if (!db.objectStoreNames.contains('cognitiveLogs')) return [];
+    return db.getAllFromIndex('cognitiveLogs', 'timestamp').then(logs => logs.slice(-limit).reverse());
   }
 
   // --- Diary ---
@@ -279,7 +319,9 @@ class IndexedDBService {
               permissions: {
                   allowApiAccess: true,
                   allowAutonomousDecision: true,
-                  allowSelfModification: false, // Default to false for safety
+                  allowSelfModification: false,
+                  autoEvolutionEnabled: true,
+                  transparencyMode: true, // Default to on
               }
           },
           apiKeys: { deepseekApiKey: '', newsApiKey: '' },
@@ -435,17 +477,9 @@ class IndexedDBService {
 
   resetNexusMemory = async (): Promise<void> => {
       const db = await this.database;
-      const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog'], 'readwrite');
-      await Promise.all([
-          tx.objectStore('concepts').clear(),
-          tx.objectStore('userProfile').clear(),
-          tx.objectStore('rlhfFeedback').clear(),
-          tx.objectStore('chatHistory').clear(),
-          tx.objectStore('systemMemory').clear(),
-          tx.objectStore('diary').clear(),
-          tx.objectStore('tasks').clear(),
-          tx.objectStore('evolutionLog').clear(),
-      ]);
+      const stores: (keyof NexusDB)[] = ['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs'];
+      const tx = db.transaction(stores, 'readwrite');
+      await Promise.all(stores.map(s => tx.objectStore(s).clear()));
       await tx.done;
   }
   
@@ -453,24 +487,12 @@ class IndexedDBService {
     if (!backupData || !backupData.system) {
         throw new Error("Arquivo de backup inválido ou corrompido.");
     }
-
+    const stores: (keyof NexusDB)[] = ['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs'];
     const db = await this.database;
-    // Perform a full reset within the same transaction for atomicity
-    const tx = db.transaction(['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog'], 'readwrite');
+    const tx = db.transaction(stores, 'readwrite');
     
-    // Clear all existing data first
-    await Promise.all([
-        tx.objectStore('concepts').clear(),
-        tx.objectStore('userProfile').clear(),
-        tx.objectStore('rlhfFeedback').clear(),
-        tx.objectStore('chatHistory').clear(),
-        tx.objectStore('systemMemory').clear(),
-        tx.objectStore('diary').clear(),
-        tx.objectStore('tasks').clear(),
-        tx.objectStore('evolutionLog').clear(),
-    ]);
+    await Promise.all(stores.map(s => tx.objectStore(s).clear()));
     
-    // Import new data
     const importPromises: Promise<any>[] = [];
 
     if (backupData.profile) {
@@ -484,7 +506,7 @@ class IndexedDBService {
             importPromises.push(tx.objectStore('concepts').put(concept));
         }
     }
-    if (backupData.diary) { // Assuming diary is an object of entries
+    if (backupData.diary) { 
         for (const entry of Object.values(backupData.diary)) {
             importPromises.push(tx.objectStore('diary').put(entry as DiaryEntry));
         }
@@ -515,7 +537,6 @@ class IndexedDBService {
     const conceptsStore = tx.objectStore('concepts');
     const systemMemoryStore = tx.objectStore('systemMemory');
 
-    // 1. Sync Concepts
     const existingConcepts = await conceptsStore.getAll();
     const existingConceptNames = new Set(existingConcepts.map(c => c.name));
     const newConcepts: Concept[] = [];
@@ -525,13 +546,13 @@ class IndexedDBService {
         if (nodeName && !existingConceptNames.has(nodeName)) {
             newConcepts.push({
                 name: nodeName,
-                confidence: 0.5, // Default confidence for imported concepts
+                confidence: 0.5,
                 related: [],
                 evidence: [`Importado do grafo em ${new Date().toISOString()}`],
                 createdAt: now,
                 updatedAt: now,
             });
-            existingConceptNames.add(nodeName); // Avoid duplicates from the import file itself
+            existingConceptNames.add(nodeName);
         }
     }
 
@@ -539,7 +560,6 @@ class IndexedDBService {
         await Promise.all(newConcepts.map(c => conceptsStore.put(c)));
     }
 
-    // 2. Merge Synapses
     const system = (await systemMemoryStore.get(1)) || this.getDefaultSystemMemory();
     const existingSynapses = system.synapses || [];
     const synapseMap = new Map<string, Synapse>();
@@ -556,7 +576,6 @@ class IndexedDBService {
         const existing = synapseMap.get(key);
         
         if (existing) {
-            // Merge strategy: take the stronger connection, update usage
             existing.strength = Math.max(existing.strength, edge.weight || 0.1);
             existing.lastUsed = now;
             existing.usage += 1;
@@ -567,14 +586,13 @@ class IndexedDBService {
                 strength: edge.weight || 0.1,
                 lastUsed: now,
                 usage: 1,
-                decayRate: 0.001 // Default decay rate
+                decayRate: 0.001
             });
         }
     }
     
     const mergedSynapses = Array.from(synapseMap.values());
     
-    // Save updated system memory
     const updatedMemory = deepMerge(system, { synapses: mergedSynapses });
     await systemMemoryStore.put({ ...updatedMemory, id: 1 });
 
@@ -595,4 +613,34 @@ class IndexedDBService {
   }
 }
 
+class CognitiveLogger {
+  private getThoughtId(): string {
+    const now = new Date();
+    const timestamp = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+    return `T-${now.toISOString().split('T')[0]}-${timestamp}`;
+  }
+
+  logThought(data: { category: ThoughtCategory, context: string, summary: string, emotion: Emotion, confidence: number }): void {
+    const thought: Omit<Thought, 'id'> = {
+      thought_id: this.getThoughtId(),
+      timestamp: Date.now(),
+      category: data.category,
+      context: data.context,
+      summary: data.summary,
+      emotional_state: data.emotion,
+      confidence: data.confidence,
+    };
+    db.addThoughtLog(thought).catch(e => console.error("[CognitiveLogger] Failed to log thought:", e));
+  }
+
+  logAction(data: Omit<CognitiveLog, 'id' | 'timestamp'>): void {
+    const action: Omit<CognitiveLog, 'id'> = {
+      ...data,
+      timestamp: Date.now(),
+    };
+    db.addCognitiveLog(action).catch(e => console.error("[CognitiveLogger] Failed to log action:", e));
+  }
+}
+
+export const cognitiveLogger = new CognitiveLogger();
 export const db = new IndexedDBService();

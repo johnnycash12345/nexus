@@ -66,19 +66,19 @@ export const useSpeech = (settings: AppSettings | null, status: AssistantStatus)
     // Emotional modulation based on status
     const currentStatus = statusRef.current;
     switch (currentStatus) {
-        case AssistantStatus.SUCCESS:
-        case AssistantStatus.SURPRISED:
+        case 'SUCCESS':
+        case 'SURPRISED':
             utter.pitch = Math.min(2, settings.voice.pitch + 0.2);
             utter.rate = Math.min(2, settings.voice.rate + 0.1);
             break;
-        case AssistantStatus.ERROR:
+        case 'ERROR':
             utter.pitch = Math.max(0, settings.voice.pitch - 0.2);
             utter.rate = Math.max(0.5, settings.voice.rate - 0.1);
             break;
-        case AssistantStatus.CURIOUS:
+        case 'CURIOUS':
             utter.pitch = Math.min(2, settings.voice.pitch + 0.1);
             break;
-        case AssistantStatus.SLEEPY:
+        case 'SLEEPY':
             utter.rate = Math.max(0.5, settings.voice.rate - 0.2);
             break;
     }

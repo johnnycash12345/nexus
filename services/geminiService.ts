@@ -1,5 +1,5 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-// FIX: Moved LlmCognitiveResponse to types.ts to be shared across services.
 import { ChatMessage, LearningContext, MetaReflection, LlmCognitiveResponse } from "../types";
 import { db } from "./indexedDBService";
 

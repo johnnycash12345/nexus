@@ -1,7 +1,6 @@
 
 
 import { useCallback } from 'react';
-// FIX: LlmCognitiveResponse is now imported from types.ts.
 import { ChatMessage, AppSettings, LlmCognitiveResponse } from '../types';
 import { generateGeminiResponse, generateGeminiVisionResponse } from '../services/geminiService';
 import { generateDeepSeekResponse, generateDeepSeekVisionResponse } from '../services/deepseekService';
