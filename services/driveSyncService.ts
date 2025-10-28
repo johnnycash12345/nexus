@@ -1,3 +1,4 @@
+
 // services/driveSyncService.ts
 import { db } from "./indexedDBService";
 import type { DiaryEntry, Concept, UserProfile, SystemMemory } from '../types';
@@ -18,11 +19,11 @@ async function findBackupFileId(token: string): Promise<string | null> {
 }
 
 export const driveSyncService = {
-  async uploadBrain(token: string) {
-    const profile = await db.getUserProfile();
-    const system = await db.getSystemMemory();
-    const diary = await db.getDiary();
-    const concepts = await db.getAllConcepts();
+  async uploadBrain(token: string, userId: string) {
+    const profile = await db.getUserProfile(userId);
+    const system = await db.getSystemMemory(userId);
+    const diary = await db.getDiary(userId);
+    const concepts = await db.getAllConcepts(userId);
 
     const brain = {
       meta: { exportedAt: new Date().toISOString(), version: "1.2" },
@@ -53,7 +54,7 @@ export const driveSyncService = {
     }));
   },
 
-  async restoreBrain(token: string): Promise<boolean> {
+  async restoreBrain(token: string, userId: string): Promise<boolean> {
     const fileId = await findBackupFileId(token);
     if (!fileId) return false;
 
@@ -70,18 +71,15 @@ export const driveSyncService = {
     if (!json.system || !json.concepts) return false;
 
     // Restore data
-    await db.saveSystemMemory(json.system as SystemMemory);
-    if (json.profile) await db.saveUserProfile(json.profile as UserProfile);
+    await db.saveSystemMemory(userId, json.system as SystemMemory, true); // Overwrite system memory
+    if (json.profile) await db.saveUserProfile(userId, json.profile as UserProfile);
     if (json.diary) {
       for (const entry of Object.values(json.diary)) {
-          await db.saveDiaryEntry(entry as DiaryEntry);
+          await db.saveDiaryEntry(userId, entry as DiaryEntry);
       }
     }
     if (json.concepts) {
-        for (const c of json.concepts) {
-            const concept = c as Concept;
-            await db.learnConcept(concept.name, concept, `Restaurado do Drive em ${json.meta?.exportedAt || 'data desconhecida'}`);
-        }
+        await db.batchUpdateConcepts(userId, json.concepts as Concept[]);
     }
 
     window.dispatchEvent(new CustomEvent("nexus-thought-update", {

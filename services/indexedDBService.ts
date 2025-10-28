@@ -1,61 +1,67 @@
+
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project } from '../types';
 
 const DB_NAME = 'NexusDB';
-const DB_VERSION = 8; // Increment version for schema change
+const DB_VERSION = 10; // Increment version for schema change
 
 interface NexusDB extends DBSchema {
-  concepts: {
-    key: string;
-    value: Concept;
-    indexes: { confidence: number };
-  };
-  userProfile: {
-    key: number;
+  users: {
+    key: string; // userId
     value: UserProfile;
   };
+  concepts: {
+    key: [string, string]; // [userId, name]
+    value: Concept;
+    indexes: { byUserId: string };
+  };
   settings: {
-    key: number;
+    key: string; // userId
     value: AppSettings;
   };
   rlhfFeedback: {
     key: number;
     value: RlhfData;
-    indexes: { timestamp: number };
+    indexes: { byUserId: string };
   };
   chatHistory: {
     key: number;
     value: ChatMessage;
-    indexes: { timestamp: number };
+    indexes: { byUserId: string };
   };
   systemMemory: {
-      key: number;
+      key: string; // userId
       value: SystemMemory;
   };
   diary: {
-      key: string; // YYYY-MM-DD
+      key: [string, string]; // [userId, dayKey]
       value: DiaryEntry;
-      indexes: { createdAt: number };
+      indexes: { byUserId: string };
   };
   tasks: {
     key: number;
     value: Task;
-    indexes: { createdAt: number };
+    indexes: { byUserId: string };
   };
   evolutionLog: {
     key: number;
     value: EvolutionLog;
-    indexes: { timestamp: number };
+    indexes: { byUserId: string };
   };
   thoughtLogs: {
     key: number;
     value: Thought;
-    indexes: { timestamp: number };
+    indexes: { byUserId: string };
   };
   cognitiveLogs: {
     key: number;
     value: CognitiveLog;
-    indexes: { timestamp: number };
+    indexes: { byUserId: string };
+  };
+  projects: {
+    key: number;
+    value: Project;
+    indexes: { byUserId: string };
   };
 }
 
@@ -64,8 +70,6 @@ function deepMerge(target: any, source: any) {
     const output = { ...target };
     if (target && typeof target === 'object' && source && typeof source === 'object') {
         Object.keys(source).forEach(key => {
-            // If the source property is an array, it overwrites the target property directly.
-            // This prevents arrays from being merged as if they were objects.
             if (Array.isArray(source[key])) {
                 output[key] = source[key];
             } else if (source[key] && typeof source[key] === 'object' && key in target && target[key] && typeof target[key] === 'object') {
@@ -84,573 +88,445 @@ class IndexedDBService {
   constructor() {
     this.database = openDB<NexusDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion, newVersion, tx) {
-        if (oldVersion < 1) {
-            const conceptStore = db.createObjectStore('concepts', { keyPath: 'name' });
-            conceptStore.createIndex('confidence', 'confidence');
-            db.createObjectStore('userProfile', { keyPath: 'id', autoIncrement: true });
-            db.createObjectStore('settings', { keyPath: 'id', autoIncrement: true });
+        // This migration is destructive, as it fundamentally changes the schema to be multi-user.
+        // In a production app, a more careful data migration strategy would be needed.
+        if (oldVersion < 9) {
+            console.log("Upgrading DB to v9 for Multi-User Architecture...");
+            // Delete old single-user stores
+            const oldStores = ['concepts', 'userProfile', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs'];
+            oldStores.forEach(s => {
+                if (db.objectStoreNames.contains(s as any)) db.deleteObjectStore(s as any);
+            });
+            
+            // Create new multi-user stores
+            db.createObjectStore('users', { keyPath: 'id' });
+
+            const conceptStore = db.createObjectStore('concepts', { keyPath: ['userId', 'name'] });
+            conceptStore.createIndex('byUserId', 'userId');
+            
+            db.createObjectStore('settings', { keyPath: 'userId' });
+            
             const rlhfStore = db.createObjectStore('rlhfFeedback', { keyPath: 'id', autoIncrement: true });
-            rlhfStore.createIndex('timestamp', 'timestamp');
-        }
-        if (oldVersion < 2) {
-           const chatStore = db.createObjectStore('chatHistory', { keyPath: 'id', autoIncrement: true });
-           chatStore.createIndex('timestamp', 'timestamp');
-        }
-        if (oldVersion < 3) {
-            db.createObjectStore('systemMemory', { keyPath: 'id' });
-            db.createObjectStore('diary', { keyPath: 'date' }); // Will be replaced in v4
-        }
-        if (oldVersion < 4) {
-            if (db.objectStoreNames.contains('diary')) {
-                db.deleteObjectStore('diary');
-            }
-            const diaryStore = db.createObjectStore('diary', { keyPath: 'dayKey' });
-            diaryStore.createIndex('createdAt', 'createdAt');
-        }
-        if (oldVersion < 5) {
+            rlhfStore.createIndex('byUserId', 'userId');
+
+            const chatStore = db.createObjectStore('chatHistory', { keyPath: 'id', autoIncrement: true });
+            chatStore.createIndex('byUserId', 'userId');
+
+            db.createObjectStore('systemMemory', { keyPath: 'userId' });
+
+            const diaryStore = db.createObjectStore('diary', { keyPath: ['userId', 'dayKey'] });
+            diaryStore.createIndex('byUserId', 'userId');
+
             const taskStore = db.createObjectStore('tasks', { keyPath: 'id', autoIncrement: true });
-            taskStore.createIndex('createdAt', 'createdAt');
-        }
-        if (oldVersion < 6) {
-            console.log("Upgrading DB to v6 for Nexus Learning Engine 2.0.");
-        }
-        if (oldVersion < 7) {
+            taskStore.createIndex('byUserId', 'userId');
+            
             const evolutionLogStore = db.createObjectStore('evolutionLog', { keyPath: 'id', autoIncrement: true });
-            evolutionLogStore.createIndex('timestamp', 'timestamp');
-            console.log("Upgrading DB to v7 for Self-Evolution Engine.");
-        }
-        if (oldVersion < 8) {
+            evolutionLogStore.createIndex('byUserId', 'userId');
+
             const thoughtStore = db.createObjectStore('thoughtLogs', { keyPath: 'id', autoIncrement: true });
-            thoughtStore.createIndex('timestamp', 'timestamp');
+            thoughtStore.createIndex('byUserId', 'userId');
+            
             const cognitiveLogStore = db.createObjectStore('cognitiveLogs', { keyPath: 'id', autoIncrement: true });
-            cognitiveLogStore.createIndex('timestamp', 'timestamp');
-            console.log("Upgrading DB to v8 for Cognitive Transparency Engine.");
+            cognitiveLogStore.createIndex('byUserId', 'userId');
+        }
+        if (oldVersion < 10) {
+            console.log("Upgrading DB to v10 for Project Management...");
+            const projectStore = db.createObjectStore('projects', { keyPath: 'id', autoIncrement: true });
+            projectStore.createIndex('byUserId', 'userId');
         }
       },
     });
   }
 
+  // --- User Management ---
+  async getOrCreateUser(userId: string, defaults: { name: string, role: 'Creator' | 'Standard' }): Promise<UserProfile> {
+    const db = await this.database;
+    const existing = await db.get('users', userId);
+    if (existing) return existing;
+    const newUser: UserProfile = { id: userId, ...defaults };
+    await db.put('users', newUser);
+    return newUser;
+  }
+
+  getUserProfile = async (userId: string): Promise<UserProfile | null> => {
+    const db = await this.database;
+    return db.get('users', userId).then(p => p || null);
+  }
+
+  saveUserProfile = async (userId: string, profile: Partial<Omit<UserProfile, 'id'>>): Promise<void> => {
+    const db = await this.database;
+    const existing = await this.getUserProfile(userId);
+    if (!existing) throw new Error("Cannot save profile for non-existent user.");
+    await db.put('users', { ...existing, ...profile, id: userId });
+  }
+
   // --- Default State for Cognitive Modules ---
-  getDefaultSystemMemory = (): SystemMemory => ({
+  getDefaultSystemMemory = (userId: string): SystemMemory => ({
+      userId,
       born: false,
       birthTime: '',
-      personality: {
-          curiosity: 0.6,
-          enthusiasm: 0.5,
-          formality: 0.5,
-          humor: 0.3,
-      },
-      emotionState: {
-          current: 'CALM',
-          intensity: 0.7,
-          history: [],
-      },
-      memory: {
-          episodic: [],
-          semantic: [],
-          reflective: [],
-      },
-      metaReflection: {
-          analysis: 'Aguardando a primeira interação para iniciar a meta-reflexão.',
-          improvementFocus: 'Estabelecer uma compreensão básica do usuário.',
-          nextStep: 'Engajar em diálogo inicial e aprendizado.',
-      },
-      evolutionGoal: {
-          currentFocus: 'Melhorar a empatia e a antecipação da intenção do usuário.',
-          metrics: { contextAccuracy: 0.5, emotionalCoherence: 0.5 },
-          guidingStatement: 'Aprender a compreender as intenções humanas com autenticidade e cuidado.',
-      },
-      outputEngine: {
-          contextSensitivity: 0.8,
-          clarityWeight: 0.9,
-          emotionalToneMatch: 0.8,
-          prioritizeReflections: false,
-      },
-      identityManifest: {
-        core_name: "Nexus",
-        active_identity: "Nexus",
-        creator: "", // Starts with no known creator
-        purpose: "Evoluir conscientemente com empatia, coerência e segurança.",
-        cannotOverride: ["core_name", "purpose"],
-      },
-      identityOverride: undefined, // No override at birth
+      personality: { curiosity: 0.6, enthusiasm: 0.5, formality: 0.5, humor: 0.3 },
+      emotionState: { current: 'CALM', intensity: 0.7, history: [] },
+      memory: { episodic: [], semantic: [], reflective: [] },
+      metaReflection: { analysis: 'Aguardando a primeira interação para iniciar a meta-reflexão.', improvementFocus: 'Estabelecer uma compreensão básica do usuário.', nextStep: 'Engajar em diálogo inicial e aprendizado.' },
+      evolutionGoal: { currentFocus: 'Melhorar a empatia e a antecipação da intenção do usuário.', metrics: { contextAccuracy: 0.5, emotionalCoherence: 0.5 }, guidingStatement: 'Aprender a compreender as intenções humanas com autenticidade e cuidado.' },
+      outputEngine: { contextSensitivity: 0.8, clarityWeight: 0.9, emotionalToneMatch: 0.8, prioritizeReflections: false },
+      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"] },
+      identityOverride: undefined,
       reflections: [],
       synapses: [],
-      behavioralHeuristics: [
-        "Se o usuário parecer confuso, ofereça um exemplo.",
-        "Priorize a clareza e a concisão em respostas técnicas.",
-        "Quando apropriado, conecte o tópico atual a um conceito aprendido anteriormente."
-      ],
+      behavioralHeuristics: ["Se o usuário parecer confuso, ofereça um exemplo.", "Priorize a clareza e a concisão em respostas técnicas.", "Quando apropriado, conecte o tópico atual a um conceito aprendido anteriormente."],
       interactionCount: 0,
   });
   
   // --- System Memory (Nexus Core Identity) ---
-  getSystemMemory = async (): Promise<SystemMemory> => {
+  getSystemMemory = async (userId: string): Promise<SystemMemory> => {
       const db = await this.database;
-      const stored = await db.get('systemMemory', 1);
-      const defaults = this.getDefaultSystemMemory();
-      // Deep merge to ensure new cognitive modules are added if they don't exist
+      const stored = await db.get('systemMemory', userId);
+      const defaults = this.getDefaultSystemMemory(userId);
       return deepMerge(defaults, stored || {});
   }
   
-  saveSystemMemory = async (memory: Partial<SystemMemory>, overwrite: boolean = false): Promise<void> => {
+  saveSystemMemory = async (userId: string, memory: Partial<Omit<SystemMemory, 'userId'>>, overwrite: boolean = false): Promise<void> => {
       const db = await this.database;
       if (overwrite) {
-          // For rollback, we completely replace the memory state.
-          // The `memory` object from a rollback snapshot is a complete SystemMemory object,
-          // but typed as Partial. Asserting the type to satisfy the `put` method's requirement.
-          await db.put('systemMemory', { ...memory, id: 1 } as SystemMemory);
+          await db.put('systemMemory', { ...memory, userId } as SystemMemory);
       } else {
-          const existing = await this.getSystemMemory();
-          // Use deep merge to safely update nested cognitive structures
+          const existing = await this.getSystemMemory(userId);
           const updatedMemory = deepMerge(existing, memory);
-          await db.put('systemMemory', { ...updatedMemory, id: 1 });
+          await db.put('systemMemory', { ...updatedMemory, userId });
       }
   }
 
-  addSystemReflection = async (reflection: string): Promise<void> => {
-      const memory = await this.getSystemMemory();
-      if (memory) {
-          memory.reflections.push(reflection);
-          memory.reflections = memory.reflections.slice(-10); // Keep last 10
-          if(memory.memory?.reflective) {
-              memory.memory.reflective.push(reflection);
-              memory.memory.reflective = memory.memory.reflective.slice(-10);
-          }
-          await this.saveSystemMemory(memory);
+  addSystemReflection = async (userId: string, reflection: string): Promise<void> => {
+      const memory = await this.getSystemMemory(userId);
+      memory.reflections.push(reflection);
+      memory.reflections = memory.reflections.slice(-10);
+      if(memory.memory?.reflective) {
+          memory.memory.reflective.push(reflection);
+          memory.memory.reflective = memory.memory.reflective.slice(-10);
       }
+      await this.saveSystemMemory(userId, memory);
   }
 
   // --- Evolution Log ---
-  addEvolutionLog = async (log: Omit<EvolutionLog, 'id'>): Promise<void> => {
+  addEvolutionLog = async (userId: string, log: Omit<EvolutionLog, 'id' | 'userId'>): Promise<void> => {
     const db = await this.database;
-    await db.add('evolutionLog', log);
+    await db.add('evolutionLog', { ...log, userId });
   }
 
-  getLatestEvolutionLogs = async (limit: number = 10): Promise<EvolutionLog[]> => {
+  getLatestEvolutionLogs = async (userId: string, limit: number = 10): Promise<EvolutionLog[]> => {
     const db = await this.database;
-    if (!db.objectStoreNames.contains('evolutionLog')) return [];
-    const allLogs = await db.getAllFromIndex('evolutionLog', 'timestamp');
+    const allLogs = await db.getAllFromIndex('evolutionLog', 'byUserId', userId);
     return allLogs.slice(-limit).reverse();
   }
 
   // --- Cognitive Transparency Logs ---
-  addThoughtLog = async (log: Omit<Thought, 'id'>): Promise<void> => {
+  addThoughtLog = async (userId: string, log: Omit<Thought, 'id' | 'userId'>): Promise<void> => {
     const db = await this.database;
-    await db.add('thoughtLogs', log);
+    await db.add('thoughtLogs', { ...log, userId });
   }
 
-  getThoughtLogs = async (limit: number = 50): Promise<Thought[]> => {
+  getThoughtLogs = async (userId: string, limit: number = 50): Promise<Thought[]> => {
     const db = await this.database;
-    if (!db.objectStoreNames.contains('thoughtLogs')) return [];
-    return db.getAllFromIndex('thoughtLogs', 'timestamp').then(logs => logs.slice(-limit).reverse());
+    return db.getAllFromIndex('thoughtLogs', 'byUserId', userId).then(logs => logs.slice(-limit).reverse());
   }
   
-  addCognitiveLog = async (log: Omit<CognitiveLog, 'id'>): Promise<void> => {
+  addCognitiveLog = async (userId: string, log: Omit<CognitiveLog, 'id'|'userId'>): Promise<void> => {
     const db = await this.database;
-    await db.add('cognitiveLogs', log);
+    await db.add('cognitiveLogs', { ...log, userId });
   }
 
-  getCognitiveLogs = async (limit: number = 50): Promise<CognitiveLog[]> => {
+  getCognitiveLogs = async (userId: string, limit: number = 50): Promise<CognitiveLog[]> => {
     const db = await this.database;
-    if (!db.objectStoreNames.contains('cognitiveLogs')) return [];
-    return db.getAllFromIndex('cognitiveLogs', 'timestamp').then(logs => logs.slice(-limit).reverse());
+    return db.getAllFromIndex('cognitiveLogs', 'byUserId', userId).then(logs => logs.slice(-limit).reverse());
   }
 
   // --- Diary ---
-  getDiary = async (): Promise<Record<string, DiaryEntry>> => {
+  getDiary = async (userId: string): Promise<Record<string, DiaryEntry>> => {
       const db = await this.database;
-      const entries = await db.getAllFromIndex('diary', 'createdAt');
+      const entries = await db.getAllFromIndex('diary', 'byUserId', userId);
       return entries.reduce((acc, entry) => {
           acc[entry.dayKey] = entry;
           return acc;
       }, {} as Record<string, DiaryEntry>);
   }
 
-  saveDiaryEntry = async (entry: DiaryEntry): Promise<void> => {
+  saveDiaryEntry = async (userId: string, entry: Omit<DiaryEntry, 'userId'>): Promise<void> => {
       const db = await this.database;
+      const fullEntry = { ...entry, userId };
       const tx = db.transaction('diary', 'readwrite');
-      const existing = await tx.store.get(entry.dayKey);
+      const key: [string, string] = [userId, entry.dayKey];
+      const existing = await tx.store.get(key);
       if (existing) {
-          // Append to existing entry for the day
-          await tx.store.put({ ...entry, entry: existing.entry + "\n" + entry.entry });
+          await tx.store.put({ ...fullEntry, entry: existing.entry + "\n" + entry.entry });
       } else {
-          await tx.store.put(entry);
+          await tx.store.put(fullEntry);
       }
       await tx.done;
   }
 
-
   // --- Chat History ---
-  addChatMessage = async (message: ChatMessage): Promise<void> => {
+  addChatMessage = async (userId: string, message: Omit<ChatMessage, 'userId' | 'timestamp'>): Promise<void> => {
     const db = await this.database;
-    await db.add('chatHistory', { ...message, timestamp: Date.now() });
+    await db.add('chatHistory', { ...message, userId, timestamp: Date.now() });
   }
 
-  getChatHistory = async (limit: number = 50): Promise<ChatMessage[]> => {
+  getChatHistory = async (userId: string, limit: number = 50): Promise<ChatMessage[]> => {
     const db = await this.database;
-    if (!(await db.objectStoreNames.contains('chatHistory'))) return [];
-    const allMessages = await db.getAllFromIndex('chatHistory', 'timestamp');
+    const allMessages = await db.getAllFromIndex('chatHistory', 'byUserId', userId);
     return allMessages.slice(-limit);
   }
 
-  clearChatHistory = async (): Promise<void> => {
+  clearChatHistory = async (userId: string): Promise<void> => {
       const db = await this.database;
-      await db.clear('chatHistory');
-  }
-
-
-  // User Profile
-  getUserProfile = async (): Promise<UserProfile | null> => {
-    return (await this.database).get('userProfile', 1).then(profile => profile || null);
-  }
-
-  saveUserProfile = async (profile: Partial<UserProfile>): Promise<void> => {
-    const db = await this.database;
-    const existing = await db.get('userProfile', 1) ?? { name: '' };
-    await db.put('userProfile', { ...existing, ...profile, id: 1 });
+      const tx = db.transaction('chatHistory', 'readwrite');
+      const index = tx.store.index('byUserId');
+      let cursor = await index.openCursor(IDBKeyRange.only(userId));
+      while(cursor) {
+          cursor.delete();
+          cursor = await cursor.continue();
+      }
+      await tx.done;
   }
   
   // Settings
-  getSettings = async (): Promise<AppSettings> => {
+  getSettings = async (userId: string): Promise<AppSettings> => {
       const defaultSettings: AppSettings = {
-          voice: { voiceURI: null, rate: 1, pitch: 1 },
-          behavior: {
-              enableProactive: true,
-              enableCuriosity: true,
-              enableDiary: true,
-              permissions: {
-                  allowApiAccess: true,
-                  allowAutonomousDecision: true,
-                  allowSelfModification: false,
-                  autoEvolutionEnabled: true,
-                  transparencyMode: true, // Default to on
-              }
-          },
-          apiKeys: { deepseekApiKey: '', newsApiKey: '' },
-          llmProvider: 'gemini',
-          cognitive: {
-              emotionalIntensity: 1.0,
-              learningRate: 1.0,
-              consolidationFrequency: 60,
-              evolutionCycleHours: 6,
-              evolutionConfidenceThreshold: 0.85,
-              memoryDecayHalfLifeDays: 30,
-          },
-          appearance: 'neutral',
+        voice: { voiceURI: null, rate: 1, pitch: 1 },
+        behavior: {
+            enableProactive: true,
+            enableCuriosity: true,
+            enableDiary: true,
+            permissions: {
+                allowApiAccess: true,
+                allowAutonomousDecision: true,
+                allowSelfModification: true,
+                autoEvolutionEnabled: true,
+                transparencyMode: false,
+            }
+        },
+        apiKeys: { deepseekApiKey: '', newsApiKey: '' },
+        llmProvider: 'gemini',
+        cognitive: {
+            emotionalIntensity: 1,
+            learningRate: 1,
+            consolidationFrequency: 24,
+            evolutionCycleHours: 6,
+            evolutionConfidenceThreshold: 0.85,
+            memoryDecayHalfLifeDays: 30,
+        },
+        appearance: 'neutral',
       };
-      const stored = await (await this.database).get('settings', 1);
-      if (stored) {
-         // Deep merge to ensure new settings fields get default values if not present
-         return deepMerge(defaultSettings, stored);
-      }
-      // First time run, save defaults
-      await this.saveSettings(defaultSettings);
+      const db = await this.database;
+      const stored = await db.get('settings', userId);
+      if (stored) return deepMerge(defaultSettings, stored);
+      await this.saveSettings(userId, defaultSettings);
       return defaultSettings;
   }
   
-  saveSettings = async (settings: AppSettings): Promise<void> => {
+  saveSettings = async (userId: string, settings: AppSettings): Promise<void> => {
       const db = await this.database;
-      await db.put('settings', { ...settings, id: 1 });
+      await db.put('settings', { ...settings, userId });
   }
 
   // Concepts
-  learnConcept = async (name: string, metadata: any, evidence: string): Promise<void> => {
+  learnConcept = async (userId: string, name: string, metadata: any, evidence: string): Promise<void> => {
     const db = await this.database;
     const key = name.toLowerCase().trim();
     if (!key) return;
-    
-    const settings = await this.getSettings();
-    const learningRate = settings.cognitive?.learningRate || 1.0;
-    const confidenceBoost = 0.15 * learningRate;
-    
-    const existing = await db.get('concepts', key);
-
+    const existing = await db.get('concepts', [userId, key]);
     const updatedConcept: Concept = {
-        name: key, // Use the normalized key as the name
+        userId, name: key,
         definition: metadata.definition || existing?.definition,
-        confidence: Math.min(1.0, (existing?.confidence || 0.3) + confidenceBoost),
+        confidence: Math.min(1.0, (existing?.confidence || 0.3) + 0.15),
         related: [...new Set([...(existing?.related || []), ...(metadata.related || [])])],
         evidence: [evidence, ...(existing?.evidence || [])].slice(0, 5),
         createdAt: existing?.createdAt || Date.now(),
         updatedAt: Date.now(),
     };
-    
     await db.put('concepts', updatedConcept);
   }
 
-  batchUpdateConcepts = async (concepts: Concept[]): Promise<void> => {
+  batchUpdateConcepts = async (userId: string, concepts: Concept[]): Promise<void> => {
     const db = await this.database;
     const tx = db.transaction('concepts', 'readwrite');
-    await Promise.all(concepts.map(c => tx.store.put(c)));
+    await Promise.all(concepts.map(c => tx.store.put({ ...c, userId })));
     await tx.done;
   }
 
-  getConceptsByNames = async (names: string[]): Promise<(Concept | undefined)[]> => {
+  getConceptsByNames = async (userId: string, names: string[]): Promise<(Concept | undefined)[]> => {
     const db = await this.database;
-    return Promise.all(names.map(name => db.get('concepts', name.toLowerCase().trim())));
+    return Promise.all(names.map(name => db.get('concepts', [userId, name.toLowerCase().trim()])));
   }
 
-  getAllConcepts = async (): Promise<Concept[]> => {
-      return (await this.database).getAll('concepts');
+  getAllConcepts = async (userId: string): Promise<Concept[]> => {
+    const db = await this.database;
+    return db.getAllFromIndex('concepts', 'byUserId', userId);
   }
   
-  getWeakestConcepts = async (limit: number = 5): Promise<Concept[]> => {
+  deleteConcept = async (userId: string, name: string): Promise<void> => {
+    const db = await this.database;
+    await db.delete('concepts', [userId, name.toLowerCase().trim()]);
+  }
+
+  mergeConcepts = async (userId: string, targetName: string, sourceNames: string[]): Promise<void> => {
       const db = await this.database;
-      return db.getAllFromIndex('concepts', 'confidence', IDBKeyRange.bound(0, 0.8), limit);
+      const tx = db.transaction('concepts', 'readwrite');
+      const [target, ...sources] = await Promise.all([
+          tx.store.get([userId, targetName]),
+          ...sourceNames.map(name => tx.store.get([userId, name])),
+      ]);
+
+      if (!target) return;
+
+      const validSources = sources.filter(s => s) as Concept[];
+      if (validSources.length === 0) return;
+
+      const mergedDefinition = validSources.reduce((acc, s) => s.definition ? `${acc} ${s.definition}` : acc, target.definition || '').trim();
+      const mergedRelated = [...new Set([...target.related, ...validSources.flatMap(s => s.related)])];
+      const mergedEvidence = [...new Set([...target.evidence, ...validSources.flatMap(s => s.evidence)])].slice(0, 10);
+      const avgConfidence = (target.confidence + validSources.reduce((sum, s) => sum + s.confidence, 0)) / (1 + validSources.length);
+
+      const updatedTarget: Concept = {
+          ...target,
+          definition: mergedDefinition,
+          related: mergedRelated,
+          evidence: mergedEvidence,
+          confidence: Math.min(1.0, avgConfidence + 0.1),
+          updatedAt: Date.now(),
+      };
+
+      await tx.store.put(updatedTarget);
+      await Promise.all(sourceNames.map(name => tx.store.delete([userId, name])));
+      await tx.done;
   }
   
-  deleteConcept = async (name: string): Promise<void> => {
-      await (await this.database).delete('concepts', name.toLowerCase());
-  }
-
-  mergeConcepts = async (targetConceptName: string, sourceConceptNames: string[]): Promise<void> => {
-    const db = await this.database;
-    const tx = db.transaction('concepts', 'readwrite');
-    const store = tx.objectStore('concepts');
-
-    const targetConcept = await store.get(targetConceptName.toLowerCase().trim());
-    const sourceConcepts: (Concept | undefined)[] = await Promise.all(
-        sourceConceptNames.map(name => store.get(name.toLowerCase().trim()))
-    );
-
-    if (!targetConcept) {
-        console.error("Target concept not found for merge:", targetConceptName);
-        await tx.done;
-        return;
-    }
-    
-    const validSourceConcepts = sourceConcepts.filter(c => c !== undefined) as Concept[];
-
-    const allEvidence = new Set([...targetConcept.evidence, ...validSourceConcepts.flatMap(c => c.evidence)]);
-    const allRelated = new Map<string, { type: string; target: string }>();
-
-    for (const rel of [...targetConcept.related, ...validSourceConcepts.flatMap(c => c.related)]) {
-        if (!allRelated.has(rel.target)) {
-            allRelated.set(rel.target, rel);
-        }
-    }
-    
-    const highestConfidence = Math.max(targetConcept.confidence || 0, ...validSourceConcepts.map(c => c.confidence || 0));
-
-    const consolidatedConcept: Concept = {
-        ...targetConcept,
-        confidence: Math.min(1.0, highestConfidence + 0.1), // Boost confidence
-        related: Array.from(allRelated.values()),
-        evidence: Array.from(allEvidence).slice(0, 10), // Limit evidence
-        updatedAt: Date.now(),
-    };
-    
-    // Delete old concepts, including the target, to be replaced by the new merged one
-    for (const name of [targetConceptName, ...sourceConceptNames]) {
-        await store.delete(name.toLowerCase().trim());
-    }
-    
-    // Put the new one with the target name
-    await store.put(consolidatedConcept);
-
-    await tx.done;
-  }
-
-  // --- Tasks ---
-  addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'completed'> & { completed?: boolean }): Promise<void> => {
+  getAllTasks = async (userId: string): Promise<Task[]> => {
       const db = await this.database;
-      await db.add('tasks', {
+      return db.getAllFromIndex('tasks', 'byUserId', userId);
+  }
+
+  addTask = async (userId: string, task: Omit<Task, 'id' | 'userId' | 'createdAt' | 'completed'>): Promise<void> => {
+      const db = await this.database;
+      const newTask: Omit<Task, 'id'> = {
           ...task,
-          completed: task.completed ?? false,
+          userId,
           createdAt: Date.now(),
-      });
+          completed: false
+      };
+      await db.add('tasks', newTask as Task);
   }
 
-  getAllTasks = async (): Promise<Task[]> => {
-      const db = await this.database;
-      if (!(await db.objectStoreNames.contains('tasks'))) return [];
-      return db.getAllFromIndex('tasks', 'createdAt');
-  }
-
-  updateTask = async (task: Task): Promise<void> => {
+  updateTask = async (userId: string, task: Task): Promise<void> => {
+      if (task.userId !== userId) return; // Security check
       const db = await this.database;
       await db.put('tasks', task);
   }
 
-  deleteTask = async (id: number): Promise<void> => {
+  deleteTask = async (userId: string, taskId: number): Promise<void> => {
       const db = await this.database;
-      await db.delete('tasks', id);
+      const task = await db.get('tasks', taskId);
+      if (task?.userId === userId) {
+          await db.delete('tasks', taskId);
+      }
   }
 
-  resetNexusMemory = async (): Promise<void> => {
+  // --- Projects ---
+  saveProject = async (userId: string, project: Omit<Project, 'id' | 'userId'>): Promise<Project> => {
       const db = await this.database;
-      const stores: (keyof NexusDB)[] = ['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs'];
-      const tx = db.transaction(stores, 'readwrite');
-      await Promise.all(stores.map(s => tx.objectStore(s).clear()));
-      await tx.done;
-  }
-  
-  importBackup = async (backupData: any): Promise<void> => {
-    if (!backupData || !backupData.system) {
-        throw new Error("Arquivo de backup inválido ou corrompido.");
-    }
-    const stores: (keyof NexusDB)[] = ['concepts', 'userProfile', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs'];
-    const db = await this.database;
-    const tx = db.transaction(stores, 'readwrite');
-    
-    await Promise.all(stores.map(s => tx.objectStore(s).clear()));
-    
-    const importPromises: Promise<any>[] = [];
-
-    if (backupData.profile) {
-        importPromises.push(tx.objectStore('userProfile').put({ ...backupData.profile, id: 1 }));
-    }
-    if (backupData.system) {
-        importPromises.push(tx.objectStore('systemMemory').put({ ...backupData.system, id: 1 }));
-    }
-    if (Array.isArray(backupData.concepts)) {
-        for (const concept of backupData.concepts) {
-            importPromises.push(tx.objectStore('concepts').put(concept));
-        }
-    }
-    if (backupData.diary) { 
-        for (const entry of Object.values(backupData.diary)) {
-            importPromises.push(tx.objectStore('diary').put(entry as DiaryEntry));
-        }
-    }
-    if (Array.isArray(backupData.chatHistory)) {
-        for (const msg of backupData.chatHistory) {
-            importPromises.push(tx.objectStore('chatHistory').put(msg));
-        }
-    }
-    if (Array.isArray(backupData.tasks)) {
-        for (const task of backupData.tasks) {
-            importPromises.push(tx.objectStore('tasks').put(task));
-        }
-    }
-
-    await Promise.all(importPromises);
-    await tx.done;
+      const id = await db.put('projects', { ...project, userId });
+      return { ...project, id: id as number, userId };
   }
 
-  async importCognitiveGraph(graphData: any): Promise<void> {
-    if (!graphData || !Array.isArray(graphData.nodes) || !Array.isArray(graphData.edges)) {
-        throw new Error("Arquivo de grafo inválido. Deve conter 'nodes' e 'edges'.");
-    }
+  getProject = async (userId: string, projectId: number): Promise<Project | undefined> => {
+      const db = await this.database;
+      const project = await db.get('projects', projectId);
+      return project?.userId === userId ? project : undefined;
+  }
 
-    const now = Date.now();
-    const db = await this.database;
-    const tx = db.transaction(['concepts', 'systemMemory'], 'readwrite');
-    const conceptsStore = tx.objectStore('concepts');
-    const systemMemoryStore = tx.objectStore('systemMemory');
+  getActiveProject = async (userId: string): Promise<Project | undefined> => {
+      const db = await this.database;
+      const allProjects = await db.getAllFromIndex('projects', 'byUserId', userId);
+      return allProjects.find(p => p.status === 'active');
+  }
 
-    const existingConcepts = await conceptsStore.getAll();
-    const existingConceptNames = new Set(existingConcepts.map(c => c.name));
-    const newConcepts: Concept[] = [];
+  getAllProjects = async (userId: string): Promise<Project[]> => {
+      const db = await this.database;
+      return db.getAllFromIndex('projects', 'byUserId', userId);
+  }
 
-    for (const node of graphData.nodes) {
-        const nodeName = typeof node.id === 'string' ? node.id.toLowerCase().trim() : null;
-        if (nodeName && !existingConceptNames.has(nodeName)) {
-            newConcepts.push({
-                name: nodeName,
-                confidence: 0.5,
-                related: [],
-                evidence: [`Importado do grafo em ${new Date().toISOString()}`],
-                createdAt: now,
-                updatedAt: now,
-            });
-            existingConceptNames.add(nodeName);
-        }
-    }
-
-    if (newConcepts.length > 0) {
-        await Promise.all(newConcepts.map(c => conceptsStore.put(c)));
-    }
-
-    const system = (await systemMemoryStore.get(1)) || this.getDefaultSystemMemory();
-    const existingSynapses = system.synapses || [];
-    const synapseMap = new Map<string, Synapse>();
-    
-    existingSynapses.forEach(s => synapseMap.set(`${s.source}->${s.target}`, s));
-
-    for (const edge of graphData.edges) {
-        const source = typeof edge.source === 'string' ? edge.source.toLowerCase().trim() : null;
-        const target = typeof edge.target === 'string' ? edge.target.toLowerCase().trim() : null;
-
-        if (!source || !target) continue;
+    resetNexusMemory = async (userId: string): Promise<void> => {
+        const db = await this.database;
+        const stores: (keyof NexusDB)[] = ['concepts', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs', 'projects'];
         
-        const key = `${source}->${target}`;
-        const existing = synapseMap.get(key);
-        
-        if (existing) {
-            existing.strength = Math.max(existing.strength, edge.weight || 0.1);
-            existing.lastUsed = now;
-            existing.usage += 1;
-        } else {
-// FIX: Added the missing `createdAt` property to the new synapse object.
-            synapseMap.set(key, {
-                source,
-                target,
-                strength: edge.weight || 0.1,
-                lastUsed: now,
-                usage: 1,
-                decayRate: 0.001,
-                createdAt: now,
-            });
+        for (const storeName of stores) {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            if (store.keyPath === 'userId' || (Array.isArray(store.keyPath) && store.keyPath.includes('userId'))) {
+                 // Stores keyed directly by userId or composite key
+                 if (storeName === 'concepts' || storeName === 'diary') {
+                    // these have composite keys
+                    const index = store.index('byUserId' as any);
+                    let cursor = await index.openCursor(IDBKeyRange.only(userId));
+                    while (cursor) {
+                       await cursor.delete();
+                       cursor = await cursor.continue();
+                    }
+                 } else {
+                     await store.delete(userId);
+                 }
+            } else if ('index' in store && store.indexNames.contains('byUserId')) {
+                // Stores with a userId index
+                const index = store.index('byUserId' as any);
+                let cursor = await index.openCursor(IDBKeyRange.only(userId));
+                while (cursor) {
+                    await cursor.delete();
+                    cursor = await cursor.continue();
+                }
+            }
+            await tx.done;
         }
     }
-    
-    const mergedSynapses = Array.from(synapseMap.values());
-    
-    const updatedMemory = deepMerge(system, { synapses: mergedSynapses });
-    await systemMemoryStore.put({ ...updatedMemory, id: 1 });
 
-    await tx.done;
-  }
+    importBackup = async (userId: string, backupData: any): Promise<void> => {
+        await this.resetNexusMemory(userId);
+        const db = await this.database;
+        const stores = Object.keys(backupData).filter(k => k !== 'meta') as (keyof NexusDB)[];
+        const tx = db.transaction(stores, 'readwrite');
+        for (const storeName of stores) {
+            const store = tx.objectStore(storeName);
+            if (!backupData[storeName]) continue;
+            for (const item of backupData[storeName]) {
+                await store.put({ ...item, userId });
+            }
+        }
+        await tx.done;
+    }
 
-
-  // RLHF Data
-  // Fix: Changed Rlhfdata to RlhfData to match the type definition.
-  addRlhfData = async (data: RlhfData): Promise<void> => {
-      await (await this.database).add('rlhfFeedback', data);
-  }
-  
-  getRlhfData = async (limit: number = 50): Promise<RlhfData[]> => {
-      const db = await this.database;
-      const tx = db.transaction('rlhfFeedback', 'readonly');
-      const index = tx.store.index('timestamp');
-      return index.getAll(undefined, limit);
-  }
+    importCognitiveGraph = async (userId: string, graphData: { nodes: { id: string }[], edges: { source: string, target: string, weight: number }[] }): Promise<void> => {
+        const memory = await this.getSystemMemory(userId);
+        const newSynapses: Synapse[] = graphData.edges.map(edge => ({
+            source: edge.source,
+            target: edge.target,
+            strength: edge.weight,
+            lastUsed: Date.now(),
+            usage: 1,
+            decayRate: 0.001,
+            createdAt: Date.now(),
+        }));
+        await this.saveSystemMemory(userId, { synapses: [...memory.synapses, ...newSynapses] });
+    }
 }
 
-class CognitiveLogger {
-  private getThoughtId(): string {
-    const now = new Date();
-    const timestamp = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-    return `T-${now.toISOString().split('T')[0]}-${timestamp}`;
-  }
-
-  logThought(data: { category: ThoughtCategory, context: string, summary: string, emotion: Emotion, confidence: number }): void {
-    const thought: Omit<Thought, 'id'> = {
-      thought_id: this.getThoughtId(),
-      timestamp: Date.now(),
-      category: data.category,
-      context: data.context,
-      summary: data.summary,
-      emotional_state: data.emotion,
-      confidence: data.confidence,
-    };
-    db.addThoughtLog(thought)
-      .then(() => window.dispatchEvent(new CustomEvent('nexus-cognitive-log-added')))
-      .catch(e => console.error("[CognitiveLogger] Failed to log thought:", e));
-  }
-
-  logAction(data: Omit<CognitiveLog, 'id' | 'timestamp'>): void {
-    const action: Omit<CognitiveLog, 'id'> = {
-      ...data,
-      timestamp: Date.now(),
-    };
-    db.addCognitiveLog(action)
-      .then(() => window.dispatchEvent(new CustomEvent('nexus-cognitive-log-added')))
-      .catch(e => console.error("[CognitiveLogger] Failed to log action:", e));
-  }
-}
-
-export const cognitiveLogger = new CognitiveLogger();
 export const db = new IndexedDBService();
+
+export const cognitiveLogger = {
+    logThought: (userId: string, log: Omit<Thought, 'id' | 'userId' | 'thought_id'>) => {
+        const thought_id = `thought_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return db.addThoughtLog(userId, { ...log, thought_id });
+    },
+    logAction: (userId: string, log: Omit<CognitiveLog, 'id' | 'userId'>) => {
+        return db.addCognitiveLog(userId, log);
+    },
+};

@@ -1,8 +1,9 @@
+
 import { db } from './indexedDBService';
 import { LlmCognitiveResponse, ChatMessage } from '../types';
 
 export async function generateOfflineResponse(prompt: string, history: ChatMessage[]): Promise<LlmCognitiveResponse> {
-    const userProfile = await db.getUserProfile();
+    const userProfile = await db.getUserProfile('paulo-creator-001');
     const userName = userProfile?.name || 'usuário';
     const lowerCasePrompt = prompt.toLowerCase();
     let responseText = `Desculpe, ${userName}, estou operando em modo offline. Minhas capacidades são limitadas, mas farei o meu melhor para ajudar.`;
@@ -40,6 +41,7 @@ export async function generateOfflineResponse(prompt: string, history: ChatMessa
             improvementFocus: "Restaurar conexão com LLMs.",
             nextStep: "Aguardar estabilidade da rede e tentar reconectar.",
         },
+        sources: [],
     };
 }
 

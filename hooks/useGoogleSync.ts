@@ -1,21 +1,22 @@
+
 // hooks/useGoogleSync.ts
 import { useEffect, useState, useCallback } from "react";
 import { googleAuth } from "../services/googleAuth";
 import { driveSyncService } from "../services/driveSyncService";
 
-export function useGoogleSync() {
+export function useGoogleSync(userId: string) {
   const [token, setToken] = useState<string | null>(() => googleAuth.getToken());
   const [status, setStatus] = useState("Verificando autenticação...");
 
-  const syncBrain = useCallback(async (tk: string) => {
+  const syncBrain = useCallback(async (tk: string, currentUserId: string) => {
     try {
       setStatus('Sincronizando com Google Drive...');
-      const restored = await driveSyncService.restoreBrain(tk);
+      const restored = await driveSyncService.restoreBrain(tk, currentUserId);
       if (restored) {
         setStatus("🧠 Memória restaurada com sucesso!");
       } else {
         setStatus('Nenhum backup encontrado. Salvando memória atual...');
-        await driveSyncService.uploadBrain(tk);
+        await driveSyncService.uploadBrain(tk, currentUserId);
         setStatus("💾 Cérebro salvo no Drive com sucesso!");
       }
     } catch (err: any) {
@@ -30,18 +31,16 @@ export function useGoogleSync() {
   }, []);
 
   useEffect(() => {
-    // This runs once on mount to handle the redirect from Google
     const tkFromRedirect = googleAuth.handleRedirect();
     if (tkFromRedirect) {
       setToken(tkFromRedirect);
-      syncBrain(tkFromRedirect);
+      syncBrain(tkFromRedirect, userId);
     } else if (token) {
-      // If token was already in localStorage, sync on startup
-      syncBrain(token);
+      syncBrain(token, userId);
     } else {
       setStatus("Faça login para sincronizar sua memória com o Google Drive.");
     }
-  }, [syncBrain]);
+  }, [syncBrain, userId, token]);
 
 
   const login = () => {

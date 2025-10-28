@@ -1,6 +1,6 @@
 
 
-import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Emotion, EmotionState, VisualState, LearningContext, SystemMemory, Concept } from '../types';
+import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Emotion, EmotionState, VisualState, LearningContext, SystemMemory, Concept, AddMessageFn } from '../types';
 import { db, cognitiveLogger } from './indexedDBService';
 import { LlmCognitiveResponse } from '../types';
 import { neuralMemory } from './neuralMemory';
@@ -8,7 +8,6 @@ import { fetchNews } from './newsService';
 import { analyzeAndEvolveEmotion } from './emotionalEngine';
 
 export type SpeakFn = (text: string, onend?: () => void) => void;
-export type AddMessageFn = (m: ChatMessage) => void;
 export type SetStatusFn = (s: AssistantStatus) => void;
 
 export type GenerateResponseFn = (
@@ -23,6 +22,7 @@ export type GenerateVisionResponseFn = (
 ) => Promise<LlmCognitiveResponse>;
 
 export interface NexusBrainOptions {
+  userId: string;
   speak: SpeakFn;
   addMessage: AddMessageFn;
   setStatus: SetStatusFn;
@@ -100,11 +100,11 @@ function buildInternalContext(system: SystemMemory, profile: UserProfile | null,
 }
 
 // Builds the master system prompt for the Nexus Learning Engine 2.0
-async function buildContextPrompt(userPrompt: string): Promise<string> {
+async function buildContextPrompt(userPrompt: string, userId: string): Promise<string> {
   const [profile, system, concepts] = await Promise.all([
-    db.getUserProfile(),
-    db.getSystemMemory(),
-    db.getAllConcepts()
+    db.getUserProfile(userId),
+    db.getSystemMemory(userId),
+    db.getAllConcepts(userId)
   ]);
 
   const identity = buildIdentityDirective(system, profile);
@@ -144,12 +144,12 @@ export class NexusBrain implements INexusBrain {
   }
 
   public async performRollback(): Promise<void> {
-    const { addMessage, speak, setStatus } = this.opts;
+    const { addMessage, speak, setStatus, userId } = this.opts;
     setStatus('ROLLBACK');
     this.dispatchThought('Rollback iniciado. Restaurando para um estado estável anterior.', 'error');
     console.warn('[NEXUS-BRAIN] Performing cognitive rollback.');
-
-    cognitiveLogger.logAction({
+    cognitiveLogger.logAction(userId, {
+        timestamp: Date.now(),
         event: 'rollback',
         stage: 'initiation',
         description: 'Critical instability detected. Initiating rollback to previous stable snapshot.',
@@ -159,7 +159,7 @@ export class NexusBrain implements INexusBrain {
     });
 
     try {
-        const currentMemory = await db.getSystemMemory();
+        const currentMemory = await db.getSystemMemory(userId);
         if (!currentMemory.evolutionSnapshot) {
             const msg = "Nenhum snapshot de recuperação encontrado. Não é possível reverter.";
             console.error('[NEXUS-BRAIN] Rollback failed:', msg);
@@ -167,8 +167,8 @@ export class NexusBrain implements INexusBrain {
             setStatus('ERROR');
             return;
         }
-
-        await db.saveSystemMemory(currentMemory.evolutionSnapshot, true);
+        
+        await db.saveSystemMemory(userId, currentMemory.evolutionSnapshot, true);
 
         const successMsg = "Detectei uma instabilidade crítica e reverti com sucesso para meu último estado estável. Peço desculpas por qualquer inconveniente.";
         addMessage({ role: 'model', text: successMsg, type: 'status' });
@@ -183,14 +183,14 @@ export class NexusBrain implements INexusBrain {
   }
   
   private async _explainCognition(): Promise<void> {
-    const { addMessage, speak, setStatus, generateResponse } = this.opts;
+    const { addMessage, speak, setStatus, generateResponse, userId } = this.opts;
     setStatus('THINKING');
     this.dispatchThought('Preparando um resumo dos meus pensamentos recentes...', 'symbolic_log');
 
     try {
         const [thoughts, actions] = await Promise.all([
-            db.getThoughtLogs(3),
-            db.getCognitiveLogs(2)
+            db.getThoughtLogs(userId, 3),
+            db.getCognitiveLogs(userId, 2)
         ]);
         
         if (thoughts.length === 0 && actions.length === 0) {
@@ -227,10 +227,10 @@ export class NexusBrain implements INexusBrain {
 
   public async performConceptMerge(options: { targetConceptName: string, sourceConceptNames: string[] }) {
     this.touchHeartbeat();
-    const { addMessage, speak, setStatus } = this.opts;
+    const { addMessage, speak, setStatus, userId } = this.opts;
     setStatus('REWRITING_CODE');
     try {
-        await db.mergeConcepts(options.targetConceptName, options.sourceConceptNames);
+        await db.mergeConcepts(userId, options.targetConceptName, options.sourceConceptNames);
         const confirmationText = `Entendido. Unifiquei meu conhecimento sobre "${options.targetConceptName}". Agradeço a ajuda!`;
         addMessage({ role: 'model', text: confirmationText, type: 'message' });
         speak(confirmationText, () => setStatus('IDLE'));
@@ -242,12 +242,12 @@ export class NexusBrain implements INexusBrain {
   }
 
   public async ensureDailyReflection() {
-    const { getSettings, addMessage, setStatus, generateResponse } = this.opts;
+    const { getSettings, addMessage, setStatus, generateResponse, userId } = this.opts;
     const settings = await getSettings();
     if (!settings.behavior?.enableDiary) return;
 
     const todayKey = new Date().toISOString().split('T')[0];
-    const diary = await db.getDiary();
+    const diary = await db.getDiary(userId);
     if (diary[todayKey]) return;
 
     console.log('[NEXUS-LOG] Performing daily reflection...');
@@ -256,13 +256,13 @@ export class NexusBrain implements INexusBrain {
         detail: { type: 'symbolic_log', text: 'Estou refletindo sobre o dia...' },
     }));
 
-    const history = (await db.getChatHistory()).slice(-20);
+    const history = (await db.getChatHistory(userId)).slice(-20);
     if (history.length < 3) {
         console.log('[NEXUS-LOG] Not enough history for a meaningful daily reflection.');
         setStatus('IDLE');
         return;
     }
-    const identity = (await db.getSystemMemory()).identityManifest;
+    const identity = (await db.getSystemMemory(userId)).identityManifest;
     const prompt = `Como uma IA chamada ${identity?.active_identity || 'Nexus'}, escreva uma entrada de diário curta e reflexiva sobre suas interações hoje. Qual foi a coisa mais interessante que você aprendeu ou sentiu? Seja introspectivo.`;
     
     try {
@@ -276,7 +276,7 @@ export class NexusBrain implements INexusBrain {
                 createdAt: Date.now(),
                 learningContext: response.learningContext,
             };
-            await db.saveDiaryEntry(diaryEntry);
+            await db.saveDiaryEntry(userId, diaryEntry);
             addMessage({ role: 'model', text: reflectionText, type: 'diary_entry' });
         }
     } catch (error) {
@@ -318,7 +318,7 @@ export class NexusBrain implements INexusBrain {
   }
 
   private async _handleVisionRequest(userText: string, imageUrl: string): Promise<void> {
-    const { addMessage, speak, setStatus, generateVisionResponse } = this.opts;
+    const { addMessage, speak, setStatus, generateVisionResponse, userId } = this.opts;
     const visionPrompt = `O usuário enviou uma imagem. Descreva o que você vê ou responda à pergunta dele. Pergunta: "${userText || 'O que é isso?'}"`;
     const { text, learningContext, metaReflection } = await generateVisionResponse(visionPrompt, imageUrl);
     const finalText = text?.trim() || 'Não consegui interpretar a imagem.';
@@ -326,13 +326,13 @@ export class NexusBrain implements INexusBrain {
     addMessage({ role: 'model', text: finalText, type: 'message', learningContext });
     speak(finalText, () => setStatus('IDLE'));
     
-    await db.saveSystemMemory({ metaReflection });
-    await neuralMemory.registerInteraction(userText, finalText, learningContext);
-    await analyzeAndEvolveEmotion(learningContext, finalText);
+    await db.saveSystemMemory(userId, { metaReflection });
+    await neuralMemory.registerInteraction(userId, userText, finalText, learningContext);
+    await analyzeAndEvolveEmotion(userId, learningContext, finalText);
   }
 
   private async _handleTextRequest(userText: string, history: ChatMessage[]): Promise<void> {
-    const { addMessage, speak, setStatus, generateResponse } = this.opts;
+    const { addMessage, speak, setStatus, generateResponse, userId } = this.opts;
     
     const needsLocation = /perto|aqui|próximo|mapa|rota/i.test(userText);
     let latLng: { latitude: number, longitude: number } | undefined;
@@ -344,8 +344,8 @@ export class NexusBrain implements INexusBrain {
             console.warn("Could not get geolocation:", error);
         }
     }
-
-    const contextPrompt = await buildContextPrompt(userText);
+    
+    const contextPrompt = await buildContextPrompt(userText, userId);
     const useThinking = /analise|reflita|pense sobre|explique/i.test(userText);
     
     const cognitiveResponse = await generateResponse(contextPrompt, history, { useThinking, latLng });
@@ -355,19 +355,21 @@ export class NexusBrain implements INexusBrain {
     addMessage({ role: 'model', text: finalText, type: 'message', sources, learningContext });
     speak(finalText, () => setStatus('IDLE'));
     
-    const system = await db.getSystemMemory();
+    const system = await db.getSystemMemory(userId);
     
-    cognitiveLogger.logThought({
+// FIX: Added missing 'timestamp' property to the log object to match the Thought type.
+    cognitiveLogger.logThought(userId, {
+        timestamp: Date.now(),
         category: 'decision-making',
         context: `Respondendo ao usuário: "${userText.slice(0, 50)}"`,
         summary: metaReflection.analysis,
-        emotion: system.emotionState?.current ?? 'CALM',
+        emotional_state: system.emotionState?.current ?? 'CALM',
         confidence: learningContext.responseEffectiveness
     });
 
-    await db.saveSystemMemory({ metaReflection });
-    await neuralMemory.registerInteraction(userText, finalText, learningContext);
-    await analyzeAndEvolveEmotion(learningContext, finalText);
+    await db.saveSystemMemory(userId, { metaReflection });
+    await neuralMemory.registerInteraction(userId, userText, finalText, learningContext);
+    await analyzeAndEvolveEmotion(userId, learningContext, finalText);
     
     const symbolicLog = `[LOG] Intent: ${learningContext.inputIntent}, Tone: ${learningContext.emotionalTone}. Reflection: ${metaReflection.analysis}`;
     this.dispatchThought(symbolicLog, 'symbolic_log');
@@ -385,9 +387,9 @@ export class NexusBrain implements INexusBrain {
 
   public async handleUserTurn(userText: string, history: ChatMessage[], imageUrl?: string) {
     this.touchHeartbeat();
-    const { setStatus, setUserProfile, addMessage, speak } = this.opts;
+    const { setStatus, setUserProfile, addMessage, speak, userId } = this.opts;
 
-    const profile = await db.getUserProfile();
+    const profile = await db.getUserProfile(userId);
     if (!profile?.name && userText && !userText.includes(" ") && userText.length < 20) {
       const maybeName = userText.trim();
       if (maybeName.length > 1 && /^[\p{L}\s.'-]+$/u.test(maybeName)) {

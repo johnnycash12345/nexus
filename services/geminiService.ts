@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ChatMessage, LearningContext, MetaReflection, LlmCognitiveResponse } from "../types";
 import { db } from "./indexedDBService";
@@ -130,48 +131,39 @@ export const generateGeminiResponse = async (
       if (options.latLng) {
         toolConfig.retrievalConfig = { latLng: options.latLng };
       }
+      if (Object.keys(toolConfig).length > 0) {
+        config.toolConfig = toolConfig;
+      }
 
       const response = await ai.models.generateContent({
         model,
         contents,
         config,
-        toolConfig: Object.keys(toolConfig).length > 0 ? toolConfig : undefined,
       });
 
       const rawText = response.text;
       let parsedJson: any = null;
       let userFacingText: string = rawText; // Default to raw text as a fallback
 
-      // We only try to parse JSON if tools are not being used, 
-      // as tools change the response structure and don't use our custom schema.
       if (!options.tools) {
           const extracted = extractJson(rawText);
           
-          // If we successfully extract a potential JSON object
           if (extracted) {
               parsedJson = extracted;
-              
-              // Now, we determine the final text for the user.
-              // Special case for debugging or when a raw JSON view is intended.
               if (options.customSchema) {
                   userFacingText = JSON.stringify(parsedJson, null, 2);
               } else {
-                  // For standard responses, extract the natural language part.
                   const textFromJSON = parsedJson.responseText || parsedJson.response || parsedJson.text;
                   
                   if (typeof textFromJSON === 'string' && textFromJSON.trim()) {
                       userFacingText = textFromJSON;
                   } else {
-                      // The model returned valid JSON, but not the part we need. This is a cognitive error.
                       console.warn("[NEXUS-GEMINI] JSON response received, but the user-facing text field ('responseText', 'response', 'text') is missing or empty.", parsedJson);
                       userFacingText = "Entendi, mas estou processando essa informação internamente. Poderia reformular sua pergunta, por favor?";
                   }
               }
           }
-          // If extractJson returns null, it means the response was likely plain text,
-          // so userFacingText correctly remains as rawText.
       }
-      // If options.tools is present, we also default to rawText, as grounding/tool usage often adds text.
       
       const cognitiveResponse: LlmCognitiveResponse = {
         text: userFacingText.trim() || "Não consegui formular uma resposta no momento.",

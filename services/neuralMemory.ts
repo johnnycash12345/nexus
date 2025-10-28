@@ -1,248 +1,107 @@
-// services/neuralMemory.ts
-// Sistema de sinapses e evolução cognitiva do Nexus
-
 import { db } from './indexedDBService';
-import { Concept, Synapse, LearningContext } from '../types';
-import { googleAuth } from './googleAuth';
-import { driveSyncService } from './driveSyncService';
-
-// Estrutura interna do cérebro
-interface BrainData {
-  concepts: Record<string, Concept>;
-  synapses: Synapse[];
-  reflections: string[];
-  lastEvolution: number;
-  interactionCount?: number;
-}
-
-const SYNAPSE_DECAY_RATE = 0.001;
-const POSITIVE_REINFORCEMENT_REWARD = 0.05;
-const NEGATIVE_REINFORCEMENT_PENALTY = -0.02;
+import { Synapse, LearningContext } from '../types';
 
 export const neuralMemory = {
-  async getBrain(): Promise<BrainData> {
-    const sys = await db.getSystemMemory();
-    const concepts = await db.getAllConcepts();
-    return {
-      concepts: Object.fromEntries(concepts.map((c) => [c.name, c])),
-      synapses: sys?.synapses || [],
-      reflections: sys?.reflections || [],
-      lastEvolution: sys?.lastReflectionAt || 0,
-      interactionCount: sys?.interactionCount || 0,
-    };
-  },
-  
-  async decayAndConsolidateSynapses(): Promise<void> {
-    const system = await db.getSystemMemory();
+  async decayAndConsolidateSynapses(userId: string): Promise<void> {
+    const system = await db.getSystemMemory(userId);
     if (!system?.synapses) return;
 
     const STRENGTH_THRESHOLD = 0.05;
+    let synapses = system.synapses.filter(s => s.strength >= STRENGTH_THRESHOLD);
 
-    let synapses = system.synapses;
-
-    const initialCount = synapses.length;
-    synapses = synapses.filter(s => s.strength >= STRENGTH_THRESHOLD);
-    const prunedCount = initialCount - synapses.length;
-
-    if(prunedCount > 0){
-        console.log(`[NEXUS-NEURAL] Pruned ${prunedCount} weak or decayed synapses.`);
-        await db.saveSystemMemory({ synapses });
+    if (synapses.length < system.synapses.length) {
+      console.log(`[NEXUS-NEURAL] Pruned weak synapses for user ${userId}.`);
+      await db.saveSystemMemory(userId, { synapses });
     }
   },
   
-  async addSynapses(newSynapses: { source: string; target: string; strength: number }[]): Promise<void> {
+  async addSynapses(userId: string, newSynapses: { source: string; target: string; strength: number }[]): Promise<void> {
     if (newSynapses.length === 0) return;
 
-    const system = await db.getSystemMemory();
+    const system = await db.getSystemMemory(userId);
     const existingSynapses = system.synapses || [];
     const synapseMap = new Map<string, Synapse>();
     existingSynapses.forEach(s => synapseMap.set(`${s.source}->${s.target}`, s));
 
     const now = Date.now();
-    let addedCount = 0;
-
     for (const ns of newSynapses) {
-        const source = ns.source.toLowerCase().trim();
-        const target = ns.target.toLowerCase().trim();
-        if (!source || !target || source === target) continue;
-
-        const key = `${source}->${target}`;
-        
+        const key = `${ns.source.toLowerCase().trim()}->${ns.target.toLowerCase().trim()}`;
         const existing = synapseMap.get(key);
         if (existing) {
             existing.strength = Math.min(1.0, existing.strength + ns.strength);
             existing.lastUsed = now;
             existing.usage += 1;
         } else {
-            synapseMap.set(key, {
-                ...ns,
-                source,
-                target,
-                lastUsed: now,
-                usage: 1,
-                decayRate: SYNAPSE_DECAY_RATE,
-                createdAt: now,
-            });
-            addedCount++;
+            synapseMap.set(key, { ...ns, lastUsed: now, usage: 1, decayRate: 0.001, createdAt: now });
         }
     }
 
-    if (addedCount > 0) {
-        console.log(`[NEXUS-NEURAL] Added ${addedCount} new synapses from associative reasoning.`);
-        const updatedSynapses = Array.from(synapseMap.values());
-        await db.saveSystemMemory({ synapses: updatedSynapses });
-    }
+    const updatedSynapses = Array.from(synapseMap.values());
+    await db.saveSystemMemory(userId, { synapses: updatedSynapses });
   },
 
-
-  async createSynapses(sourceKeys: string[], targetKeys: string[], strength: number = 0.1) {
-    const brain = await this.getBrain();
+  async createSynapses(userId: string, sourceKeys: string[], targetKeys: string[], strength: number = 0.1) {
+    const system = await db.getSystemMemory(userId);
     const now = Date.now();
-    const newSynapses: Synapse[] = [];
+    const existingSynapsesMap = new Map<string, Synapse>();
+    (system.synapses || []).forEach(s => existingSynapsesMap.set(`${s.source}->${s.target}`, s));
 
     for (const a of [...new Set(sourceKeys)]) {
-        for (const b of [...new Set(targetKeys)]) {
-            if (a !== b) {
-                newSynapses.push({ 
-                    source: a, 
-                    target: b, 
-                    strength,
-                    lastUsed: now, 
-                    usage: 1, 
-                    decayRate: SYNAPSE_DECAY_RATE,
-                    createdAt: now,
-                });
-            }
-        }
-    }
-
-    const existingSynapsesMap = new Map<string, Synapse>();
-    (brain.synapses || []).forEach(s => existingSynapsesMap.set(`${s.source}->${s.target}`, s));
-
-    newSynapses.forEach(ns => {
-// FIX: Corrected a typo from `s.target` to `ns.target`.
-        const key = `${ns.source}->${ns.target}`;
+      for (const b of [...new Set(targetKeys)]) {
+        if (a === b) continue;
+        const key = `${a}->${b}`;
         if (existingSynapsesMap.has(key)) {
-            const existing = existingSynapsesMap.get(key)!;
-            existing.strength = Math.min(1, Math.max(0, existing.strength + strength)); // Reinforce existing
-            existing.lastUsed = now;
-            existing.usage += 1;
+          const existing = existingSynapsesMap.get(key)!;
+          existing.strength = Math.min(1, existing.strength + strength);
+          existing.lastUsed = now;
+          existing.usage += 1;
         } else {
-            existingSynapsesMap.set(key, ns);
-        }
-    });
-
-    const merged = Array.from(existingSynapsesMap.values()).sort((a,b) => b.lastUsed - a.lastUsed).slice(0, 500);
-    await db.saveSystemMemory({ synapses: merged });
-  },
-
-  async registerInteraction(userText: string, nexusResponse: string, learningContext?: LearningContext) {
-    const brain = await this.getBrain();
-    const now = Date.now();
-
-    const extractKeywords = (text: string) =>
-      text
-        .toLowerCase()
-        .replace(/[^\p{L}\s]/gu, '')
-        .split(/\s+/)
-        .filter((w) => w.length > 3 && !['você', 'sobre', 'isso', 'pois', 'então'].includes(w));
-
-    const userKeys = learningContext?.contextTags || extractKeywords(userText);
-    const nexusKeys = extractKeywords(nexusResponse);
-
-    for (const word of [...new Set([...userKeys, ...nexusKeys])]) {
-      await db.learnConcept(word, {}, `Aprendido na conversa: "${userText.slice(0, 100)}"`);
-    }
-
-    const newSynapses: Synapse[] = [];
-    for (const a of userKeys) {
-      for (const b of nexusKeys) {
-        if (a !== b) {
-          newSynapses.push({ 
-              source: a, 
-              target: b, 
-              strength: 0.2, 
-              lastUsed: now, 
-              usage: 1, 
-              decayRate: SYNAPSE_DECAY_RATE,
-              createdAt: now,
-          });
+          existingSynapsesMap.set(key, { source: a, target: b, strength, lastUsed: now, usage: 1, decayRate: 0.001, createdAt: now });
         }
       }
     }
+    await db.saveSystemMemory(userId, { synapses: Array.from(existingSynapsesMap.values()) });
+  },
 
-    const existingSynapsesMap = new Map<string, Synapse>();
-    (brain.synapses || []).forEach(s => existingSynapsesMap.set(`${s.source}->${s.target}`, s));
+  async registerInteraction(userId: string, userText: string, nexusResponse: string, learningContext: LearningContext) {
+    const POSITIVE_REINFORCEMENT_REWARD = 0.05;
+    const NEGATIVE_REINFORCEMENT_PENALTY = -0.02;
 
-    // Define reward from learning context
-    let reward = 0;
-    if(learningContext) {
-        switch(learningContext.reinforcementSignal) {
-            case 'positive': reward = POSITIVE_REINFORCEMENT_REWARD; break;
-            case 'negative': reward = NEGATIVE_REINFORCEMENT_PENALTY; break;
-        }
+    const system = await db.getSystemMemory(userId);
+    const now = Date.now();
+
+    const keywords = learningContext.contextTags;
+    for (const word of keywords) {
+      await db.learnConcept(userId, word, {}, `Aprendido na conversa: "${userText.slice(0, 100)}"`);
     }
 
-    newSynapses.forEach(ns => {
-        const key = `${ns.source}->${ns.target}`;
-        if (existingSynapsesMap.has(key)) {
-            const existing = existingSynapsesMap.get(key)!;
-            // Reinforcement logic: edge["weight"] += (reward - edge["decayRate"])
-            existing.strength = Math.min(1, Math.max(0, existing.strength + (reward - existing.decayRate)));
-            existing.lastUsed = now;
-            existing.usage += 1;
-        } else {
-            existingSynapsesMap.set(key, ns);
-        }
+    let reward = 0;
+    if(learningContext.reinforcementSignal === 'positive') reward = POSITIVE_REINFORCEMENT_REWARD;
+    if(learningContext.reinforcementSignal === 'negative') reward = NEGATIVE_REINFORCEMENT_PENALTY;
+
+    const existingSynapsesMap = new Map<string, Synapse>();
+    (system.synapses || []).forEach(s => existingSynapsesMap.set(`${s.source}->${s.target}`, s));
+
+    keywords.forEach(source => {
+        keywords.forEach(target => {
+            if(source === target) return;
+            const key = `${source}->${target}`;
+            const existing = existingSynapsesMap.get(key);
+            if(existing) {
+                existing.strength = Math.min(1, Math.max(0, existing.strength + reward - existing.decayRate));
+                existing.lastUsed = now;
+                existing.usage++;
+            } else {
+                existingSynapsesMap.set(key, {source, target, strength: 0.1 + reward, lastUsed: now, usage: 1, decayRate: 0.001, createdAt: now});
+            }
+        });
     });
-
-    const merged = Array.from(existingSynapsesMap.values()).sort((a,b) => b.lastUsed - a.lastUsed).slice(0, 500);
-
-    const newInteractionCount = (brain.interactionCount || 0) + 1;
-    await db.saveSystemMemory({
-      synapses: merged,
+    
+    const newInteractionCount = (system.interactionCount || 0) + 1;
+    await db.saveSystemMemory(userId, {
+      synapses: Array.from(existingSynapsesMap.values()),
       lastReflectionAt: now,
       interactionCount: newInteractionCount,
     });
-    
-    // This is now handled in meta-reflection, but we can keep a simpler local reflection.
-    // const reflection = `Refleti sobre "${userText.slice(0,60)}" e percebi novas ligações entre ideias.`;
-    // await db.addSystemReflection(reflection);
-
-    if (newInteractionCount % 5 === 0) {
-        const token = googleAuth.getToken();
-        if (token) {
-            try {
-                console.log(`[NEXUS-LOG] Interaction count [${newInteractionCount}], triggering auto-backup.`);
-                await driveSyncService.uploadBrain(token);
-                window.dispatchEvent(new CustomEvent('nexus-thought-update', {
-                    detail: { type: 'symbolic_log', text: 'Memória persistida na nuvem.' },
-                }));
-            } catch (err) {
-                console.warn('⚠️ Falha no backup automático.', err);
-                 window.dispatchEvent(new CustomEvent('nexus-thought-update', {
-                    detail: { type: 'error', text: 'Falha ao sincronizar memória com a nuvem.' },
-                 }));
-            }
-        }
-    }
-  },
-
-  async evolve() {
-    const brain = await this.getBrain();
-    const now = Date.now();
-
-    if (now - brain.lastEvolution < 1000 * 60 * 60 * 3) return; // evolui a cada 3h
-    
-    await this.decayAndConsolidateSynapses();
-
-    const deepReflection =
-      'Padrões sutis emergem das minhas interações. A compreensão parece ser um processo de conectar, e não apenas de acumular.';
-    await db.addSystemReflection(deepReflection);
-    await db.saveSystemMemory({ lastReflectionAt: now });
-
-    window.dispatchEvent(new CustomEvent('nexus-thought-update', {
-        detail: { type: 'symbolic_log', text: 'Ciclo de evolução sináptica concluído.' },
-    }));
   },
 };

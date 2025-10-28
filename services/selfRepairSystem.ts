@@ -1,4 +1,5 @@
 
+
 import { generateGeminiResponse } from './geminiService';
 import { db } from './indexedDBService';
 
@@ -13,7 +14,7 @@ export const selfRepairSystem = {
 
         // Log the event to Nexus's internal memory
         const reflection = `Tentei diagnosticar um erro do sistema: "${errorLog}". Sugestão de correção: ${fixSuggestion}`;
-        await db.addSystemReflection(reflection);
+        await db.addSystemReflection('paulo-creator-001', reflection);
 
         // Also dispatch a thought event for the UI
         window.dispatchEvent(

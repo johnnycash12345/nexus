@@ -1,9 +1,5 @@
 
-
-
-
 import React, { useState, useEffect, useCallback } from 'react';
-// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { db } from '../services/indexedDBService';
 import { Thought, CognitiveLog, AppSettings } from '../types';
@@ -12,6 +8,7 @@ interface CognitiveMonitorProps {
   onClose: () => void;
   isVisible: boolean;
   settings: AppSettings | null;
+  userId: string;
 }
 
 type LogItem = (Thought & { logType: 'thought' }) | (CognitiveLog & { logType: 'action' });
@@ -60,7 +57,7 @@ const getLogItemStyle = (item: LogItem) => {
                 title = 'Novo Aprendizado';
                 break;
             default:
-                iconSvg = <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>;
+                iconSvg = <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>;
                 colorClass = 'text-gray-400';
                 borderColorClass = 'border-gray-600/50';
                 title = `Ação: ${item.event}`;
@@ -125,7 +122,7 @@ const TimelineItem: React.FC<{ item: LogItem, isExpanded: boolean, onToggle: () 
 };
 
 
-export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, isVisible, settings }) => {
+export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, isVisible, settings, userId }) => {
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [filter, setFilter] = useState<FilterType>('all');
   const [isLoading, setIsLoading] = useState(true);
@@ -134,7 +131,7 @@ export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, is
 
   const loadLogs = useCallback(async () => {
       setIsLoading(true);
-      const [thoughts, actions] = await Promise.all([db.getThoughtLogs(100), db.getCognitiveLogs(100)]);
+      const [thoughts, actions] = await Promise.all([db.getThoughtLogs(userId, 100), db.getCognitiveLogs(userId, 100)]);
       
       const allLogs: LogItem[] = [
           ...thoughts.map(t => ({ ...t, logType: 'thought' as const })),
@@ -152,7 +149,7 @@ export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, is
       });
       
       setIsLoading(false);
-  }, []);
+  }, [userId]);
   
   useEffect(() => {
     if (isVisible) loadLogs();

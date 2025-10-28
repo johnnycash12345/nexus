@@ -1,9 +1,5 @@
 
-
-
-
 import React, { useState, useEffect } from 'react';
-// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { AppSettings, Concept, Permissions } from '../types';
 import { db } from '../services/indexedDBService';
@@ -19,6 +15,7 @@ interface SettingsPanelProps {
   onClose: () => void;
   token: string | null;
   onLogout: () => void;
+  userId: string;
 }
 
 type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória';
@@ -38,7 +35,7 @@ const panelVariants: Variants = {
   },
 };
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, settings, onSettingsChange, onClose, token, onLogout }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, settings, onSettingsChange, onClose, token, onLogout, userId }) => {
   const [activeTab, setActiveTab] = useState<Tab>('geral');
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -61,9 +58,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, setting
     window.speechSynthesis.onvoiceschanged = fetchVoices;
     
     if (activeTab === 'memória') {
-        db.getAllConcepts().then(setConcepts);
+        db.getAllConcepts(userId).then(setConcepts);
     }
-  }, [activeTab]);
+  }, [activeTab, userId]);
   
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -84,8 +81,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, setting
   };
 
   const handlePermissionChange = (field: keyof Permissions, value: boolean) => {
-    // FIX: Simplified the state update to be more direct and type-safe,
-    // removing unnecessary nullish coalescing that caused type errors.
     setLocalSettings(prev => ({
         ...prev,
         behavior: {
@@ -131,6 +126,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, setting
                 />;
       case 'memória':
         return <MemorySettings 
+                    userId={userId}
                     token={token}
                     onLogout={onLogout}
                     concepts={concepts}

@@ -5,18 +5,19 @@ import { Concept } from '../../types';
 import { db } from '../../services/indexedDBService';
 
 interface MemorySettingsProps {
+    userId: string;
     token: string | null;
     onLogout: () => void;
     concepts: Concept[];
     setConcepts: React.Dispatch<React.SetStateAction<Concept[]>>;
 }
 
-export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout, concepts, setConcepts }) => {
+export const MemorySettings: React.FC<MemorySettingsProps> = ({ userId, token, onLogout, concepts, setConcepts }) => {
     
     const handleDeleteConcept = async (name: string) => {
       if(window.confirm(`Tem certeza que quer que o Nexus esqueça sobre "${name}"?`)){
-        await db.deleteConcept(name);
-        setConcepts(await db.getAllConcepts());
+        await db.deleteConcept(userId, name);
+        setConcepts(await db.getAllConcepts(userId));
       }
     };
 
@@ -28,7 +29,7 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
     
     const handleClearHistory = async () => {
         if (window.confirm('Tem certeza que deseja apagar todo o histórico de conversas? Esta ação não pode ser desfeita.')) {
-            await db.clearChatHistory();
+            await db.clearChatHistory(userId);
             alert('Histórico de conversas apagado. A aplicação será recarregada.');
             window.location.reload();
         }
@@ -36,7 +37,7 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
 
     const handleResetMemory = async () => {
         if (window.confirm('ATENÇÃO: Você tem certeza que deseja resetar TODA a memória do Nexus? Isso inclui conceitos, perfil de usuário, diário e histórico. Esta ação não pode ser desfeita.')) {
-            await db.resetNexusMemory();
+            await db.resetNexusMemory(userId);
             alert('Memória do Nexus resetada. A aplicação será recarregada.');
             window.location.reload();
         }
@@ -45,12 +46,12 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
     const handleExportMemory = async () => {
         try {
             const [profile, diary, system, concepts, chatHistory, tasks] = await Promise.all([
-                db.getUserProfile(),
-                db.getDiary(),
-                db.getSystemMemory(),
-                db.getAllConcepts(),
-                db.getChatHistory(),
-                db.getAllTasks(),
+                db.getUserProfile(userId),
+                db.getDiary(userId),
+                db.getSystemMemory(userId),
+                db.getAllConcepts(userId),
+                db.getChatHistory(userId),
+                db.getAllTasks(userId),
             ]);
 
             const backupData = {
@@ -80,7 +81,7 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
     
     const handleExportCognitiveGraph = async () => {
         try {
-            const systemMemory = await db.getSystemMemory();
+            const systemMemory = await db.getSystemMemory(userId);
             const synapses = systemMemory?.synapses || [];
 
             if (synapses.length === 0) {
@@ -136,7 +137,7 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
                 const content = e.target?.result;
                 if (typeof content !== 'string') throw new Error("File content is not readable.");
                 const backupData = JSON.parse(content);
-                await db.importBackup(backupData);
+                await db.importBackup(userId, backupData);
                 alert('Memória importada com sucesso! A aplicação será recarregada.');
                 window.location.reload();
             } catch (error: any) {
@@ -168,7 +169,7 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ token, onLogout,
                 const content = e.target?.result;
                 if (typeof content !== 'string') throw new Error("File content is not readable.");
                 const graphData = JSON.parse(content);
-                await db.importCognitiveGraph(graphData);
+                await db.importCognitiveGraph(userId, graphData);
                 alert('Grafo cognitivo importado com sucesso! A aplicação será recarregada.');
                 window.location.reload();
             } catch (error: any) {

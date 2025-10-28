@@ -1,9 +1,5 @@
 
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
-// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, type Variants } from 'framer-motion';
 import { db } from '../services/indexedDBService';
 import { Task } from '../types';
@@ -11,6 +7,7 @@ import { Task } from '../types';
 interface TodoListProps {
   onClose: () => void;
   isVisible: boolean;
+  userId: string;
 }
 
 const backdropVariants: Variants = {
@@ -44,7 +41,7 @@ const itemVariants: Variants = {
   },
 };
 
-export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
+export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible, userId }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskText, setNewTaskText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,10 +51,10 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
       loadTasks();
       setTimeout(() => inputRef.current?.focus(), 300);
     }
-  }, [isVisible]);
+  }, [isVisible, userId]);
 
   const loadTasks = async () => {
-    const allTasks = await db.getAllTasks();
+    const allTasks = await db.getAllTasks(userId);
     allTasks.sort((a, b) => {
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
         return b.createdAt - a.createdAt;
@@ -69,7 +66,7 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
     e.preventDefault();
     const text = newTaskText.trim();
     if (text) {
-      await db.addTask({ text });
+      await db.addTask(userId, { text });
       setNewTaskText('');
       loadTasks();
     }
@@ -77,14 +74,14 @@ export const TodoList: React.FC<TodoListProps> = ({ onClose, isVisible }) => {
 
   const handleToggleTask = async (task: Task) => {
     if (task.id) {
-        await db.updateTask({ ...task, completed: !task.completed });
+        await db.updateTask(userId, { ...task, completed: !task.completed });
         loadTasks();
     }
   };
 
   const handleDeleteTask = async (id: number | undefined) => {
     if (id) {
-      await db.deleteTask(id);
+      await db.deleteTask(userId, id);
       loadTasks();
     }
   };

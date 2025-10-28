@@ -1,5 +1,5 @@
-// types.ts
 
+// types.ts
 export type AssistantStatus =
   | 'IDLE'
   | 'LISTENING'
@@ -57,6 +57,7 @@ export interface CodeModificationProposal {
 
 export interface ChatMessage {
   id?: number;
+  userId: string;
   role: 'user' | 'model';
   text: string;
   type: 'message' | 'status' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary' | 'code_proposal_prompt';
@@ -120,6 +121,7 @@ export interface SimpleFunctionCall {
 }
 
 export interface Concept {
+    userId: string;
     name: string;
     definition?: string;
     confidence: number;
@@ -129,13 +131,23 @@ export interface Concept {
     updatedAt: number;
 }
 
+export type UserRole = 'Creator' | 'Standard';
+
 export interface UserProfile {
-  id?: number;
+  id: string; // userId
   name: string;
+  role: UserRole;
+}
+
+export interface UserContext {
+    userId: string;
+    userName: string;
+    userRole: UserRole;
 }
 
 export interface RlhfData {
   id?: number;
+  userId: string;
   timestamp: number;
   prompt: string;
   response: string;
@@ -207,7 +219,7 @@ export interface Synapse {
 }
 
 export interface SystemMemory {
-    id?: number;
+    userId: string;
     born: boolean;
     birthTime: string;
     personality: Personality;
@@ -230,6 +242,7 @@ export interface SystemMemory {
 }
 
 export interface DiaryEntry {
+  userId: string;
   dayKey: string;
   entry: string;
   createdAt: number;
@@ -238,6 +251,7 @@ export interface DiaryEntry {
 
 export interface Task {
   id?: number;
+  userId: string;
   text: string;
   createdAt: number;
   completed: boolean;
@@ -251,6 +265,7 @@ export interface EvolutionChange {
 
 export interface EvolutionLog {
     id?: number;
+    userId: string;
     timestamp: number;
     reasoning: string;
     changes: EvolutionChange[];
@@ -263,6 +278,7 @@ export type ThoughtCategory = 'decision-making' | 'self-reflection' | 'planning'
 
 export interface Thought {
     id?: number;
+    userId: string;
     thought_id: string;
     timestamp: number;
     category: ThoughtCategory;
@@ -279,6 +295,7 @@ export type CognitiveStage = 'start_cycle' | 'observe' | 'analyze' | 'sandbox' |
 
 export interface CognitiveLog {
     id?: number;
+    userId: string;
     timestamp: number;
     event: CognitiveEvent;
     stage: CognitiveStage;
@@ -296,7 +313,7 @@ export interface LlmCognitiveResponse {
   sources?: Source[];
 }
 
-export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'unknown';
+export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'project_start' | 'unknown';
 
 export interface CognitiveFrame {
     userInput: string;
@@ -304,7 +321,40 @@ export interface CognitiveFrame {
     imageUrl?: string;
     intent: Intent;
     status: AssistantStatus;
+    userContext: UserContext;
     retrievedConcepts?: Concept[];
     retrievedReflections?: string[];
     llmResponse?: LlmCognitiveResponse;
+}
+
+export interface ProjectTask {
+    step: number;
+    description: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    result?: string;
+}
+
+export interface Project {
+    id?: number;
+    userId: string;
+    name: string;
+    goal: string;
+    tasks: ProjectTask[];
+    createdAt: number;
+    status: 'active' | 'completed' | 'paused';
+}
+
+export type SpeakFn = (text: string, onend?: () => void) => void;
+export type AddMessageFn = (m: Omit<ChatMessage, 'userId' | 'timestamp'>) => void;
+export type SetStatusFn = (s: AssistantStatus) => void;
+export type GenerateResponseFn = (prompt: string, history: ChatMessage[], options?: any) => Promise<any>;
+export type GenerateVisionResponseFn = (prompt: string, imageUrl: string) => Promise<any>;
+
+export interface OrchestratorOptions {
+  userId: string;
+  speak: SpeakFn;
+  addMessage: AddMessageFn;
+  setStatus: SetStatusFn;
+  generateResponse: GenerateResponseFn;
+  generateVisionResponse: GenerateVisionResponseFn;
 }

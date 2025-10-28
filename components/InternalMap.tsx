@@ -11,6 +11,7 @@ import { Concept, Synapse } from '../types';
 interface InternalMapProps {
   onClose: () => void;
   isVisible: boolean;
+  userId: string;
 }
 
 interface ConceptWithSynapses extends Concept {
@@ -35,7 +36,7 @@ const itemVariants: Variants = {
   },
 };
 
-export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) => {
+export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible, userId }) => {
   const [concepts, setConcepts] = useState<ConceptWithSynapses[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,8 +44,10 @@ export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) 
     if (isVisible) {
       setIsLoading(true);
       Promise.all([
-        db.getAllConcepts(),
-        db.getSystemMemory()
+// FIX: Pass userId to getAllConcepts as required by the multi-user database schema.
+        db.getAllConcepts(userId),
+// FIX: Pass userId to getSystemMemory as required by the multi-user database schema.
+        db.getSystemMemory(userId)
       ]).then(([allConcepts, systemMemory]) => {
         const synapses = systemMemory.synapses || [];
         const conceptsWithSynapses = allConcepts.map(concept => {
@@ -60,7 +63,7 @@ export const InternalMap: React.FC<InternalMapProps> = ({ onClose, isVisible }) 
         setIsLoading(false);
       });
     }
-  }, [isVisible]);
+  }, [isVisible, userId]);
 
   return (
     <div className={`fixed inset-0 bg-black/60 z-30 flex justify-start backdrop-blur-sm transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}>

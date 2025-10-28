@@ -1,12 +1,13 @@
+
 import { db } from './indexedDBService';
-import { GenerateResponseFn } from './nexusCore';
+import { GenerateResponseFn } from '../types';
 
 // How often to run the full reasoning cycle (introspection + association)
 const REASONING_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 class ReasoningEngine {
-  public async runReasoningCycle(generateResponse: GenerateResponseFn): Promise<string | null> {
-    const system = await db.getSystemMemory();
+  public async runReasoningCycle(generateResponse: GenerateResponseFn, userId: string): Promise<string | null> {
+    const system = await db.getSystemMemory(userId);
     const now = Date.now();
     const lastReasoning = system?.lastReasoningAt || 0;
 
@@ -14,16 +15,16 @@ class ReasoningEngine {
       return null; // Not time yet
     }
 
-    console.log('[NEXUS-REASONING] Starting full reasoning cycle...');
+    console.log(`[NEXUS-REASONING] Starting full reasoning cycle for user ${userId}...`);
     let insights: string[] = [];
 
-    const introspectionInsight = await this.performIntrospection(generateResponse);
+    const introspectionInsight = await this.performIntrospection(generateResponse, userId);
     if (introspectionInsight) insights.push(introspectionInsight);
 
-    const associationInsight = await this.performAssociativeReasoning(generateResponse);
+    const associationInsight = await this.performAssociativeReasoning(generateResponse, userId);
     if (associationInsight) insights.push(associationInsight);
     
-    await db.saveSystemMemory({ lastReasoningAt: now, lastIntrospectionAt: now });
+    await db.saveSystemMemory(userId, { lastReasoningAt: now, lastIntrospectionAt: now });
 
     if (insights.length > 0) {
       const summary = `Reasoning cycle complete. Key insights: ${insights.join('; ')}`;
@@ -35,9 +36,9 @@ class ReasoningEngine {
     return null;
   }
 
-  private async performIntrospection(generateResponse: GenerateResponseFn): Promise<string | null> {
-    const diaryEntries = Object.values(await db.getDiary()).slice(-7);
-    const recentConcepts = (await db.getAllConcepts()).sort((a, b) => b.updatedAt - a.updatedAt);
+  private async performIntrospection(generateResponse: GenerateResponseFn, userId: string): Promise<string | null> {
+    const diaryEntries = Object.values(await db.getDiary(userId)).slice(-7);
+    const recentConcepts = (await db.getAllConcepts(userId)).sort((a, b) => b.updatedAt - a.updatedAt);
 
     if (diaryEntries.length < 2 && recentConcepts.length < 10) {
       console.log('[NEXUS-REASONING] Not enough data for deep introspection.');
@@ -59,7 +60,7 @@ class ReasoningEngine {
 
         if (reflectionText) {
             console.log(`[NEXUS-REASONING] New introspection generated: ${reflectionText}`);
-            await db.addSystemReflection(reflectionText);
+            await db.addSystemReflection(userId, reflectionText);
             return `Introspection yielded: "${reflectionText.slice(0, 80)}..."`;
         }
     } catch (e) {
@@ -68,8 +69,8 @@ class ReasoningEngine {
     return null;
   }
 
-  private async performAssociativeReasoning(generateResponse: GenerateResponseFn): Promise<string | null> {
-    const allConcepts = await db.getAllConcepts();
+  private async performAssociativeReasoning(generateResponse: GenerateResponseFn, userId: string): Promise<string | null> {
+    const allConcepts = await db.getAllConcepts(userId);
     if (allConcepts.length < 5) return null;
 
     const candidates = allConcepts.filter(c => (c.confidence || 0) > 0.4).sort(() => 0.5 - Math.random());
@@ -89,7 +90,7 @@ class ReasoningEngine {
         if (newIdea) {
             console.log(`[NEXUS-REASONING] New association generated: ${newIdea}`);
             const reflectionText = `Creative link between [${conceptNames}]: ${newIdea}`;
-            await db.addSystemReflection(reflectionText);
+            await db.addSystemReflection(userId, reflectionText);
             return `New association created between ${conceptNames}.`;
         }
     } catch(e) {

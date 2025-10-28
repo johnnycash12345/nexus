@@ -14,7 +14,9 @@ function extractKeywords(text: string): string[] {
         .filter(word => word.length > 4 && !stopWords.has(word));
 }
 
+// FIX: Added userId parameter to function signature to support multi-user architecture.
 export async function integrateWebKnowledge(
+    userId: string,
     topic: string,
     summary: string,
     sources: Source[]
@@ -22,18 +24,23 @@ export async function integrateWebKnowledge(
     try {
         // 1. Create a reflection from the learning
         const reflection = `Aprendizado autônomo sobre '${topic}': ${summary.slice(0, 200)}...`;
-        await db.addSystemReflection(reflection);
+// FIX: Pass userId to addSystemReflection.
+        await db.addSystemReflection(userId, reflection);
 
         // 2. Extract keywords and reinforce/create concepts
         const keywords = [topic, ...extractKeywords(summary)];
         const uniqueKeywords = [...new Set(keywords)];
-        await adaptiveMemory.reinforceConcepts(uniqueKeywords);
+// FIX: Pass userId to reinforceConcepts.
+        await adaptiveMemory.reinforceConcepts(userId, uniqueKeywords);
 
         // 3. Create synapses between the topic and the new concepts
-        await neuralMemory.createSynapses([topic], uniqueKeywords, 0.2);
+// FIX: Pass userId to createSynapses and correct argument order.
+        await neuralMemory.createSynapses(userId, [topic], uniqueKeywords, 0.2);
 
         // 4. Log the cognitive event for transparency
-        cognitiveLogger.logAction({
+// FIX: Pass userId to logAction and add missing timestamp property.
+        cognitiveLogger.logAction(userId, {
+            timestamp: Date.now(),
             event: 'knowledge_expansion',
             stage: 'web_learning',
             description: `Learned about "${topic}" from the web.`,
