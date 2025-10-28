@@ -1,12 +1,13 @@
-
-
 import { db, cognitiveLogger } from '../indexedDBService';
-import { CognitiveFrame, VisualState } from '../../types';
+import { CognitiveFrame, VisualState, CodeModificationProposal } from '../../types';
 import { neuralMemory } from '../neuralMemory';
 import { analyzeAndEvolveEmotion } from '../emotionalEngine';
 import { associativeReasoner } from '../associativeReasoner';
+import { selfReflection } from '../selfReflection';
 
-export async function updateCognitiveState(frame: CognitiveFrame): Promise<void> {
+type PresentProposalFn = (proposal: CodeModificationProposal, goal: string) => void;
+
+export async function updateCognitiveState(frame: CognitiveFrame, presentCodeProposal: PresentProposalFn): Promise<void> {
     if (!frame.llmResponse) {
         console.error("[CognitiveUpdater] Cannot update state without an LLM response in the frame.");
         return;
@@ -48,4 +49,12 @@ export async function updateCognitiveState(frame: CognitiveFrame): Promise<void>
     associativeReasoner.generateNewSynapses(frame).catch(err => {
         console.warn("[CognitiveUpdater] Associative reasoning process failed:", err);
     });
+
+    // 7. Perform self-reflection on the interaction's effectiveness
+    const settings = await db.getSettings();
+    if (settings.behavior.permissions.allowSelfModification) {
+        selfReflection.reflectOnInteraction(frame, presentCodeProposal).catch(err => {
+            console.warn("[CognitiveUpdater] Self-reflection process failed:", err);
+        });
+    }
 }

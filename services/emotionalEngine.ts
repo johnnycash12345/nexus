@@ -1,4 +1,5 @@
 
+
 import { Type } from '@google/genai';
 import { db } from './indexedDBService';
 import { Emotion, EmotionState, LearningContext } from '../types';
@@ -50,6 +51,8 @@ export const analyzeAndEvolveEmotion = async (learningContext: LearningContext, 
         - Se o usuário estava curioso, o Nexus pode se tornar CURIOSO.
         - Se a interação foi confusa ou negativa, o Nexus pode se tornar INCERTO.
         - Uma troca neutra ou informativa deve levar de volta à CALMA.
+
+        Além da emoção, considere o tom do usuário. Se for sobre um projeto ('command_task', 'complex_reasoning'), o tom do Nexus deve ser mais focado e profissional. Se for uma conversa pessoal ('small_talk'), deve ser mais empático e casual. Sua mudança emocional deve refletir isso.
         
         Sua resposta DEVE ser um único objeto JSON correspondente ao esquema fornecido.
     `;

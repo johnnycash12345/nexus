@@ -48,17 +48,28 @@ export interface LearningContext {
   reinforcementSignal: 'positive' | 'neutral' | 'negative';
 }
 
+export interface CodeModificationProposal {
+    reasoning: string;
+    modificationType: 'REPLACE' | 'INSERT_BEFORE' | 'INSERT_AFTER';
+    targetSnippet: string;
+    newCode: string;
+}
+
 export interface ChatMessage {
   id?: number;
   role: 'user' | 'model';
   text: string;
-  type: 'message' | 'status' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary';
+  type: 'message' | 'status' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary' | 'code_proposal_prompt';
   imageUrl?: string;
   timestamp?: number;
   consolidationOptions?: ConsolidationOptions;
   sources?: Source[];
   articles?: NewsArticle[];
   learningContext?: LearningContext;
+  codeProposal?: {
+      goal: string;
+      code: string;
+  };
 }
 
 export interface Permissions {

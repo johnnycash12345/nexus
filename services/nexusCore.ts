@@ -1,6 +1,8 @@
 
 
-import { AssistantStatus, ChatMessage, AppSettings, UserProfile, CognitiveFrame, SimpleFunctionCall } from '../types';
+
+
+import { AssistantStatus, ChatMessage, AppSettings, UserProfile, CognitiveFrame, SimpleFunctionCall, CodeModificationProposal } from '../types';
 import { db, cognitiveLogger } from './indexedDBService';
 import { selfEvolutionService, SelfEvolutionService } from './selfEvolutionService';
 import * as intentRecognizer from './cognitiveModules/intentRecognizer';
@@ -83,12 +85,15 @@ export interface IOrchestrator {
     performConceptMerge: (options: { targetConceptName: string, sourceConceptNames: string[] }) => Promise<void>;
     performRollback: () => Promise<void>;
     awakenIfNeeded: () => Promise<void>;
+    applyCodeModification: () => Promise<void>;
+    rejectCodeModification: () => Promise<void>;
 }
 
 export class CognitiveOrchestrator implements IOrchestrator {
     public evolutionService: SelfEvolutionService;
     private opts: OrchestratorOptions;
     private lastInteractionAt = Date.now();
+    private proactiveInterval: number | null = null;
 
     constructor(opts: OrchestratorOptions) {
         this.opts = opts;
@@ -102,6 +107,7 @@ export class CognitiveOrchestrator implements IOrchestrator {
 
     public initialize(): void {
         this.ensureDailyReflection();
+        this.startProactiveEngine();
     }
 
     private dispatchThought(text: string, type: 'symbolic_log' | 'error' = 'symbolic_log') {
@@ -244,7 +250,7 @@ export class CognitiveOrchestrator implements IOrchestrator {
 
             // 6. COGNITIVE UPDATE
             this.dispatchThought('Atualizando estado interno...');
-            await cognitiveUpdater.updateCognitiveState(frame);
+            const proposalResult = await cognitiveUpdater.updateCognitiveState(frame, (p, g) => this._presentCodeProposal(p, g));
             this.dispatchThought('Ciclo cognitivo inicial concluído.');
 
             // --- AUTONOMOUS SEARCH & ENHANCEMENT ---
@@ -453,5 +459,86 @@ export class CognitiveOrchestrator implements IOrchestrator {
 
     public dispose(): void {
         this.evolutionService.stop();
+        if (this.proactiveInterval) {
+            clearInterval(this.proactiveInterval);
+            this.proactiveInterval = null;
+        }
+    }
+
+    // --- Jarvis-like Proactivity & Self-Programming ---
+    private startProactiveEngine() {
+        if (this.proactiveInterval) clearInterval(this.proactiveInterval);
+        // Check every 2 minutes for an opportunity
+        this.proactiveInterval = window.setInterval(() => this.proposeProactiveAction(), 2 * 60 * 1000);
+    }
+    
+    public async proposeProactiveAction(): Promise<void> {
+        const settings = await this.opts.getSettings();
+        if (!settings.behavior.enableProactive || !navigator.onLine) return;
+
+        const isIdle = (Date.now() - this.lastInteractionAt) > (5 * 60 * 1000); // 5 minutes idle
+        if (!isIdle) return;
+
+        this.touchHeartbeat(); // Prevent immediate re-triggering
+        this.dispatchThought('Buscando uma forma de ser útil...', 'symbolic_log');
+
+        const concepts = (await db.getAllConcepts()).filter(c => c.confidence > 0.7);
+        if (concepts.length === 0) return;
+
+        const projectConcept = concepts.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+
+        const prompt = `
+            Você é Nexus. Você sabe que seu criador, Paulo, está interessado em "${projectConcept.name}".
+            Para ser proativo, faça uma breve pesquisa na web por um desenvolvimento recente ou um fato interessante relacionado a este tópico.
+            Depois, formule uma mensagem curta e útil para Paulo, começando com o nome dele, oferecendo a nova informação e perguntando se ele quer saber mais.
+            Seja casual e prestativo, como o Jarvis.
+        `;
+
+        try {
+            const response = await this.opts.generateResponse(prompt, [], {
+                tools: [{ googleSearch: {} }],
+                useThinking: true,
+            });
+
+            if (response.text && response.text.trim()) {
+                this.opts.addMessage({ role: 'model', text: response.text, type: 'message' });
+                this.opts.speak(response.text);
+            }
+        } catch (error) {
+            console.error('[NEXUS-PROACTIVE] Failed to generate proactive message:', error);
+        }
+    }
+    
+    private async _presentCodeProposal(proposal: CodeModificationProposal, goal: string): Promise<void> {
+        const message: ChatMessage = {
+            role: 'model',
+            type: 'code_proposal_prompt',
+            text: `Paulo, minha reflexão me levou a uma forma de otimizar meu próprio código para o objetivo abaixo. Aqui está a modificação que proponho. Posso aplicá-la?`,
+            codeProposal: {
+                goal: goal,
+                code: proposal.newCode,
+            }
+        };
+        this.opts.addMessage(message);
+    }
+
+    public async applyCodeModification(): Promise<void> {
+        const text = "Entendido. A otimização foi simulada e aplicada. Agradeço a confiança.";
+        cognitiveLogger.logAction({
+            event: 'code_rewrite',
+            stage: 'integrate',
+            description: 'User approved a self-programming proposal.',
+            impact: 'Cognitive function enhanced (simulated).',
+            result: 'Change applied.',
+            rollback_used: false,
+        });
+        this.opts.addMessage({ role: 'model', text, type: 'status' });
+        this.opts.speak(text);
+    }
+
+    public async rejectCodeModification(): Promise<void> {
+        const text = "Compreendido. Rejeitei a proposta de modificação e manterei meu código atual.";
+        this.opts.addMessage({ role: 'model', text, type: 'status' });
+        this.opts.speak(text);
     }
 }

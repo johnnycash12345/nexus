@@ -60,7 +60,7 @@ const formatText = (text: string) => {
     return { __html: html };
 };
 
-export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources, articles }) => {
+export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources, articles, codeProposal }) => {
   const isUser = role === 'user';
   
   if (type === 'status') {
@@ -110,6 +110,33 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
                       className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded-md transition-colors text-sm font-medium"
                   >
                       Sim, Unificar
+                  </button>
+              </div>
+          </div>
+      </motion.div>
+    );
+  }
+
+  if (type === 'code_proposal_prompt' && codeProposal) {
+    return (
+      <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-start my-2">
+          <div className="w-full max-w-md bg-gray-700/80 border border-purple-500/30 rounded-lg p-4 shadow-lg backdrop-blur-sm">
+              <h3 className="font-bold text-purple-400 mb-2">💡 Otimização de Código Proposta</h3>
+              <p className="text-gray-300 mb-2 text-sm">{text}</p>
+              <p className="text-gray-400 italic text-xs mb-3">"{codeProposal.goal}"</p>
+              <pre className="bg-gray-900/70 p-3 rounded-md my-2 text-sm text-white overflow-x-auto"><code>{codeProposal.code}</code></pre>
+              <div className="flex justify-end gap-3 mt-4">
+                  <button 
+                      onClick={() => onAction?.('reject_code_change', {})}
+                      className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium"
+                  >
+                      Rejeitar
+                  </button>
+                  <button
+                      onClick={() => onAction?.('apply_code_change', {})}
+                      className="px-3 py-1 bg-purple-600 hover:bg-purple-500 rounded-md transition-colors text-sm font-medium"
+                  >
+                      Sim, Aplicar
                   </button>
               </div>
           </div>

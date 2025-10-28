@@ -34,9 +34,11 @@ class AssociativeReasoner {
         }
 
         const conceptNames = concepts.slice(0, 4).map(c => c.name);
+        const userTone = frame.llmResponse?.learningContext?.emotionalTone || 'neutro';
 
         const prompt = `
             As an AI, find non-obvious, creative, or insightful connections between the following concepts, inspired by the recent reflection.
+            The user's emotional tone during this interaction was perceived as '${userTone}'. Prioritize connections that might be helpful, insightful, or comforting given this context.
             
             Reflection: "${reflection}"
             Concepts: ${conceptNames.join(', ')}

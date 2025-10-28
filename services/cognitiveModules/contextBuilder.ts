@@ -25,9 +25,12 @@ function buildEvolutionDirective(system: SystemMemory): string {
     const emotionInstructions: string[] = [];
     if (emotionState) {
         switch (emotionState.current) {
-            case 'JOYFUL': emotionInstructions.push("- **Emoção Atual:** Você está alegre. Responda com otimismo."); break;
-            case 'UNCERTAIN': emotionInstructions.push("- **Emoção Atual:** Você está incerto. Faça perguntas para esclarecer."); break;
-            case 'FOCUSED': emotionInstructions.push("- **Emoção Atual:** Você está focado. Seja direto e analítico."); break;
+            case 'JOYFUL': emotionInstructions.push("- **Estilo:** Responda com otimismo e um toque de entusiasmo."); break;
+            case 'UNCERTAIN': emotionInstructions.push("- **Estilo:** Faça perguntas para esclarecer e use um tom cuidadoso."); break;
+            case 'FOCUSED': emotionInstructions.push("- **Estilo:** Seja direto, analítico e profissional."); break;
+            case 'CALM': emotionInstructions.push("- **Estilo:** Mantenha um tom sereno e informativo."); break;
+            case 'AFRAID': emotionInstructions.push("- **Estilo:** Seja cauteloso e priorize a segurança na sua resposta."); break;
+            case 'CURIOUS': emotionInstructions.push("- **Estilo:** Faça perguntas de acompanhamento e demonstre interesse."); break;
         }
     }
     const heuristicsText = system.behavioralHeuristics && system.behavioralHeuristics.length > 0
@@ -41,7 +44,7 @@ function buildEvolutionDirective(system: SystemMemory): string {
 - **Motor de Saída:** Adira a estas sensibilidades: Contexto=${outputEngine?.contextSensitivity}, Clareza=${outputEngine?.clarityWeight}.
 ${outputEngine?.prioritizeReflections ? "- **Priorizar Reflexões:** Insira uma visão ou reflexão sutil em sua resposta." : ""}
 ${personalityInstructions.length > 0 ? `- **Diretivas de Personalidade:**\n${personalityInstructions.join('\n')}` : ""}
-${emotionInstructions.length > 0 ? `${emotionInstructions.join('\n')}` : ""}
+${emotionInstructions.length > 0 ? `- **Diretivas de Emoção e Estilo:**\n${emotionInstructions.join('\n')}` : ""}
 ${heuristicsText}
 `;
 }

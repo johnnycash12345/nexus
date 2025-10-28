@@ -1,7 +1,4 @@
 
-
-
-
 import { db, cognitiveLogger } from './indexedDBService';
 import { GenerateResponseFn, SetStatusFn, AddMessageFn, SpeakFn } from './nexusCore';
 // FIX: Import `EvolutionChange` to correctly type the `logChange` variable.
@@ -243,9 +240,8 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
             strongestConcepts: concepts.sort((a,b) => (b.confidence||0) - (a.confidence||0)).slice(0,3).map(c=>c.name),
             weakestConcepts: concepts.sort((a,b) => (a.confidence||0) - (b.confidence||0)).slice(0,3).map(c=>c.name),
             synapseCount: system.synapses?.length,
-// FIX: Use `String(l.reasoning ?? 'N/A')` to robustly convert the reasoning to a string,
-// preventing a TypeScript error where the map's result was inferred as `unknown[]`.
-            recentEvolutions: logs.map((l: EvolutionLog) => String(l.reasoning ?? 'N/A')),
+// FIX: Explicitly set the return type of the map callback to 'string' to resolve a type inference issue where it was inferring `unknown[]`.
+            recentEvolutions: logs.map((l: EvolutionLog): string => String(l.reasoning ?? 'N/A')),
         };
         return JSON.stringify(stats, null, 2);
     }
@@ -374,7 +370,7 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
 
         await db.saveSystemMemory({ ...modifiedSystem, lastEvolutionAt: Date.now() }, true);
         
-        const log = {
+        const log: Omit<EvolutionLog, 'id'> = {
             timestamp: Date.now(),
             reasoning: proposal.proposal.reasoning,
             changes: [logChange],
