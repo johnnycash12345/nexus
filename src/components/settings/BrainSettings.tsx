@@ -51,14 +51,15 @@ export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, setSetti
             <SettingsSection title="Comportamento e Personalidade">
                 <ToggleSetting id="enableProactive" title="Iniciativa Proativa" description="Permitir que o Nexus inicie conversas." checked={settings.behavior?.enableProactive} onChange={(v) => handleNestedSettingChange('behavior', 'enableProactive', v)} />
                 <ToggleSetting id="enableCuriosity" title="Curiosidade Autônoma" description="Permitir que o Nexus faça perguntas quando ocioso." checked={settings.behavior?.enableCuriosity} onChange={(v) => handleNestedSettingChange('behavior', 'enableCuriosity', v)} />
-                <ToggleSetting id="enableDiary" title="Diário e Reflexões" description="Habilitar o Nexus para manter um diário sobre as interações." checked={settings.behavior?.enableDiary} onChange={(v) => handleNestedSettingChange('behavior', 'enableDiary', v)} />
+                <ToggleSetting id="enableDiary" title="Diário de Bordo" description="Habilitar o Nexus para manter um diário sobre as interações." checked={settings.behavior?.enableDiary} onChange={(v) => handleNestedSettingChange('behavior', 'enableDiary', v)} />
+                <ToggleSetting id="enableReflection" title="Reflexão Automática de Fundo" description="Permitir que o Nexus reflita sobre conversas passadas para aprender." checked={settings.behavior?.enableReflection} onChange={(v) => handleNestedSettingChange('behavior', 'enableReflection', v)} />
             </SettingsSection>
 
             <SettingsSection title="Permissões Autônomas">
                 <ToggleSetting id="autoEvolutionEnabled" title="🧬 Autoevolução Online" description="Permitir que o Nexus aprenda e se aperfeiçoe sozinho." checked={settings.behavior?.permissions?.autoEvolutionEnabled} onChange={(v) => handlePermissionChange('autoEvolutionEnabled', v)} />
-                <ToggleSetting id="allowApiAccess" title="Acesso a APIs Externas" description="Permitir que o Nexus use APIs como a de notícias." checked={settings.behavior?.permissions?.allowApiAccess} onChange={(v) => handlePermissionChange('allowApiAccess', v)} />
+                <ToggleSetting id="allowApiAccess" title="Acesso a APIs Externas" description="Permitir que o Nexus use APIs como a de notícias e buscas." checked={settings.behavior?.permissions?.allowApiAccess} onChange={(v) => handlePermissionChange('allowApiAccess', v)} />
                 <ToggleSetting id="allowSelfModification" title="Auto-modificação da Memória" description="Permitir que o Nexus organize e evolua sua memória." checked={settings.behavior?.permissions?.allowSelfModification} onChange={(v) => handlePermissionChange('allowSelfModification', v)} />
-                <ToggleSetting id="transparencyMode" title="🪞 Transparência Cognitiva" description="Exibir pensamentos e processos internos em tempo real." checked={settings.behavior?.permissions?.transparencyMode} onChange={(v) => handlePermissionChange('transparencyMode', v)} />
+                <ToggleSetting id="transparencyMode" title="🪞 Modo Mente Aberta (Logs Detalhados)" description="Exibir todos os pensamentos e processos internos em tempo real." checked={settings.behavior?.permissions?.transparencyMode} onChange={(v) => handlePermissionChange('transparencyMode', v)} />
             </SettingsSection>
             
             <SettingsSection title="Parâmetros Cognitivos">
@@ -72,6 +73,17 @@ export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, setSetti
                         <motion.div initial={{ opacity: 0, height: 0, marginTop: 0 }} animate={{ opacity: 1, height: 'auto', marginTop: '16px' }} exit={{ opacity: 0, height: 0, marginTop: 0 }} className="overflow-hidden">
                             <div className="space-y-4 pt-4 border-t border-gray-700">
                                 <div>
+                                    <label htmlFor="learning-model" className="block text-sm font-medium text-gray-300 mb-1">Modelo para Aprendizado</label>
+                                    <select id="learning-model" value={settings.cognitive?.learningModel || 'gemini-2.5-flash'} onChange={(e) => handleNestedSettingChange('cognitive', 'learningModel', e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500">
+                                        <option value="gemini-2.5-flash">Gemini Flash (Rápido e Eficiente)</option>
+                                        <option value="gemini-2.5-pro">Gemini Pro (Análise Profunda)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="reflection-frequency" className="block text-sm font-medium text-gray-300 mb-1">Frequência de Reflexão ({settings.cognitive?.reflectionFrequencyMinutes} min)</label>
+                                    <input id="reflection-frequency" type="range" min="1" max="60" step="1" value={settings.cognitive?.reflectionFrequencyMinutes || 10} onChange={(e) => handleNestedSettingChange('cognitive', 'reflectionFrequencyMinutes', parseInt(e.target.value, 10))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                                </div>
+                                <div>
                                     <label htmlFor="emotional-intensity" className="block text-sm font-medium text-gray-300 mb-1">Intensidade Emocional ({settings.cognitive?.emotionalIntensity.toFixed(1)})</label>
                                     <input id="emotional-intensity" type="range" min="0.5" max="1.5" step="0.1" value={settings.cognitive?.emotionalIntensity || 1.0} onChange={(e) => handleNestedSettingChange('cognitive', 'emotionalIntensity', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
                                 </div>
@@ -82,14 +94,6 @@ export const BrainSettings: React.FC<BrainSettingsProps> = ({ settings, setSetti
                                 <div>
                                     <label htmlFor="evolution-cycle" className="block text-sm font-medium text-gray-300 mb-1">Frequência da Evolução ({settings.cognitive?.evolutionCycleHours}h)</label>
                                     <input id="evolution-cycle" type="range" min="1" max="24" step="1" value={settings.cognitive?.evolutionCycleHours || 6} onChange={(e) => handleNestedSettingChange('cognitive', 'evolutionCycleHours', parseInt(e.target.value, 10))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-                                </div>
-                                <div>
-                                    <label htmlFor="evolution-confidence" className="block text-sm font-medium text-gray-300 mb-1">Confiança para Auto-Evolução ({(settings.cognitive?.evolutionConfidenceThreshold * 100).toFixed(0)}%)</label>
-                                    <input id="evolution-confidence" type="range" min="0.5" max="1.0" step="0.05" value={settings.cognitive?.evolutionConfidenceThreshold || 0.85} onChange={(e) => handleNestedSettingChange('cognitive', 'evolutionConfidenceThreshold', parseFloat(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-                                </div>
-                                <div>
-                                    <label htmlFor="memory-decay" className="block text-sm font-medium text-gray-300 mb-1">Decaimento da Memória ({settings.cognitive?.memoryDecayHalfLifeDays} dias)</label>
-                                    <input id="memory-decay" type="range" min="7" max="90" step="1" value={settings.cognitive?.memoryDecayHalfLifeDays || 30} onChange={(e) => handleNestedSettingChange('cognitive', 'memoryDecayHalfLifeDays', parseInt(e.target.value, 10))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
                                 </div>
                             </div>
                         </motion.div>

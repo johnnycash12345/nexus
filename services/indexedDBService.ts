@@ -1,4 +1,3 @@
-
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project } from '../types';
 
@@ -299,6 +298,8 @@ class IndexedDBService {
             enableProactive: true,
             enableCuriosity: true,
             enableDiary: true,
+            // FIX: Add missing 'enableReflection' property to align with its usage in the default settings.
+            enableReflection: true,
             permissions: {
                 allowApiAccess: true,
                 allowAutonomousDecision: true,
@@ -316,6 +317,9 @@ class IndexedDBService {
             evolutionCycleHours: 6,
             evolutionConfidenceThreshold: 0.85,
             memoryDecayHalfLifeDays: 30,
+            // FIX: Add missing 'reflectionFrequencyMinutes' and 'learningModel' properties to align with their usage in default settings and services.
+            reflectionFrequencyMinutes: 10,
+            learningModel: 'gemini-2.5-flash',
         },
         appearance: 'neutral',
       };

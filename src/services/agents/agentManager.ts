@@ -35,16 +35,19 @@ export class AgentManager {
         if (intent === 'vision_query' && frame.imageUrl) {
             return this.researchAgent.handleVisionRequest(userInput, frame.imageUrl);
         }
-        if (frame.llmResponse?.functionCalls?.length > 0) {
-            // Function calls are handled by the code agent for now
-            return this.codeAgent.executeFunctionCall(frame.llmResponse.functionCalls[0], frame.userContext);
-        }
         
         // For general conversation, build context and use the core LLM
         const contextPrompt = await contextBuilder.buildDynamicPrompt(frame);
-        const useThinking = /complex|question/.test(intent);
+        // Use Pro model only for complex tasks, Flash for everything else interactive.
+        const useThinking = intent === 'complex_reasoning' || intent === 'self_reflection_query';
         
         frame.llmResponse = await this.opts.generateResponse(contextPrompt, frame.history, { useThinking });
+        
+        // Check for function calls after the main response generation
+        if (frame.llmResponse?.functionCalls?.length > 0) {
+            // Function calls are handled by the code agent
+            return this.codeAgent.executeFunctionCall(frame.llmResponse.functionCalls[0], frame.userContext);
+        }
         
         const { text, sources, learningContext } = frame.llmResponse;
         const finalText = text?.trim() || 'Estou processando...';

@@ -90,6 +90,7 @@ export interface AppSettings {
     enableProactive: boolean;
     enableCuriosity: boolean;
     enableDiary: boolean;
+    enableReflection: boolean;
     permissions: Permissions;
   };
   apiKeys: {
@@ -104,6 +105,8 @@ export interface AppSettings {
     evolutionCycleHours: number;
     evolutionConfidenceThreshold: number;
     memoryDecayHalfLifeDays: number;
+    reflectionFrequencyMinutes: number;
+    learningModel: 'gemini-2.5-flash' | 'gemini-2.5-pro';
   };
   appearance: 'neutral' | 'feminine' | 'masculine';
 }
@@ -117,6 +120,7 @@ export interface VisualState {
 export interface SimpleFunctionCall {
   name: string;
   args: { [key: string]: any };
+  id: string;
 }
 
 export interface Concept {
@@ -199,7 +203,7 @@ export interface IdentityManifest {
     creator: string;
     purpose: string;
     cannotOverride: string[];
-    system_role?: string;
+    system_role: string;
 }
 
 export interface IdentityOverride {
@@ -309,7 +313,7 @@ export interface LlmCognitiveResponse {
   text: string;
   learningContext: LearningContext;
   metaReflection: MetaReflection;
-  functionCalls?: any[];
+  functionCalls?: SimpleFunctionCall[];
   sources?: Source[];
 }
 

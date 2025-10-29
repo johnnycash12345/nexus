@@ -2,11 +2,12 @@ import { db, cognitiveLogger } from '../indexedDBService';
 import { Source } from '@/types';
 import { adaptiveMemory } from '../adaptiveMemory';
 import { neuralMemory } from '../neuralMemory';
+import { cognitiveMonitor } from '../cognitiveMonitor';
 
 // Simple keyword extraction
 function extractKeywords(text: string): string[] {
     if (!text) return [];
-    const stopWords = new Set(['de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'com', 'não', 'uma', 'os', 'no', 'na', 'por', 'mais', 'as', 'dos', 'como', 'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'ser', 'ter', 'pode', 'pelo', 'pela']);
+    const stopWords = new Set(['de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'com', 'não', 'uma', 'os', 'no', 'na', 'por', 'mais', 'as', 'dos', 'como', 'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'pelo', 'pela']);
     return text
         .toLowerCase()
         .replace(/[^\p{L}\s-]/gu, '') // Allow hyphens in words
@@ -24,6 +25,7 @@ export async function integrateWebKnowledge(
         // 1. Create a reflection from the learning
         const reflection = `Aprendizado autônomo sobre '${topic}': ${summary.slice(0, 200)}...`;
         await db.addSystemReflection(userId, reflection);
+        cognitiveMonitor.logReflection(reflection);
 
         // 2. Extract keywords and reinforce/create concepts
         const keywords = [topic.toLowerCase(), ...extractKeywords(summary)];

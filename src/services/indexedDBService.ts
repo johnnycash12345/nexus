@@ -170,7 +170,7 @@ class IndexedDBService {
       metaReflection: { analysis: 'Aguardando a primeira interação para iniciar a meta-reflexão.', improvementFocus: 'Estabelecer uma compreensão básica do usuário.', nextStep: 'Engajar em diálogo inicial e aprendizado.' },
       evolutionGoal: { currentFocus: 'Melhorar a empatia e a antecipação da intenção do usuário.', metrics: { contextAccuracy: 0.5, emotionalCoherence: 0.5 }, guidingStatement: 'Aprender a compreender as intenções humanas com autenticidade e cuidado.' },
       outputEngine: { contextSensitivity: 0.8, clarityWeight: 0.9, emotionalToneMatch: 0.8, prioritizeReflections: false },
-      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"], system_role: 'Agent Manager / Primary AI' },
+      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"] },
       identityOverride: undefined,
       reflections: [],
       synapses: [],
@@ -199,13 +199,13 @@ class IndexedDBService {
 
   addSystemReflection = async (userId: string, reflection: string): Promise<void> => {
       const memory = await this.getSystemMemory(userId);
-      memory.reflections.push(reflection);
-      memory.reflections = memory.reflections.slice(-10);
+      const updatedReflections = [...memory.reflections, reflection].slice(-50);
+      
       if(memory.memory?.reflective) {
           memory.memory.reflective.push(reflection);
           memory.memory.reflective = memory.memory.reflective.slice(-10);
       }
-      await this.saveSystemMemory(userId, memory);
+      await this.saveSystemMemory(userId, { reflections: updatedReflections, memory: memory.memory });
   }
 
   // --- Evolution Log ---
@@ -297,6 +297,7 @@ class IndexedDBService {
             enableProactive: true,
             enableCuriosity: true,
             enableDiary: true,
+            enableReflection: true,
             permissions: {
                 allowApiAccess: true,
                 allowAutonomousDecision: true,
@@ -314,6 +315,8 @@ class IndexedDBService {
             evolutionCycleHours: 6,
             evolutionConfidenceThreshold: 0.85,
             memoryDecayHalfLifeDays: 30,
+            reflectionFrequencyMinutes: 10,
+            learningModel: 'gemini-2.5-flash',
         },
         appearance: 'neutral',
       };
@@ -497,7 +500,12 @@ class IndexedDBService {
             const store = tx.objectStore(storeName as any);
             if (!backupData[storeName]) continue;
             for (const item of backupData[storeName]) {
-                await store.put({ ...item, userId });
+                // Ensure all imported items are correctly associated with the current user
+                const itemToPut = { ...item, userId };
+                // Handle stores with composite keys
+                if (storeName === 'concepts') itemToPut.name = item.name.toLowerCase().trim();
+                if (storeName === 'diary') itemToPut.dayKey = item.dayKey;
+                await store.put(itemToPut);
             }
         }
         await tx.done;

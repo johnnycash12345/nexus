@@ -12,6 +12,8 @@ import { useGoogleSync } from '@/hooks/useGoogleSync';
 import { useSpeech } from '@/hooks/useSpeech';
 import { selfRepairSystem } from '@/services/selfRepairSystem';
 import { systemMonitor } from '@/services/systemMonitor';
+import { reflectionEngine } from '@/services/reflectionEngine';
+import { cognitiveMonitor } from '@/services/cognitiveMonitor';
 
 const SettingsPanel = lazy(() => import('@/components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
 const CameraView = lazy(() => import('@/components/CameraView').then(m => ({ default: m.CameraView })));
@@ -126,6 +128,7 @@ const App: React.FC = () => {
       const history = await db.getChatHistory(currentUserId);
       setMessages(history);
       const loadedSettings = await db.getSettings(currentUserId);
+      await cognitiveMonitor.initialize(currentUserId, loadedSettings);
       setSettings(loadedSettings);
       setIsInitializing(false);
     };
@@ -160,6 +163,26 @@ const App: React.FC = () => {
           systemMonitor.stop(); // STOP MONITOR
         };
   }, [isInitializing, isStarted, settings, currentUserId, addMessage, speak, generateResponse, generateVisionResponse, token]);
+  
+  // Background reflection engine
+  useEffect(() => {
+    if (!isStarted || isInitializing || !settings || !settings.behavior.enableReflection) {
+        return; // Do nothing if not started, initializing, or reflection is disabled
+    }
+
+    const reflectNow = () => {
+        console.log('[App] Triggering background reflection...');
+        reflectionEngine.reflect(currentUserId, generateResponse, settings);
+    };
+    
+    const intervalMs = (settings.cognitive.reflectionFrequencyMinutes || 10) * 60 * 1000;
+    const reflectionInterval = setInterval(reflectNow, intervalMs);
+
+    return () => {
+        clearInterval(reflectionInterval);
+    };
+  }, [isStarted, isInitializing, settings, currentUserId, generateResponse]);
+
 
   const handleTextSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,6 +212,7 @@ const App: React.FC = () => {
   const onSettingsChange = async (newSettings: AppSettings) => {
     setSettings(newSettings);
     await db.saveSettings(currentUserId, newSettings);
+    cognitiveMonitor.updateSettings(newSettings);
   };
   
   const handleMessageAction = async (action: string, payload: any) => {

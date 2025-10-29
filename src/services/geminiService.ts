@@ -1,33 +1,82 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ChatMessage, LearningContext, MetaReflection, LlmCognitiveResponse } from "@/types";
 import { db } from "./indexedDBService";
+import { cognitiveMonitor } from "./cognitiveMonitor";
+import { telemetryService } from './telemetryService';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// --- Request Queue ---
+type RequestResolver<T> = () => Promise<T>;
+const requestQueue: {
+    request: RequestResolver<any>;
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+}[] = [];
+let isProcessingQueue = false;
+
+async function processQueue() {
+    if (isProcessingQueue || requestQueue.length === 0) {
+        return;
+    }
+    isProcessingQueue = true;
+    const { request, resolve, reject } = requestQueue.shift()!;
+    try {
+        const result = await request();
+        resolve(result);
+    } catch (error) {
+        reject(error);
+    } finally {
+        isProcessingQueue = false;
+        processQueue();
+    }
+}
+
+function enqueueRequest<T>(request: RequestResolver<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        requestQueue.push({ request, resolve, reject });
+        if (!isProcessingQueue) {
+            processQueue();
+        }
+    });
+}
+
 // --- Retry Helper ---
+const API_TIMEOUT = 30000; // 30 seconds
+
 async function withRetry<T>(apiCall: () => Promise<T>, retries = 3, backoff = 2000): Promise<T> {
     try {
-        return await apiCall();
+        const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('API call timed out')), API_TIMEOUT)
+        );
+        const result = await Promise.race([apiCall(), timeoutPromise]);
+        telemetryService.incrementSuccess();
+        return result;
     } catch (error: any) {
-        const errorString = JSON.stringify(error);
-        const isRateLimitError = errorString.includes('429') || errorString.includes('RESOURCE_EXHAUSTED');
-        
-        if (isRateLimitError && retries > 0) {
-            console.warn(`[NEXUS-GEMINI] Rate limit atingido. Tentando novamente em ${backoff / 1000}s... (${retries} tentativas restantes)`);
+        telemetryService.incrementFailure();
+        const errorString = (error.message || '').toString();
+        const isRetryableError =
+            errorString.includes('429') || // Rate limit
+            /5\d\d/.test(errorString) || // 5xx server errors
+            errorString.includes('Failed to fetch') || // Network error
+            errorString.includes('timed out'); // Timeout
+
+        if (isRetryableError && retries > 0) {
+            console.warn(`[NEXUS-GEMINI] Retryable error occurred. Retrying in ${backoff / 1000}s... (${retries} retries left)`, error.message);
             await new Promise(resolve => setTimeout(resolve, backoff));
             return withRetry(apiCall, retries - 1, backoff * 2);
-        } else if (isRateLimitError) {
-             console.error(`[NEXUS-ERROR] Rate limit atingido e número máximo de tentativas excedido.`);
+        } else if (isRetryableError) {
+            console.error(`[NEXUS-ERROR] API call failed after multiple retries.`);
         }
         
-        throw error; // Re-throw for fallbacks
+        throw error;
     }
 }
 
 
 // --- Rate Limiting ---
 let lastCallTimestamp = 0;
-const MIN_CALL_INTERVAL_MS = 2000; // 2s minimum between calls to be polite to the API
+const MIN_CALL_INTERVAL_MS = 1000; // 1s minimum between calls, queue handles concurrency
 
 // --- Types ---
 interface GenerateOptions {
@@ -35,12 +84,12 @@ interface GenerateOptions {
   latLng?: { latitude: number; longitude: number };
   customSchema?: any;
   tools?: any[];
+  forcePlainText?: boolean;
 }
 
 // --- JSON Extraction Helper ---
 function extractJson(str: string): any | null {
   if (!str) return null;
-  // Find the first '{' and the last '}' to bound the JSON object.
   const firstBrace = str.indexOf('{');
   const lastBrace = str.lastIndexOf('}');
   
@@ -99,19 +148,18 @@ export const generateGeminiResponse = async (
   history: ChatMessage[],
   options: GenerateOptions = {}
 ): Promise<LlmCognitiveResponse> => {
-  return withRetry(async () => {
+  return enqueueRequest(() => withRetry(async () => {
     const now = Date.now();
     const elapsed = now - lastCallTimestamp;
     if (elapsed < MIN_CALL_INTERVAL_MS) {
       const waitTime = MIN_CALL_INTERVAL_MS - elapsed;
-      console.log(`[NEXUS-LOG] Aguardando ${waitTime}ms para respeitar taxa de chamadas.`);
       await new Promise((r) => setTimeout(r, waitTime));
     }
     lastCallTimestamp = Date.now();
+    const model = options.useThinking ? "gemini-2.5-pro" : "gemini-2.5-flash";
+    cognitiveMonitor.logThought(`Consultando modelo: ${model} com prompt de ${prompt.length} caracteres.`);
 
     try {
-      const model = options.useThinking ? "gemini-2.5-pro" : "gemini-2.5-flash";
-
       const contents = history
         .map((h) => ({
           role: h.role === "model" ? "model" : "user",
@@ -120,8 +168,8 @@ export const generateGeminiResponse = async (
         .concat([{ role: "user", parts: [{ text: prompt }] }]);
 
       const config: any = {
-        responseMimeType: options.tools ? undefined : "application/json",
-        responseSchema: options.tools ? undefined : (options.customSchema || responseSchema),
+        responseMimeType: options.forcePlainText ? undefined : (options.tools ? undefined : "application/json"),
+        responseSchema: options.forcePlainText ? undefined : (options.tools ? undefined : (options.customSchema || responseSchema)),
       };
       if (options.useThinking) config.thinkingConfig = { thinkingBudget: 32768 };
       if (options.tools) config.tools = options.tools;
@@ -140,7 +188,19 @@ export const generateGeminiResponse = async (
         config,
       });
 
+      cognitiveMonitor.logThought('Resposta do modelo recebida e sendo processada.');
       const rawText = response.text;
+
+      if (options.forcePlainText) {
+          return {
+              text: rawText.trim(),
+              learningContext: { inputIntent: 'internal', emotionalTone: 'neutral', contextTags: [], responseEffectiveness: 0.5, reinforcementSignal: 'neutral' },
+              metaReflection: { analysis: 'Plain text response requested.', improvementFocus: 'accuracy', nextStep: 'provide text' },
+              functionCalls: [],
+              sources: [],
+          };
+      }
+      
       let parsedJson: any = null;
       let userFacingText: string = rawText; // Default to raw text as a fallback
 
@@ -203,10 +263,11 @@ export const generateGeminiResponse = async (
 
       return cognitiveResponse;
     } catch (error: any) {
-      console.error(`[NEXUS-ERROR] Falha na chamada do Gemini:`, error);
+      cognitiveMonitor.logThought(`Erro na chamada do Gemini: ${error.message}`);
+      // Error is thrown to be handled by withRetry
       throw error;
     }
-  });
+  }));
 };
 
 // --- Gemini Vision ---
@@ -214,12 +275,13 @@ export const generateGeminiVisionResponse = async (
   prompt: string,
   base64ImageUrl: string
 ): Promise<LlmCognitiveResponse> => {
-  return withRetry(async () => {
+  return enqueueRequest(() => withRetry(async () => {
     const now = Date.now();
     const elapsed = now - lastCallTimestamp;
     if (elapsed < MIN_CALL_INTERVAL_MS)
       await new Promise((r) => setTimeout(r, MIN_CALL_INTERVAL_MS - elapsed));
     lastCallTimestamp = Date.now();
+    cognitiveMonitor.logThought('Consultando modelo de visão com imagem.');
 
     try {
       const model = "gemini-2.5-flash";
@@ -235,6 +297,7 @@ export const generateGeminiVisionResponse = async (
           parts: [{ text: prompt }, { inlineData: { mimeType, data: base64Data } }],
         },
       });
+      cognitiveMonitor.logThought('Resposta do modelo de visão recebida.');
 
       return {
         text: response.text,
@@ -251,9 +314,10 @@ export const generateGeminiVisionResponse = async (
           nextStep: "Associar imagem com memórias semânticas.",
         },
       };
-    } catch (err) {
-      console.error("[NEXUS-VISION-ERROR]:", err);
+    } catch (err: any) {
+      cognitiveMonitor.logThought(`Erro na chamada de visão do Gemini: ${err.message}`);
+      // Error is thrown to be handled by withRetry
       throw err;
     }
-  });
+  }));
 };

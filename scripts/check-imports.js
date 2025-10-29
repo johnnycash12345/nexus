@@ -25,8 +25,8 @@ function checkDir(dir) {
       const code = fs.readFileSync(fullPath, "utf-8");
       const imports = findImports(code);
       for (const imp of imports) {
-        if (imp.startsWith("/")) {
-          console.error(`❌ Caminho inválido detectado em ${fullPath}: ${imp}`);
+        if (imp.startsWith("../")) {
+          console.error(`❌ Caminho relativo inválido detectado em ${fullPath}: '${imp}'. Use o alias '@/' em vez disso.`);
           process.exit(1);
         }
       }
@@ -42,7 +42,7 @@ function checkAliasConfig() {
   const viteConfigPath = path.resolve(process.cwd(), 'vite.config.ts');
   if (fs.existsSync(viteConfigPath)) {
     const viteConfigContent = fs.readFileSync(viteConfigPath, 'utf-8');
-    if (viteConfigContent.replace(/\s/g, '').includes("alias:{'@':path.resolve(__dirname,'./src')}")) {
+    if (viteConfigContent.includes("'@': path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'src')")) {
       viteConfigCorrect = true;
     }
   }
@@ -63,8 +63,8 @@ function checkAliasConfig() {
   
   if (!viteConfigCorrect || !tsConfigCorrect) {
     console.error('❌ Alias “@” não configurado corretamente no projeto.');
-    if (!viteConfigCorrect) console.error("   - Verifique `resolve.alias` em vite.config.ts. Deve ser: `{'@': path.resolve(__dirname, './src')}`");
-    if (!tsConfigCorrect) console.error('   - Verifique `baseUrl` e `paths` em tsconfig.json. Deve ser: `"baseUrl": ".", "paths": { "@/*": ["src/*"] }`');
+    if (!viteConfigCorrect) console.error("   - Verifique `resolve.alias` em vite.config.ts.");
+    if (!tsConfigCorrect) console.error('   - Verifique `baseUrl` e `paths` em tsconfig.json.');
     process.exit(1);
   }
 }

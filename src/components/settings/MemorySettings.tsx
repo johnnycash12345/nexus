@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Concept } from '@/types';
 import { db } from '@/services/indexedDBService';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cognitiveTestService } from '@/services/cognitiveTestService';
+import { telemetryService } from '@/services/telemetryService';
 
 interface MemorySettingsProps {
     userId: string;
@@ -18,6 +20,9 @@ const SettingsSection: React.FC<{ title: string; children: React.ReactNode, clas
 
 export const MemorySettings: React.FC<MemorySettingsProps> = ({ userId, token, onLogout }) => {
     const [concepts, setConcepts] = useState<Concept[]>([]);
+    const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'success' | 'failure'>('idle');
+    const [testResult, setTestResult] = useState<{ success: boolean; message: string; details: any } | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
 
     useEffect(() => {
         db.getAllConcepts(userId).then(setConcepts);
@@ -104,6 +109,23 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ userId, token, o
         reader.readAsText(file);
     };
 
+    const handleRunTest = async () => {
+        setTestStatus('running');
+        setTestResult(null);
+        const result = await cognitiveTestService.runTest(userId);
+        setTestResult(result);
+        setTestStatus(result.success ? 'success' : 'failure');
+        if (result.success) {
+            db.getAllConcepts(userId).then(setConcepts);
+        }
+    };
+    
+    const handleExportDiagnostics = async () => {
+        setIsExporting(true);
+        await telemetryService.exportDiagnostics(userId);
+        setIsExporting(false);
+    };
+
     return (
         <div className="max-w-xl mx-auto">
             <SettingsSection title="Sincronização na Nuvem">
@@ -119,7 +141,7 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ userId, token, o
                 </div>
             </SettingsSection>
 
-            <SettingsSection title="Backup Local">
+            <SettingsSection title="Backup e Transferência">
                 <p className="text-sm text-gray-400 -mt-2">Salve ou restaure a memória completa do Nexus, ou apenas sua rede de conhecimento (grafo).</p>
                 <div className="grid grid-cols-2 gap-3">
                     <button onClick={() => handleExport('memory')} className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors text-sm font-medium">Exportar Memória</button>
@@ -129,6 +151,59 @@ export const MemorySettings: React.FC<MemorySettingsProps> = ({ userId, token, o
                     <label htmlFor="import-graph" className="w-full px-4 py-2 bg-cyan-700 hover:bg-cyan-600 rounded-md transition-colors text-sm font-medium text-center cursor-pointer">Importar Grafo</label>
                     <input id="import-graph" type="file" accept=".json" className="hidden" onChange={(e) => handleImport(e, 'graph')} />
                 </div>
+            </SettingsSection>
+            
+            <SettingsSection title="Telemetria e Diagnóstico">
+                 <p className="text-sm text-gray-400 -mt-2">Exporte um arquivo JSON com métricas de desempenho e dados cognitivos anonimizados para auditoria e análise.</p>
+                 <button 
+                    onClick={handleExportDiagnostics}
+                    disabled={isExporting}
+                    className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 disabled:cursor-wait rounded-md transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                >
+                    {isExporting ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                            Gerando Relatório...
+                        </>
+                    ) : 'Exportar Diagnóstico'}
+                </button>
+            </SettingsSection>
+
+            <SettingsSection title="Diagnóstico Cognitivo">
+                <p className="text-sm text-gray-400 -mt-2">
+                    Execute um cenário de aprendizado simulado para verificar se os processos cognitivos do Nexus estão funcionando corretamente.
+                </p>
+                <button 
+                    onClick={handleRunTest}
+                    disabled={testStatus === 'running'}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-wait rounded-md transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                >
+                    {testStatus === 'running' ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                            Executando...
+                        </>
+                    ) : 'Executar Teste Cognitivo'}
+                </button>
+                <AnimatePresence>
+                {testResult && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className={`mt-4 p-3 rounded-md text-sm ${testStatus === 'success' ? 'bg-green-800/50 text-green-300' : 'bg-red-800/50 text-red-300'}`}>
+                        <p className="font-bold">{testStatus === 'success' ? 'Teste Concluído com Sucesso' : 'Falha no Teste'}</p>
+                        <p>{testResult.message}</p>
+                        <ul className="text-xs mt-2 list-disc list-inside">
+                            <li>Conceitos Iniciais: {testResult.details.initialConceptCount}</li>
+                            <li>Conceitos Finais: {testResult.details.finalConceptCount}</li>
+                            {testResult.details.learnedConcepts.length > 0 && (
+                                 <li>Conceitos Verificados: {testResult.details.learnedConcepts.join(', ')}</li>
+                            )}
+                        </ul>
+                    </motion.div>
+                )}
+                </AnimatePresence>
             </SettingsSection>
             
             <SettingsSection title="Memória de Conceitos">

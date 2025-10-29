@@ -1,15 +1,15 @@
 /* --- Body Motion --- */
-@keyframes motion-idle-keyframes { 0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);} }
-.motion-idle { animation: motion-idle-keyframes 4s ease-in-out infinite; }
+@keyframes motion-idle-keyframes { 0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);} }
+.motion-idle { animation: motion-idle-keyframes 5s ease-in-out infinite; }
 
 @keyframes motion-thinking-keyframes {
-  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
-  50% { transform: translateY(-5px) rotate(1.5deg); }
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-2px) rotate(1deg); }
 }
-.motion-thinking { animation: motion-thinking-keyframes 4s ease-in-out infinite; }
+.motion-thinking { animation: motion-thinking-keyframes 6s ease-in-out infinite; }
 
-@keyframes motion-listening-keyframes { 0%,100%{transform:scale(1);}50%{transform:scale(1.02);} }
-.motion-listening { animation: motion-listening-keyframes 2.5s ease-in-out infinite; }
+@keyframes motion-listening-keyframes { 0%,100%{transform:scale(1);}50%{transform:scale(1.04);} }
+.motion-listening { animation: motion-listening-keyframes 2.0s ease-in-out infinite; }
 
 @keyframes motion-curious-keyframes { 0%,100%{transform:rotate(0);}50%{transform:rotate(8deg);} }
 .motion-curious { animation: motion-curious-keyframes 3s ease-in-out infinite; }
@@ -50,14 +50,14 @@
 @keyframes motion-speaking-keyframes { 
   0%, 100% { 
     transform: translateY(0);
-    filter: drop-shadow(0 0 5px #22d3ee);
+    filter: drop-shadow(0 0 8px #22d3ee);
   }
   50% { 
-    transform: translateY(-2px);
-    filter: drop-shadow(0 0 15px #22d3ee);
+    transform: translateY(-4px);
+    filter: drop-shadow(0 0 22px #22d3ee);
   } 
 }
-.motion-speaking { animation: motion-speaking-keyframes 0.6s ease-in-out infinite; }
+.motion-speaking { animation: motion-speaking-keyframes 0.5s ease-in-out infinite; }
 
 
 /* --- Eyes --- */

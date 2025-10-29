@@ -90,6 +90,8 @@ export interface AppSettings {
     enableProactive: boolean;
     enableCuriosity: boolean;
     enableDiary: boolean;
+    // FIX: Add missing 'enableReflection' property to align with its usage in the default settings.
+    enableReflection: boolean;
     permissions: Permissions;
   };
   apiKeys: {
@@ -104,6 +106,9 @@ export interface AppSettings {
     evolutionCycleHours: number;
     evolutionConfidenceThreshold: number;
     memoryDecayHalfLifeDays: number;
+    // FIX: Add missing 'reflectionFrequencyMinutes' and 'learningModel' properties to align with their usage in default settings and services.
+    reflectionFrequencyMinutes: number;
+    learningModel: 'gemini-2.5-flash' | 'gemini-2.5-pro';
   };
   appearance: 'neutral' | 'feminine' | 'masculine';
 }

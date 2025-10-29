@@ -4,6 +4,7 @@ import { Type } from '@google/genai';
 import { adaptiveMemory } from './adaptiveMemory';
 import { reasoningEngine } from './reasoningEngine';
 import { neuralMemory } from './neuralMemory';
+import { systemMonitor } from './systemMonitor';
 
 // This is a placeholder since the full options aren't needed for this service's current implementation
 interface EvolutionServiceOptions extends Pick<OrchestratorOptions, 'userId' | 'generateResponse'> {}
@@ -51,7 +52,13 @@ class SelfEvolutionServiceImpl implements SelfEvolutionService {
     }
 
     private async runCycle() {
-        if (this.isStopped || this.isRunning || !navigator.onLine) return;
+        if (this.isStopped || this.isRunning || !navigator.onLine || systemMonitor.isDeviceUnderStrain()) {
+            if (systemMonitor.isDeviceUnderStrain()) {
+                console.info(`[NEXUS-EVOLVE] Postponing evolution cycle due to device strain: ${systemMonitor.getStrainReason()}`);
+                this.scheduleNextRun(); // Reschedule for later
+            }
+            return;
+        }
         this.isRunning = true;
         
         try {

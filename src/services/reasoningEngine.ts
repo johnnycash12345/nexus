@@ -1,6 +1,7 @@
 import { db } from './indexedDBService';
 import { GenerateResponseFn } from '@/types';
 import { selfReflection } from './selfReflection';
+import { cognitiveMonitor } from './cognitiveMonitor';
 
 // How often to run the full reasoning cycle (introspection + association)
 const REASONING_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -64,6 +65,7 @@ class ReasoningEngine {
         if (reflectionText) {
             console.log(`[NEXUS-REASONING] New introspection generated: ${reflectionText}`);
             await db.addSystemReflection(userId, reflectionText);
+            cognitiveMonitor.logReflection(reflectionText);
             return `Introspection yielded: "${reflectionText.slice(0, 80)}..."`;
         }
     } catch (e) {
@@ -94,6 +96,7 @@ class ReasoningEngine {
             console.log(`[NEXUS-REASONING] New association generated: ${newIdea}`);
             const reflectionText = `Creative link between [${conceptNames}]: ${newIdea}`;
             await db.addSystemReflection(userId, reflectionText);
+            cognitiveMonitor.logReflection(reflectionText);
             return `New association created between ${conceptNames}.`;
         }
     } catch(e) {
