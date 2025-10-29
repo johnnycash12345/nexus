@@ -1,12 +1,36 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+Nexus – Assistente Pessoal Inteligente
 
-# Run and deploy your AI Studio app
+O Nexus é um assistente pessoal modular e local-first que integra inteligência artificial, voz, visão e automação em uma única interface. Projetado para ser rápido, personalizável e offline-ready, o Nexus combina múltiplos agentes cognitivos para oferecer uma experiência de interação natural e contínua.
 
-This contains everything you need to run your app locally.
+✨ Principais recursos
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ZLfv4AuI1iE3Qdm1fKHhXS4IcyvP55__
+🗣️ Voz e fala – suporte a síntese e reconhecimento de fala via Gemini e DeepSeek.
+
+👁️ Visão cognitiva – análise de imagem e vídeo por meio do visionService.
+
+🧩 Memória neural – armazenamento e recuperação contextual inteligente via neuralMemory.
+
+🔄 Sincronização – integração com Google Drive e APIs externas (googleAuth, driveSyncService, syncService).
+
+🧠 Agente pró-ativo – execução de tarefas automáticas e reflexão contextual com useProactiveAgent.
+
+⚙️ Interface modular – arquitetura baseada em componentes React e hooks customizados para IA, voz e sincronização.
+
+📦 Arquitetura limpa e extensível – separação clara entre camadas de UI, serviços e lógica cognitiva.
+
+🧰 Tecnologias
+
+Frontend: React + TypeScript + Vite
+
+IA e Voz: Gemini, DeepSeek, LLMs locais/offline
+
+Sincronização: IndexedDB, Google Drive API
+
+Ambiente: Capacitor (compatível com desktop e mobile)
+
+🚀 Visão
+
+O Nexus busca ser um hub pessoal de inteligência, capaz de aprender, refletir e agir em nome do usuário — um verdadeiro “cérebro digital” que conecta dados, ideias e rotinas cotidianas de forma fluida e privada.
 
 ## Run Locally
 
