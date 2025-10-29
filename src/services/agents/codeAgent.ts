@@ -1,4 +1,4 @@
-import { db } from '../indexedDBService';
+import { db } from '@/services/indexedDBService';
 import { SimpleFunctionCall, ChatMessage, UserContext } from '@/types';
 
 export class CodeAgent {

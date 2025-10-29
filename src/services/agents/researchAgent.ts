@@ -1,8 +1,8 @@
 import { ChatMessage, OrchestratorOptions } from '@/types';
-import { fetchNews } from '../newsService';
-import { db } from '../indexedDBService';
-import { webSearchService } from '../webSearchService';
-import { integrateWebKnowledge } from '../cognitiveModules/knowledgeIntegrator';
+import { fetchNews } from '@/services/newsService';
+import { db } from '@/services/indexedDBService';
+import { webSearchService } from '@/services/webSearchService';
+import { integrateWebKnowledge } from '@/services/cognitiveModules/knowledgeIntegrator';
 
 // Helper to extract the core query from a user's prompt
 function extractQuery(userInput: string, keywords: string[]): string {

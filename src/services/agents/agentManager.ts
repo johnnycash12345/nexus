@@ -2,10 +2,10 @@ import { CognitiveFrame, ChatMessage, OrchestratorOptions } from '@/types';
 import { ResearchAgent } from './researchAgent';
 import { EmotionalAgent } from './emotionalAgent';
 import { CodeAgent } from './codeAgent';
-import * as memoryRetriever from '../cognitiveModules/memoryRetriever';
-import * as contextBuilder from '../cognitiveModules/contextBuilder';
-import { db } from '../indexedDBService';
-import { cognitiveMonitor } from '../cognitiveMonitor';
+import * as memoryRetriever from '@/services/cognitiveModules/memoryRetriever';
+import * as contextBuilder from '@/services/cognitiveModules/contextBuilder';
+import { db } from '@/services/indexedDBService';
+import { cognitiveMonitor } from '@/services/cognitiveMonitor';
 
 export class AgentManager {
     private researchAgent: ResearchAgent;
