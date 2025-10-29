@@ -1,44 +1,85 @@
-Nexus – Assistente Pessoal Inteligente
+🧠 Nexus – Assistente Pessoal Inteligente
 
-O Nexus é um assistente pessoal modular e local-first que integra inteligência artificial, voz, visão e automação em uma única interface. Projetado para ser rápido, personalizável e offline-ready, o Nexus combina múltiplos agentes cognitivos para oferecer uma experiência de interação natural e contínua.
+O Nexus é um assistente pessoal modular que integra inteligência artificial, voz, visão e automação em uma única interface.
+Com foco em privacidade, personalização e desempenho, o projeto permite executar agentes cognitivos locais e conectados, criando uma experiência fluida e natural com IA.
 
-✨ Principais recursos
+🚀 Recursos principais
 
 🗣️ Voz e fala – suporte a síntese e reconhecimento de fala via Gemini e DeepSeek.
 
-👁️ Visão cognitiva – análise de imagem e vídeo por meio do visionService.
+👁️ Visão cognitiva – análise de imagem e vídeo através do visionService.
 
-🧩 Memória neural – armazenamento e recuperação contextual inteligente via neuralMemory.
+🧠 Memória neural – armazenamento e recuperação contextual inteligente com neuralMemory.
 
-🔄 Sincronização – integração com Google Drive e APIs externas (googleAuth, driveSyncService, syncService).
+🔄 Sincronização – integração com Google Drive e APIs externas.
 
-🧠 Agente pró-ativo – execução de tarefas automáticas e reflexão contextual com useProactiveAgent.
+⚙️ Agente pró-ativo – execução automática de rotinas com useProactiveAgent.
 
-⚙️ Interface modular – arquitetura baseada em componentes React e hooks customizados para IA, voz e sincronização.
-
-📦 Arquitetura limpa e extensível – separação clara entre camadas de UI, serviços e lógica cognitiva.
+🧩 Interface modular – arquitetura baseada em React, hooks e serviços independentes.
 
 🧰 Tecnologias
+Categoria	Tecnologias
+Frontend	React, TypeScript, Vite
+IA e Voz	Gemini API, DeepSeek LLM, LLM Offline
+Sincronização	Google Drive API, IndexedDB
+Ambiente	Capacitor (compatível com desktop e mobile)
+⚙️ Instalação
+# Clonar o repositório
+git clone https://github.com/seuusuario/nexus.git
+cd nexus
 
-Frontend: React + TypeScript + Vite
+# Instalar dependências
+npm install
 
-IA e Voz: Gemini, DeepSeek, LLMs locais/offline
-
-Sincronização: IndexedDB, Google Drive API
-
-Ambiente: Capacitor (compatível com desktop e mobile)
-
-🚀 Visão
-
-O Nexus busca ser um hub pessoal de inteligência, capaz de aprender, refletir e agir em nome do usuário — um verdadeiro “cérebro digital” que conecta dados, ideias e rotinas cotidianas de forma fluida e privada.
-
-## Run Locally
-
-**Prerequisites:**  Node.js
+# Executar em modo desenvolvimento
+npm run dev
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Para empacotar o projeto com o Capacitor:
+
+npm run build
+npx cap sync
+
+🧩 Estrutura do Projeto
+├── components/        # Componentes visuais e UI
+├── hooks/             # Hooks personalizados para IA, voz e sincronização
+├── services/          # Lógica de integração e agentes cognitivos
+│   ├── geminiService.ts
+│   ├── memoryService.ts
+│   ├── nexusBrain.ts
+│   └── visionService.ts
+├── types.ts           # Definições de tipos globais
+├── App.tsx            # Ponto de entrada principal
+└── vite.config.ts     # Configuração do build
+
+🧠 Arquitetura Cognitiva
+
+O Nexus combina múltiplos serviços e agentes internos:
+
+NexusCore: coordena fluxos de dados e contexto global.
+
+NexusBrain: gerencia o raciocínio e memória ativa.
+
+NeuralMemory: armazena experiências e reflexões contextuais.
+
+ProactiveAgent: executa ações automaticamente com base no estado cognitivo.
+
+🔐 Privacidade
+
+O Nexus é local-first — sempre que possível, processa informações localmente e apenas sincroniza com a nuvem quando explicitamente autorizado.
+Isso garante controle total sobre dados pessoais e históricos de interação.
+
+🤝 Contribuindo
+
+Faça um fork do repositório
+
+Crie um branch para sua feature (git checkout -b feature/nova-funcionalidade)
+
+Faça o commit (git commit -m 'Adiciona nova funcionalidade')
+
+Envie um pull request
+
+🪪 Licença
+
+Distribuído sob a licença MIT.
+Consulte o arquivo LICENSE para mais detalhes.
