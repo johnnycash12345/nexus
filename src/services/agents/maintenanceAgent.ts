@@ -69,7 +69,6 @@ export class MaintenanceAgent {
                 if (researchTopic) {
                     this.setAgentStatus('SEARCHING_WEB');
                     console.log(`[MaintenanceAgent] Researching topic: "${researchTopic}"`);
-                    // FIX: Add missing arguments to the search call.
                     const searchResult = await webSearchService.search(this.opts.userId, researchTopic, "Proactive research during maintenance cycle.");
                     if (searchResult) {
                         await integrateWebKnowledge(this.opts.userId, researchTopic, searchResult.summary, searchResult.sources);

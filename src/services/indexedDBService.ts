@@ -62,6 +62,7 @@ interface NexusDB extends DBSchema {
     value: Project;
     indexes: { byUserId: string };
   };
+  // FIX: Added 'decisionLogs' store to the database schema for logging critical AI decisions.
   decisionLogs: {
     key: number;
     value: DecisionLogEntry;
@@ -99,6 +100,7 @@ class IndexedDBService {
                 projectStore.createIndex('byUserId', 'userId');
             }
         }
+        // FIX: Added migration step for DB version 11 to create the 'decisionLogs' object store.
         if (oldVersion < 11) {
             console.log("Upgrading DB to v11 for Decision Logging...");
             if (!db.objectStoreNames.contains('decisionLogs')) {
@@ -193,6 +195,7 @@ class IndexedDBService {
     return allLogs.slice(-limit).reverse();
   }
 
+  // FIX: Added methods to interact with the new 'decisionLogs' store.
   // --- Decision Log ---
   addDecisionLog = async (entry: Omit<DecisionLogEntry, 'id'>): Promise<void> => {
     const db = await this.database;

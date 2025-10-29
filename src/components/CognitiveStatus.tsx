@@ -4,7 +4,7 @@ import { db } from '../services/indexedDBService';
 import { SystemMemory, EvolutionLog, EvolutionCyclePhase } from '../types';
 import { systemMonitor } from '../services/systemMonitor';
 
-// FIX: Remove modal-related props as this component is now used as tab content.
+// FIX: Removed modal-related props (onClose, isVisible) as this is now tab content.
 interface CognitiveStatusProps {
   userId: string;
 }
@@ -85,6 +85,7 @@ const EvolutionLogItem: React.FC<{ log: EvolutionLog }> = ({ log }) => {
     )
 }
 
+// FIX: Refactored component from a modal to tab content by removing modal-specific props and wrappers.
 export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ userId }) => {
   const [systemMemory, setSystemMemory] = useState<SystemMemory | null>(null);
   const [evolutionLogs, setEvolutionLogs] = useState<EvolutionLog[]>([]);

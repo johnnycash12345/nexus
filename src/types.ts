@@ -122,6 +122,7 @@ export interface VisualState {
 export interface SimpleFunctionCall {
   name: string;
   args: { [key: string]: any };
+  // FIX: Added missing 'id' property to align with Gemini API's FunctionCall object.
   id: string;
 }
 
@@ -365,8 +366,8 @@ export interface OrchestratorOptions {
   generateVisionResponse: GenerateVisionResponseFn;
 }
 
+// FIX: Added missing DecisionLogType and DecisionLogEntry types for the decision logging feature.
 // --- New Types for Decision Logging ---
-// FIX: Added missing DecisionLogType and DecisionLogEntry types.
 export type DecisionLogType = 'CODE_PROPOSAL' | 'AUTONOMOUS_SEARCH' | 'CONCEPT_MERGE';
 
 export interface DecisionLogEntry {

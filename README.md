@@ -1,85 +1,20 @@
-🧠 Nexus – Assistente Pessoal Inteligente
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-O Nexus é um assistente pessoal modular que integra inteligência artificial, voz, visão e automação em uma única interface.
-Com foco em privacidade, personalização e desempenho, o projeto permite executar agentes cognitivos locais e conectados, criando uma experiência fluida e natural com IA.
+# Run and deploy your AI Studio app
 
-🚀 Recursos principais
+This contains everything you need to run your app locally.
 
-🗣️ Voz e fala – suporte a síntese e reconhecimento de fala via Gemini e DeepSeek.
+View your app in AI Studio: https://ai.studio/apps/drive/1ZLfv4AuI1iE3Qdm1fKHhXS4IcyvP55__
 
-👁️ Visão cognitiva – análise de imagem e vídeo através do visionService.
+## Run Locally
 
-🧠 Memória neural – armazenamento e recuperação contextual inteligente com neuralMemory.
-
-🔄 Sincronização – integração com Google Drive e APIs externas.
-
-⚙️ Agente pró-ativo – execução automática de rotinas com useProactiveAgent.
-
-🧩 Interface modular – arquitetura baseada em React, hooks e serviços independentes.
-
-🧰 Tecnologias
-Categoria	Tecnologias
-Frontend	React, TypeScript, Vite
-IA e Voz	Gemini API, DeepSeek LLM, LLM Offline
-Sincronização	Google Drive API, IndexedDB
-Ambiente	Capacitor (compatível com desktop e mobile)
-⚙️ Instalação
-# Clonar o repositório
-git clone https://github.com/seuusuario/nexus.git
-cd nexus
-
-# Instalar dependências
-npm install
-
-# Executar em modo desenvolvimento
-npm run dev
+**Prerequisites:**  Node.js
 
 
-Para empacotar o projeto com o Capacitor:
-
-npm run build
-npx cap sync
-
-🧩 Estrutura do Projeto
-├── components/        # Componentes visuais e UI
-├── hooks/             # Hooks personalizados para IA, voz e sincronização
-├── services/          # Lógica de integração e agentes cognitivos
-│   ├── geminiService.ts
-│   ├── memoryService.ts
-│   ├── nexusBrain.ts
-│   └── visionService.ts
-├── types.ts           # Definições de tipos globais
-├── App.tsx            # Ponto de entrada principal
-└── vite.config.ts     # Configuração do build
-
-🧠 Arquitetura Cognitiva
-
-O Nexus combina múltiplos serviços e agentes internos:
-
-NexusCore: coordena fluxos de dados e contexto global.
-
-NexusBrain: gerencia o raciocínio e memória ativa.
-
-NeuralMemory: armazena experiências e reflexões contextuais.
-
-ProactiveAgent: executa ações automaticamente com base no estado cognitivo.
-
-🔐 Privacidade
-
-O Nexus é local-first — sempre que possível, processa informações localmente e apenas sincroniza com a nuvem quando explicitamente autorizado.
-Isso garante controle total sobre dados pessoais e históricos de interação.
-
-🤝 Contribuindo
-
-Faça um fork do repositório
-
-Crie um branch para sua feature (git checkout -b feature/nova-funcionalidade)
-
-Faça o commit (git commit -m 'Adiciona nova funcionalidade')
-
-Envie um pull request
-
-🪪 Licença
-
-Distribuído sob a licença MIT.
-Consulte o arquivo LICENSE para mais detalhes.
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

@@ -23,7 +23,6 @@ interface SettingsPanelProps {
   initialTab?: Tab;
 }
 
-// FIX: Export Tab type for use in App.tsx.
 export type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória' | 'gerenciamento' | 'arquitetura' | 'monitor';
 
 const backdropVariants: Variants = {

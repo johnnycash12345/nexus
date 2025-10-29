@@ -45,7 +45,6 @@ export class ResearchAgent {
         }
 
         this.opts.setStatus('SEARCHING_WEB');
-        // FIX: Pass the required userId and reasoning string to the search method.
         const searchResult = await webSearchService.search(this.opts.userId, query, `User requested a search for: "${query}"`);
 
         if (searchResult) {

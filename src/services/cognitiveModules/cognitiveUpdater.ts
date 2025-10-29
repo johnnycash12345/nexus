@@ -5,7 +5,6 @@ import { selfReflection } from '../selfReflection';
 import { EmotionalAgent } from '../agents/emotionalAgent';
 import { analyzeAndStoreConcepts } from '../conceptEngine';
 import { autonomousLearningService } from '../autonomousLearningService';
-// FIX: Added missing import for adaptiveMemory.
 import { adaptiveMemory } from '../adaptiveMemory';
 
 type PresentProposalFn = (proposal: CodeModificationProposal, goal: string) => void;
@@ -69,7 +68,7 @@ export async function updateCognitiveState(frame: CognitiveFrame, presentCodePro
     });
 }
 
-// FIX: Added missing `runCognitiveMaintenance` function.
+// FIX: Added 'runCognitiveMaintenance' function to handle background memory optimization tasks.
 export async function runCognitiveMaintenance(userId: string): Promise<void> {
     try {
         await Promise.all([

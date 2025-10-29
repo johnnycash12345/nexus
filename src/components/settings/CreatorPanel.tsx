@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+// FIX: Imported the 'DecisionLogEntry' type to correctly type the decision log data.
 import { AppSettings, AssistantStatus, DecisionLogEntry } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/services/indexedDBService';
