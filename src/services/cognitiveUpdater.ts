@@ -3,10 +3,10 @@ import { CognitiveFrame, VisualState, CodeModificationProposal, UserContext } fr
 import { neuralMemory } from './neuralMemory';
 import { selfReflection } from './selfReflection';
 import { EmotionalAgent } from './agents/emotionalAgent';
-import { analyzeAndStoreConcepts } from '../conceptEngine';
-import { autonomousLearningService } from '../autonomousLearningService';
+import { analyzeAndStoreConcepts } from '@/services/conceptEngine';
+import { autonomousLearningService } from '@/services/autonomousLearningService';
 // FIX: Added missing import for adaptiveMemory.
-import { adaptiveMemory } from '../adaptiveMemory';
+import { adaptiveMemory } from '@/services/adaptiveMemory';
 
 type PresentProposalFn = (proposal: CodeModificationProposal, goal: string) => void;
 
@@ -44,7 +44,7 @@ export async function updateCognitiveState(frame: CognitiveFrame, presentCodePro
 
     // Dispatch visual state update (can run after emotion has likely been updated)
     const updatedSystem = await db.getSystemMemory(userContext.userId);
-    const emotionState = updatedSystem.emotionState;
+    const emotionState = updatedSystem?.emotionState;
     if (emotionState) {
         const visualState: VisualState = {
             highlightNodes: learningContext.contextTags.slice(0, 3),

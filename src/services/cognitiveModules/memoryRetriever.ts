@@ -1,4 +1,4 @@
-import { db } from '../indexedDBService';
+import { db } from '@/services/indexedDBService';
 import { Concept, Intent, UserContext } from '@/types';
 
 function extractKeywords(text: string): string[] {

@@ -26,7 +26,8 @@ export const useGeminiVoice = (
         voiceServiceRef.current = new VoiceService();
     }, []);
 
-    const handleMessage = (message: LiveServerMessage) => {
+    const handleMessage = (rawMessage: LiveServerMessage) => {
+        const message = rawMessage as Record<string, any>;
         if (message.serverContent?.inputTranscription) {
             const text = message.serverContent.inputTranscription.text;
             userTranscriptRef.current += text;

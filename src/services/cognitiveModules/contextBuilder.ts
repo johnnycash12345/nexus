@@ -1,4 +1,4 @@
-import { db } from '../indexedDBService';
+import { db } from '@/services/indexedDBService';
 import { SystemMemory, UserProfile, CognitiveFrame, UserContext } from '@/types';
 
 function buildIdentityDirective(system: SystemMemory, profile: UserProfile | null): string {

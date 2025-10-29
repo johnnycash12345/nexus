@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
-import { db } from '../services/indexedDBService';
-import { SystemMemory, EvolutionLog, EvolutionCyclePhase } from '../types';
-import { systemMonitor } from '../services/systemMonitor';
+import { db } from '@/services/indexedDBService';
+import { SystemMemory, EvolutionLog, EvolutionCyclePhase } from '@/types';
+import { systemMonitor } from '@/services/systemMonitor';
 
 // FIX: Removed modal-related props (onClose, isVisible) as this is now tab content.
 interface CognitiveStatusProps {
@@ -107,14 +107,14 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ userId }) => {
       db.getAllConcepts(userId),
       db.getLatestEvolutionLogs(userId, 5),
     ]).then(([memory, concepts, logs]) => {
-      setSystemMemory(memory);
+      setSystemMemory(memory ?? null);
       setConceptCount(concepts.length);
       setEvolutionLogs(logs);
 
       const now = Date.now();
       const oneDay = 24 * 60 * 60 * 1000;
-      
-      const synapses = memory.synapses || [];
+
+      const synapses = memory?.synapses ?? [];
       const newSynapses = synapses.filter(s => s.createdAt && (now - s.createdAt < oneDay));
       const factor = newSynapses.length / 24;
       setCognitiveExpansionFactor(factor);

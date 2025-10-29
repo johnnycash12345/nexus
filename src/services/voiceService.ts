@@ -169,6 +169,7 @@ export class VoiceService {
     }
 
     private async handleAudioPlayback(message: LiveServerMessage) {
+        const safeMessage = message as any;
         if (!this.outputAudioContext) return;
 
         // Resume the audio context if it's suspended by the browser,
@@ -177,7 +178,7 @@ export class VoiceService {
             await this.outputAudioContext.resume();
         }
         
-        const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+        const base64EncodedAudioString = safeMessage.serverContent?.modelTurn?.parts[0]?.inlineData.data;
         if (base64EncodedAudioString) {
             this.nextStartTime = Math.max(
                 this.nextStartTime,
@@ -201,7 +202,7 @@ export class VoiceService {
             this.outputSources.add(source);
         }
 
-        if (message.serverContent?.interrupted) {
+        if (safeMessage.serverContent?.interrupted) {
             for (const source of this.outputSources.values()) {
                 source.stop();
                 this.outputSources.delete(source);

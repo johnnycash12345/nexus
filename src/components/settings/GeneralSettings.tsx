@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppSettings } from '@/types';
-import { AppearanceSelector } from '../AppearanceSelector';
+import { AppearanceSelector } from '@/components/AppearanceSelector';
 
 interface GeneralSettingsProps {
   settings: AppSettings;
