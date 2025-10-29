@@ -6,7 +6,7 @@ import { neuralMemory } from '../neuralMemory';
 // Simple keyword extraction
 function extractKeywords(text: string): string[] {
     if (!text) return [];
-    const stopWords = new Set(['de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'com', 'não', 'uma', 'os', 'no', 'na', 'por', 'mais', 'as', 'dos', 'como', 'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'ser', 'ter', 'pode']);
+    const stopWords = new Set(['de', 'a', 'o', 'que', 'e', 'do', 'da', 'em', 'um', 'para', 'com', 'não', 'uma', 'os', 'no', 'na', 'por', 'mais', 'as', 'dos', 'como', 'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'pelo', 'pela']);
     return text
         .toLowerCase()
         .replace(/[^\p{L}\s]/gu, '')

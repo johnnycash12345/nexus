@@ -1,9 +1,10 @@
 import { db, cognitiveLogger } from './indexedDBService';
 import { CognitiveFrame, VisualState, CodeModificationProposal } from '@/types';
-import { neuralMemory } from '../neuralMemory';
+import { neuralMemory } from './neuralMemory';
 import { selfReflection } from './selfReflection';
 import { EmotionalAgent } from './agents/emotionalAgent';
 import { analyzeAndStoreConcepts } from '../conceptEngine';
+import { autonomousLearningService } from '../autonomousLearningService';
 
 type PresentProposalFn = (proposal: CodeModificationProposal, goal: string) => void;
 
@@ -57,4 +58,10 @@ export async function updateCognitiveState(frame: CognitiveFrame, presentCodePro
             console.warn("[CognitiveUpdater] Self-reflection process failed:", err);
         });
     }
+
+    // Trigger autonomous learning cycle in the background
+    // This runs after the main response flow and does not block the UI
+    autonomousLearningService.runLearningCycle(frame).catch(err => {
+        console.warn('[CognitiveUpdater] Autonomous learning cycle failed in background:', err);
+    });
 }

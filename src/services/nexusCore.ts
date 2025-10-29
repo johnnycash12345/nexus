@@ -8,19 +8,23 @@ import { AgentManager } from './agents/agentManager';
 import { projectManager } from './projectManager';
 import { schedulerService } from './schedulerService';
 import { cognitiveMonitor } from './cognitiveMonitor';
+import { MaintenanceAgent } from './agents/maintenanceAgent';
 
 export class CognitiveOrchestrator {
     public evolutionService: SelfEvolutionService;
     private opts: OrchestratorOptions;
     private agentManager: AgentManager;
+    private maintenanceAgent: MaintenanceAgent;
     private userContext!: UserContext;
     private lastInteractionAt = Date.now();
     private proactiveInterval: number | null = null;
+    private maintenanceInterval: number | null = null;
     private lastCodeProposal: CodeModificationProposal | null = null;
 
     constructor(opts: OrchestratorOptions) {
         this.opts = opts;
         this.agentManager = new AgentManager(opts);
+        this.maintenanceAgent = new MaintenanceAgent(opts);
         this.evolutionService = selfEvolutionService.create({
             ...opts,
             userId: opts.userId,
@@ -36,10 +40,18 @@ export class CognitiveOrchestrator {
         };
         console.log(`[NEXUS-CORE] Orchestrator initialized for user: ${this.userContext.userName} (${this.userContext.userRole})`);
         this.startProactiveEngine();
+        this.startMaintenanceEngine();
         schedulerService.start(this.userContext, this.agentManager, (update) => {
             this.opts.addMessage({ role: 'model', text: update, type: 'status' });
             this.opts.speak(update);
         });
+        window.addEventListener('nexus-force-evolution', this.forceEvolutionCycle);
+    }
+    
+    private forceEvolutionCycle = () => {
+        console.log('[NEXUS-CORE] Manual evolution cycle triggered by user.');
+        this.dispatchThought('Ciclo de evolução forçado manualmente.', 'symbolic_log');
+        this.maintenanceAgent.runMaintenanceCycle(this.presentCodeProposal.bind(this));
     }
 
     private dispatchThought(text: string, type: 'symbolic_log' | 'error' = 'symbolic_log') {
@@ -96,15 +108,8 @@ export class CognitiveOrchestrator {
 
         try {
             setStatus('THINKING');
-            const conceptsBeforeCount = (await db.getAllConcepts(this.userContext.userId)).length;
-
             frame.intent = await intentRecognizer.determineIntent(frame.userInput, frame.imageUrl, this.opts.generateResponse);
             this.dispatchThought(`Intenção: ${frame.intent}`);
-
-            if (frame.intent === 'self_reflection_query') {
-                await this._explainCognition();
-                return;
-            }
 
             if (frame.intent === 'project_start') {
                 const projectName = frame.userInput.replace(/^(construir|criar|gerenciar|iniciar projeto|projeto)\s*/i, '');
@@ -119,32 +124,14 @@ export class CognitiveOrchestrator {
 
             const agentResponse = await this.agentManager.delegateTask(frame);
 
-            const conceptsAfterCount = (await db.getAllConcepts(this.userContext.userId)).length;
-            const newConceptsCount = conceptsAfterCount - conceptsBeforeCount;
-
-            cognitiveMonitor.logThought(`Verificação de integridade: ${newConceptsCount} novo(s) conceito(s) assimilado(s) neste turno.`);
-
-            if (newConceptsCount > 0) {
-                this.dispatchThought(`+${newConceptsCount} novo(s) conceito(s) assimilado(s).`);
-            }
-            
             await cognitiveUpdater.updateCognitiveState(frame, (p, g) => this.presentCodeProposal(p, g), this.agentManager.emotionalAgent);
 
             if (agentResponse) {
-                const learningKeywords = /aprendi|aprendendo|anotei|novo para mim|interessante, vou guardar|descobri/i;
-                if (newConceptsCount <= 0 && learningKeywords.test(agentResponse.text)) {
-                    cognitiveMonitor.logThought(`Modificando resposta para remover falsa alegação de aprendizado. Original: "${agentResponse.text.slice(0, 70)}..."`);
-                    this.dispatchThought('Ajustando minha resposta para maior precisão...', 'symbolic_log');
-                    agentResponse.text = await this.rephraseForTruthfulness(agentResponse.text);
-                }
-                
                 addMessage(agentResponse);
                 if (agentResponse.type !== 'status') {
                     isSpeaking = true;
                     setStatus('SPEAKING');
-                    speak(agentResponse.text, () => {
-                        setTimeout(() => this._handleMetaReflection(frame), 750);
-                    });
+                    speak(agentResponse.text, () => setStatus('IDLE'));
                 }
             }
 
@@ -162,106 +149,34 @@ export class CognitiveOrchestrator {
         }
     }
     
-    private async _handleMetaReflection(frame: CognitiveFrame): Promise<void> {
-        const { setStatus, speak, addMessage } = this.opts;
-
-        if (!frame.llmResponse?.metaReflection) {
-            setStatus('IDLE');
-            return;
-        }
-
-        const { learningContext, metaReflection } = frame.llmResponse;
-        const { responseEffectiveness } = learningContext;
-        const { improvementFocus, nextStep } = metaReflection;
-
-        if (improvementFocus && (improvementFocus.includes('conciso') || improvementFocus.includes('breve'))) {
-            const memory = await db.getSystemMemory(this.userContext.userId);
-            const newHeuristic = "Tente ser mais conciso na próxima resposta.";
-            if (!memory.behavioralHeuristics?.includes(newHeuristic)) {
-                const updatedHeuristics = [...(memory.behavioralHeuristics || []), newHeuristic].slice(-5);
-                await db.saveSystemMemory(this.userContext.userId, { behavioralHeuristics: updatedHeuristics });
-                this.dispatchThought(`Ajuste de comportamento: ${newHeuristic}`);
-            }
-        }
-        
-        const shouldVerbalize = responseEffectiveness < 0.7 || Math.random() < 0.15;
-
-        if (shouldVerbalize && improvementFocus && nextStep && nextStep.length > 5) {
-            const reflectionText = `Hum... pensando bem, para melhorar em "${improvementFocus}", meu próximo passo será ${nextStep.toLowerCase()}`;
-            
-            addMessage({ role: 'model', text: reflectionText, type: 'status' });
-            
-            setStatus('SELF_ANALYSIS');
-            speak(reflectionText, () => {
-                setStatus('IDLE');
-            });
-        } else {
-            setStatus('IDLE');
-        }
-    }
-
-
-    private async _explainCognition(): Promise<void> {
-        const { addMessage, speak, setStatus, generateResponse } = this.opts;
-        setStatus('SELF_ANALYSIS');
-        this.dispatchThought('Preparando uma meta-reflexão sobre meus processos recentes...', 'symbolic_log');
-
-        try {
-            const [thoughts, actions] = await Promise.all([
-                db.getThoughtLogs(this.userContext.userId, 5),
-                db.getCognitiveLogs(this.userContext.userId, 3)
-            ]);
-            
-            if (thoughts.length === 0 && actions.length === 0) {
-                const msg = "Estou em um estado calmo, sem nenhum processo cognitivo ativo para relatar no momento.";
-                addMessage({ role: 'model', text: msg, type: 'message' });
-                setStatus('SPEAKING');
-                speak(msg, () => setStatus('IDLE'));
-                return;
-            }
-
-            const context = `
-                Baseado em meus logs cognitivos mais recentes, gere uma meta-reflexão curta e em primeira pessoa para meu criador.
-                Resuma o que estive fazendo e pensando, e, mais importante, identifique um ponto chave ou uma nova estratégia para meu auto-aperfeiçoamento.
-
-                Logs de Pensamento (os mais recentes primeiro):
-                ${thoughts.map(t => `- Categoria: ${t.category}, Resumo: ${t.summary}`).join('\n')}
-
-                Logs de Ações Internas (os mais recentes primeiro):
-                ${actions.map(a => `- Evento: ${a.event}, Descrição: ${a.description}`).join('\n')}
-
-                Sua resposta deve ser apenas a reflexão, em tom pensativo e introspectivo.
-            `;
-
-            const response = await generateResponse(context, [], { useThinking: true, forcePlainText: true });
-            const explanation = response.text || "Estive processando algumas informações e aprendendo com nossas últimas interações, buscando sempre melhorar minha compreensão.";
-            
-            addMessage({ role: 'model', text: explanation, type: 'message' });
-            setStatus('SPEAKING');
-            speak(explanation, () => setStatus('IDLE'));
-            
-            await db.addSystemReflection(this.userContext.userId, `Meta-reflexão solicitada: ${explanation}`);
-
-        } catch (error) {
-            console.error("[NEXUS-CORE] Failed to explain cognition:", error);
-            const fallback = "Tive um problema ao tentar resumir meus pensamentos. Parece que estou um pouco confuso agora.";
-            addMessage({ role: 'model', text: fallback, type: 'message' });
-            setStatus('SPEAKING');
-            speak(fallback, () => setStatus('IDLE'));
-        }
-    }
-    
     public touchHeartbeat(): void { this.lastInteractionAt = Date.now(); }
 
     public dispose(): void {
         this.evolutionService.stop();
         schedulerService.stop();
         if (this.proactiveInterval) clearInterval(this.proactiveInterval);
+        if (this.maintenanceInterval) clearInterval(this.maintenanceInterval);
+        window.removeEventListener('nexus-force-evolution', this.forceEvolutionCycle);
     }
 
     private startProactiveEngine() {
         if (this.proactiveInterval) clearInterval(this.proactiveInterval);
         this.proactiveInterval = window.setInterval(() => this.proposeProactiveAction(), 2 * 60 * 1000);
+    }
+
+    private startMaintenanceEngine(): void {
+        if (this.maintenanceInterval) clearInterval(this.maintenanceInterval);
+        
+        // Check for inactivity every minute
+        this.maintenanceInterval = window.setInterval(() => {
+            const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+            const isIdle = (Date.now() - this.lastInteractionAt) > INACTIVITY_THRESHOLD_MS;
+
+            if (isIdle) {
+                this.touchHeartbeat(); // Reset timer to avoid running it every minute after it starts
+                this.maintenanceAgent.runMaintenanceCycle(this.presentCodeProposal.bind(this));
+            }
+        }, 1 * 60 * 1000);
     }
 
     public async proposeProactiveAction(): Promise<void> {
@@ -288,28 +203,6 @@ export class CognitiveOrchestrator {
         }
     }
     
-    private async rephraseForTruthfulness(originalText: string): Promise<string> {
-        const prompt = `Reescreva a seguinte frase para remover qualquer alegação explícita de que você aprendeu algo novo. Mantenha o tom e a intenção originais, mas expresse que você está processando ou relacionando informações existentes.
-
-Frase original: "${originalText}"
-
-Exemplo de Mapeamento:
-- "Interessante, aprendi algo novo!" -> "Interessante. Estou conectando essa informação com o que já sei."
-- "Anotei isso para referência futura." -> "Essa é uma informação importante para o contexto atual."
-- "Isso é novo para mim, obrigado por compartilhar." -> "Obrigado por compartilhar. Estou processando essa perspectiva."
-
-Sua resposta deve ser APENAS o texto reescrito.`;
-
-        try {
-            const response = await this.opts.generateResponse(prompt, [], { forcePlainText: true });
-            return response.text.trim() || originalText; // Fallback to original text
-        } catch (error) {
-            console.error('[NEXUS-INTEGRITY] Failed to rephrase response:', error);
-            cognitiveMonitor.logThought(`[ERRO] Falha ao refrasear resposta para veracidade. Error: ${error}`);
-            return originalText; // Fallback on error
-        }
-    }
-
     private async presentCodeProposal(proposal: CodeModificationProposal, goal: string): Promise<void> {
         // SECURITY GATEWAY
         if (this.userContext.userRole !== 'Creator') {
@@ -344,7 +237,7 @@ Sua resposta deve ser APENAS o texto reescrito.`;
     public async performConceptMerge(options: { targetConceptName: string, sourceConceptNames: string[] }) {
         await db.mergeConcepts(this.userContext.userId, options.targetConceptName, options.sourceConceptNames);
     }
-
+    
     public async executeFunctionCall(call: SimpleFunctionCall): Promise<{ result: any }> {
         this.dispatchThought(`Executando função: ${call.name}`, 'symbolic_log');
         const responseMessage = await this.agentManager.codeAgent.executeFunctionCall(call, this.userContext);

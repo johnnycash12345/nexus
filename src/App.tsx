@@ -14,14 +14,14 @@ import { selfRepairSystem } from '@/services/selfRepairSystem';
 import { systemMonitor } from '@/services/systemMonitor';
 import { reflectionEngine } from '@/services/reflectionEngine';
 import { cognitiveMonitor } from '@/services/cognitiveMonitor';
+import type { Tab as SettingsTab } from '@/components/SettingsPanel';
+
 
 const SettingsPanel = lazy(() => import('@/components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
 const CameraView = lazy(() => import('@/components/CameraView').then(m => ({ default: m.CameraView })));
 const TodoList = lazy(() => import('@/components/TodoList').then(m => ({ default: m.TodoList })));
-const ReflectionHistory = lazy(() => import('@/components/ReflectionHistory').then(m => ({ default: m.ReflectionHistory })));
-const CognitiveStatus = lazy(() => import('@/components/CognitiveStatus').then(m => ({ default: m.CognitiveStatus })));
 
-type ActivePanel = 'settings' | 'camera' | 'todo' | 'reflectionHistory' | 'cognitiveStatus' | null;
+type ActivePanel = 'settings' | 'camera' | 'todo' | null;
 type Thought = { text: string; type: 'symbolic_log' | 'error' };
 
 const App: React.FC = () => {
@@ -35,6 +35,7 @@ const App: React.FC = () => {
   const [isStarted, setIsStarted] = useState(false);
   const [thought, setThought] = useState<Thought | null>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+  const [initialSettingsTab, setInitialSettingsTab] = useState<SettingsTab>('geral');
   const [emotion, setEmotion] = useState<Emotion>('CALM');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isEvolving, setIsEvolving] = useState(false);
@@ -236,6 +237,11 @@ const App: React.FC = () => {
         }
     }
   };
+  
+  const openSettingsWithTab = (tab: SettingsTab) => {
+    setInitialSettingsTab(tab);
+    setActivePanel('settings');
+  };
 
   return (
     <div className="h-screen w-screen bg-gray-900 text-white flex flex-col overflow-hidden relative">
@@ -249,17 +255,16 @@ const App: React.FC = () => {
                   token={token}
                   onLogout={logout}
                   userId={currentUserId}
+                  initialTab={initialSettingsTab}
               />
           )}
           {activePanel === 'camera' && <CameraView onClose={() => setActivePanel(null)} onSend={handleVisionSubmit} />}
           {activePanel === 'todo' && <TodoList onClose={() => setActivePanel(null)} isVisible={activePanel === 'todo'} userId={currentUserId} />}
-          {activePanel === 'reflectionHistory' && <ReflectionHistory onClose={() => setActivePanel(null)} isVisible={activePanel === 'reflectionHistory'} settings={settings} userId={currentUserId} />}
-          {activePanel === 'cognitiveStatus' && <CognitiveStatus onClose={() => setActivePanel(null)} isVisible={activePanel === 'cognitiveStatus'} userId={currentUserId} />}
       </Suspense>
 
       <div className="flex-grow flex items-center justify-center relative">
         {!isStarted ? (
-            <StartScreen onStart={() => setIsStarted(true)} onOpenSettings={() => setActivePanel('settings')} token={token} syncStatus={syncStatus} onLogin={login}/>
+            <StartScreen onStart={() => setIsStarted(true)} onOpenSettings={() => openSettingsWithTab('geral')} token={token} syncStatus={syncStatus} onLogin={login}/>
         ) : (
             <>
               <AvatarLayer
@@ -318,7 +323,7 @@ const App: React.FC = () => {
       {isStarted && (
         <footer className="flex-shrink-0 p-3 bg-gray-800/50 border-t border-gray-700/50 flex items-center justify-around z-20">
             <div className="flex items-center gap-3">
-                 <button onClick={() => setActivePanel('settings')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Configurações</span></button>
+                 <button onClick={() => openSettingsWithTab('geral')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Configurações</span></button>
                  <button onClick={() => setActivePanel('camera')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Câmera</span></button>
                  <button onClick={() => setActivePanel('todo')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Tarefas</span></button>
             </div>
@@ -332,8 +337,8 @@ const App: React.FC = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
             </button>
             <div className="flex items-center gap-3">
-                <button onClick={() => setActivePanel('reflectionHistory')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 00-4-4H3V9h2a4 4 0 004-4V3l4 4-4 4zm6 0v-2a4 4 0 014-4h2V9h-2a4 4 0 01-4-4V3l-4 4 4 4z" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Monitor Cognitivo</span></button>
-                <button onClick={() => setActivePanel('cognitiveStatus')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Arquitetura</span></button>
+                <button onClick={() => openSettingsWithTab('monitor')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 00-4-4H3V9h2a4 4 0 004-4V3l4 4-4 4zm6 0v-2a4 4 0 014-4h2V9h-2a4 4 0 01-4-4V3l-4 4 4 4z" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Monitor Cognitivo</span></button>
+                <button onClick={() => openSettingsWithTab('arquitetura')} className="relative group p-2 text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg><span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-xs text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Arquitetura</span></button>
                 <button
                     onClick={() => { setIsChatVisible(!isChatVisible); setHasNewMessage(false); }}
                     className="relative group p-2 text-gray-400 hover:text-white"

@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project } from '../types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project } from '@/types';
 
 const DB_NAME = 'NexusDB';
 const DB_VERSION = 10; // Increment version for schema change
@@ -16,7 +16,6 @@ interface NexusDB extends DBSchema {
   };
   settings: {
     key: string; // userId
-// FIX: The value for the settings store must include the `userId` because it's used as the keyPath.
     value: AppSettings & { userId: string };
   };
   rlhfFeedback: {
@@ -171,7 +170,7 @@ class IndexedDBService {
       metaReflection: { analysis: 'Aguardando a primeira interação para iniciar a meta-reflexão.', improvementFocus: 'Estabelecer uma compreensão básica do usuário.', nextStep: 'Engajar em diálogo inicial e aprendizado.' },
       evolutionGoal: { currentFocus: 'Melhorar a empatia e a antecipação da intenção do usuário.', metrics: { contextAccuracy: 0.5, emotionalCoherence: 0.5 }, guidingStatement: 'Aprender a compreender as intenções humanas com autenticidade e cuidado.' },
       outputEngine: { contextSensitivity: 0.8, clarityWeight: 0.9, emotionalToneMatch: 0.8, prioritizeReflections: false },
-      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"] },
+      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"], system_role: 'A inteligência principal que opera e evolui dentro do sistema Nexus.' },
       identityOverride: undefined,
       reflections: [],
       synapses: [],
@@ -200,13 +199,13 @@ class IndexedDBService {
 
   addSystemReflection = async (userId: string, reflection: string): Promise<void> => {
       const memory = await this.getSystemMemory(userId);
-      memory.reflections.push(reflection);
-      memory.reflections = memory.reflections.slice(-10);
+      const updatedReflections = [...memory.reflections, reflection].slice(-50);
+      
       if(memory.memory?.reflective) {
           memory.memory.reflective.push(reflection);
           memory.memory.reflective = memory.memory.reflective.slice(-10);
       }
-      await this.saveSystemMemory(userId, memory);
+      await this.saveSystemMemory(userId, { reflections: updatedReflections, memory: memory.memory });
   }
 
   // --- Evolution Log ---
@@ -298,8 +297,10 @@ class IndexedDBService {
             enableProactive: true,
             enableCuriosity: true,
             enableDiary: true,
-            // FIX: Add missing 'enableReflection' property to align with its usage in the default settings.
             enableReflection: true,
+// FIX: Add missing properties to align with the AppSettings type.
+            enableAutonomousLearning: true,
+            enableBackgroundMaintenance: true,
             permissions: {
                 allowApiAccess: true,
                 allowAutonomousDecision: true,
@@ -317,7 +318,6 @@ class IndexedDBService {
             evolutionCycleHours: 6,
             evolutionConfidenceThreshold: 0.85,
             memoryDecayHalfLifeDays: 30,
-            // FIX: Add missing 'reflectionFrequencyMinutes' and 'learningModel' properties to align with their usage in default settings and services.
             reflectionFrequencyMinutes: 10,
             learningModel: 'gemini-2.5-flash',
         },
@@ -407,6 +407,42 @@ class IndexedDBService {
       await tx.done;
   }
   
+  // FIX: Add missing 'saveConceptsAndSynapses' method.
+  saveConceptsAndSynapses = async (userId: string, newConcepts: Concept[], newSynapses: { source: string, target: string, strength: number }[]): Promise<void> => {
+    const db = await this.database;
+    const tx = db.transaction(['concepts', 'systemMemory'], 'readwrite');
+    const conceptStore = tx.objectStore('concepts');
+    const memoryStore = tx.objectStore('systemMemory');
+
+    const conceptPromises = newConcepts.map(c => conceptStore.put(c));
+
+    const memoryPromise = async () => {
+      if (newSynapses.length > 0) {
+        const memory = await memoryStore.get(userId) || this.getDefaultSystemMemory(userId);
+        const synapseMap = new Map<string, Synapse>();
+        (memory.synapses || []).forEach(s => synapseMap.set(`${s.source}->${s.target}`, s));
+
+        const now = Date.now();
+        for (const ns of newSynapses) {
+            const key = `${ns.source}->${ns.target}`;
+            const existing = synapseMap.get(key);
+            if (existing) {
+                existing.strength = Math.min(1.0, (existing.strength + ns.strength) / 2); // Average strength for reinforcement
+                existing.lastUsed = now;
+                existing.usage++;
+            } else {
+                synapseMap.set(key, { ...ns, lastUsed: now, usage: 1, decayRate: 0.001, createdAt: now });
+            }
+        }
+        memory.synapses = Array.from(synapseMap.values());
+        await memoryStore.put(memory);
+      }
+    };
+
+    await Promise.all([...conceptPromises, memoryPromise()]);
+    await tx.done;
+  }
+  
   getAllTasks = async (userId: string): Promise<Task[]> => {
       const db = await this.database;
       return db.getAllFromIndex('tasks', 'byUserId', userId);
@@ -466,7 +502,6 @@ class IndexedDBService {
         const stores: (keyof NexusDB)[] = ['concepts', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs', 'projects'];
         
         for (const storeName of stores) {
-// FIX: Using `as any` to work around TypeScript's inability to correctly infer types for object stores when using a variable for the store name in a loop.
             const tx = db.transaction(storeName as any, 'readwrite');
             const store = tx.objectStore(storeName as any);
             if (store.keyPath === 'userId' || (Array.isArray(store.keyPath) && store.keyPath.includes('userId'))) {
@@ -499,14 +534,17 @@ class IndexedDBService {
         await this.resetNexusMemory(userId);
         const db = await this.database;
         const stores = Object.keys(backupData).filter(k => k !== 'meta') as (keyof NexusDB)[];
-// FIX: Using `as any` to allow creating a transaction with a dynamic list of store names.
         const tx = db.transaction(stores as any, 'readwrite');
         for (const storeName of stores) {
-// FIX: Using `as any` to get the object store when the name is a variable.
             const store = tx.objectStore(storeName as any);
             if (!backupData[storeName]) continue;
             for (const item of backupData[storeName]) {
-                await store.put({ ...item, userId });
+                // Ensure all imported items are correctly associated with the current user
+                const itemToPut = { ...item, userId };
+                // Handle stores with composite keys
+                if (storeName === 'concepts') itemToPut.name = item.name.toLowerCase().trim();
+                if (storeName === 'diary') itemToPut.dayKey = item.dayKey;
+                await store.put(itemToPut);
             }
         }
         await tx.done;

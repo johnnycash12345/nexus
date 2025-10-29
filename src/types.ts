@@ -91,6 +91,8 @@ export interface AppSettings {
     enableCuriosity: boolean;
     enableDiary: boolean;
     enableReflection: boolean;
+    enableAutonomousLearning: boolean;
+    enableBackgroundMaintenance: boolean;
     permissions: Permissions;
   };
   apiKeys: {
@@ -361,4 +363,17 @@ export interface OrchestratorOptions {
   setStatus: SetStatusFn;
   generateResponse: GenerateResponseFn;
   generateVisionResponse: GenerateVisionResponseFn;
+}
+
+// --- New Types for Decision Logging ---
+// FIX: Added missing DecisionLogType and DecisionLogEntry types.
+export type DecisionLogType = 'CODE_PROPOSAL' | 'AUTONOMOUS_SEARCH' | 'CONCEPT_MERGE';
+
+export interface DecisionLogEntry {
+    id?: number;
+    userId: string;
+    timestamp: number;
+    decisionType: DecisionLogType;
+    reasoning: string;
+    details: any; // JSON payload with action details
 }

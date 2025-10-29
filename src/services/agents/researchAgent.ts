@@ -45,7 +45,8 @@ export class ResearchAgent {
         }
 
         this.opts.setStatus('SEARCHING_WEB');
-        const searchResult = await webSearchService.search(query);
+        // FIX: Pass the required userId and reasoning string to the search method.
+        const searchResult = await webSearchService.search(this.opts.userId, query, `User requested a search for: "${query}"`);
 
         if (searchResult) {
             // Integrate this new knowledge into the brain asynchronously

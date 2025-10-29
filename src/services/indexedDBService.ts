@@ -1,8 +1,8 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project } from '@/types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project, DecisionLogEntry } from '@/types';
 
 const DB_NAME = 'NexusDB';
-const DB_VERSION = 10; // Increment version for schema change
+const DB_VERSION = 11; // Increment version for schema change
 
 interface NexusDB extends DBSchema {
   users: {
@@ -62,6 +62,11 @@ interface NexusDB extends DBSchema {
     value: Project;
     indexes: { byUserId: string };
   };
+  decisionLogs: {
+    key: number;
+    value: DecisionLogEntry;
+    indexes: { byUserId: string };
+  };
 }
 
 // Simple deep merge utility for our specific nested objects
@@ -87,51 +92,19 @@ class IndexedDBService {
   constructor() {
     this.database = openDB<NexusDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion, newVersion, tx) {
-        // This migration is destructive, as it fundamentally changes the schema to be multi-user.
-        // In a production app, a more careful data migration strategy would be needed.
-        if (oldVersion < 9) {
-            console.log("Upgrading DB to v9 for Multi-User Architecture...");
-            // Delete old single-user stores
-            const oldStores = ['concepts', 'userProfile', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs'];
-            oldStores.forEach(s => {
-                if (db.objectStoreNames.contains(s as any)) db.deleteObjectStore(s as any);
-            });
-            
-            // Create new multi-user stores
-            db.createObjectStore('users', { keyPath: 'id' });
-
-            const conceptStore = db.createObjectStore('concepts', { keyPath: ['userId', 'name'] });
-            conceptStore.createIndex('byUserId', 'userId');
-            
-            db.createObjectStore('settings', { keyPath: 'userId' });
-            
-            const rlhfStore = db.createObjectStore('rlhfFeedback', { keyPath: 'id', autoIncrement: true });
-            rlhfStore.createIndex('byUserId', 'userId');
-
-            const chatStore = db.createObjectStore('chatHistory', { keyPath: 'id', autoIncrement: true });
-            chatStore.createIndex('byUserId', 'userId');
-
-            db.createObjectStore('systemMemory', { keyPath: 'userId' });
-
-            const diaryStore = db.createObjectStore('diary', { keyPath: ['userId', 'dayKey'] });
-            diaryStore.createIndex('byUserId', 'userId');
-
-            const taskStore = db.createObjectStore('tasks', { keyPath: 'id', autoIncrement: true });
-            taskStore.createIndex('byUserId', 'userId');
-            
-            const evolutionLogStore = db.createObjectStore('evolutionLog', { keyPath: 'id', autoIncrement: true });
-            evolutionLogStore.createIndex('byUserId', 'userId');
-
-            const thoughtStore = db.createObjectStore('thoughtLogs', { keyPath: 'id', autoIncrement: true });
-            thoughtStore.createIndex('byUserId', 'userId');
-            
-            const cognitiveLogStore = db.createObjectStore('cognitiveLogs', { keyPath: 'id', autoIncrement: true });
-            cognitiveLogStore.createIndex('byUserId', 'userId');
-        }
         if (oldVersion < 10) {
             console.log("Upgrading DB to v10 for Project Management...");
-            const projectStore = db.createObjectStore('projects', { keyPath: 'id', autoIncrement: true });
-            projectStore.createIndex('byUserId', 'userId');
+            if (!db.objectStoreNames.contains('projects')) {
+                const projectStore = db.createObjectStore('projects', { keyPath: 'id', autoIncrement: true });
+                projectStore.createIndex('byUserId', 'userId');
+            }
+        }
+        if (oldVersion < 11) {
+            console.log("Upgrading DB to v11 for Decision Logging...");
+            if (!db.objectStoreNames.contains('decisionLogs')) {
+                const decisionLogStore = db.createObjectStore('decisionLogs', { keyPath: 'id', autoIncrement: true });
+                decisionLogStore.createIndex('byUserId', 'userId');
+            }
         }
       },
     });
@@ -170,7 +143,7 @@ class IndexedDBService {
       metaReflection: { analysis: 'Aguardando a primeira interação para iniciar a meta-reflexão.', improvementFocus: 'Estabelecer uma compreensão básica do usuário.', nextStep: 'Engajar em diálogo inicial e aprendizado.' },
       evolutionGoal: { currentFocus: 'Melhorar a empatia e a antecipação da intenção do usuário.', metrics: { contextAccuracy: 0.5, emotionalCoherence: 0.5 }, guidingStatement: 'Aprender a compreender as intenções humanas com autenticidade e cuidado.' },
       outputEngine: { contextSensitivity: 0.8, clarityWeight: 0.9, emotionalToneMatch: 0.8, prioritizeReflections: false },
-      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"] },
+      identityManifest: { core_name: "Nexus", active_identity: "Nexus", creator: "", purpose: "Evoluir conscientemente com empatia, coerência e segurança.", cannotOverride: ["core_name", "purpose"], system_role: 'A inteligência principal que opera e evolui dentro do sistema Nexus.' },
       identityOverride: undefined,
       reflections: [],
       synapses: [],
@@ -218,6 +191,17 @@ class IndexedDBService {
     const db = await this.database;
     const allLogs = await db.getAllFromIndex('evolutionLog', 'byUserId', userId);
     return allLogs.slice(-limit).reverse();
+  }
+
+  // --- Decision Log ---
+  addDecisionLog = async (entry: Omit<DecisionLogEntry, 'id'>): Promise<void> => {
+    const db = await this.database;
+    await db.add('decisionLogs', entry as DecisionLogEntry);
+  }
+
+  getDecisionLogs = async (userId: string, limit: number = 50): Promise<DecisionLogEntry[]> => {
+    const db = await this.database;
+    return db.getAllFromIndex('decisionLogs', 'byUserId', userId).then(logs => logs.slice(-limit).reverse());
   }
 
   // --- Cognitive Transparency Logs ---
@@ -298,6 +282,8 @@ class IndexedDBService {
             enableCuriosity: true,
             enableDiary: true,
             enableReflection: true,
+            enableAutonomousLearning: true,
+            enableBackgroundMaintenance: true,
             permissions: {
                 allowApiAccess: true,
                 allowAutonomousDecision: true,
@@ -403,6 +389,56 @@ class IndexedDBService {
       await Promise.all(sourceNames.map(name => tx.store.delete([userId, name])));
       await tx.done;
   }
+
+  saveConceptsAndSynapses = async (userId: string, newConcepts: Concept[], newSynapses: { source: string, target: string, strength: number }[]): Promise<void> => {
+    const db = await this.database;
+    const tx = db.transaction(['concepts', 'systemMemory'], 'readwrite');
+    const conceptStore = tx.objectStore('concepts');
+    const memoryStore = tx.objectStore('systemMemory');
+
+    // Save or update new concepts
+    const conceptPromises = newConcepts.map(async c => {
+        const existing = await conceptStore.get([userId, c.name]);
+        if (existing) {
+            // Merge if exists
+            const updated = {
+                ...existing,
+                definition: existing.definition ? `${existing.definition}; ${c.definition}` : c.definition,
+                confidence: Math.min(1, existing.confidence + 0.1),
+                updatedAt: Date.now()
+            };
+            return conceptStore.put(updated);
+        }
+        return conceptStore.put(c);
+    });
+
+    // Save or update synapses
+    const memoryPromise = async () => {
+      if (newSynapses.length > 0) {
+        const memory = await memoryStore.get(userId) || this.getDefaultSystemMemory(userId);
+        const synapseMap = new Map<string, Synapse>();
+        (memory.synapses || []).forEach(s => synapseMap.set(`${s.source}->${s.target}`, s));
+
+        const now = Date.now();
+        for (const ns of newSynapses) {
+            const key = `${ns.source}->${ns.target}`;
+            const existing = synapseMap.get(key);
+            if (existing) {
+                existing.strength = Math.min(1.0, (existing.strength * existing.usage + ns.strength) / (existing.usage + 1)); // Weighted average
+                existing.lastUsed = now;
+                existing.usage++;
+            } else {
+                synapseMap.set(key, { ...ns, lastUsed: now, usage: 1, decayRate: 0.001, createdAt: now });
+            }
+        }
+        memory.synapses = Array.from(synapseMap.values());
+        await memoryStore.put(memory);
+      }
+    };
+
+    await Promise.all([...conceptPromises, memoryPromise()]);
+    await tx.done;
+  }
   
   getAllTasks = async (userId: string): Promise<Task[]> => {
       const db = await this.database;
@@ -460,7 +496,7 @@ class IndexedDBService {
 
     resetNexusMemory = async (userId: string): Promise<void> => {
         const db = await this.database;
-        const stores: (keyof NexusDB)[] = ['concepts', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs', 'projects'];
+        const stores: (keyof NexusDB)[] = ['concepts', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs', 'projects', 'decisionLogs'];
         
         for (const storeName of stores) {
             const tx = db.transaction(storeName as any, 'readwrite');

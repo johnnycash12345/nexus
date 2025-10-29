@@ -1,4 +1,3 @@
-
 import { db, cognitiveLogger } from '../indexedDBService';
 import { CognitiveFrame, VisualState, CodeModificationProposal, UserContext } from '../../types';
 import { neuralMemory } from '../neuralMemory';

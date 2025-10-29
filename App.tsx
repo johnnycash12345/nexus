@@ -20,6 +20,8 @@ const ReflectionHistory = lazy(() => import('./components/ReflectionHistory').th
 const CognitiveStatus = lazy(() => import('./components/CognitiveStatus').then(m => ({ default: m.CognitiveStatus })));
 
 type ActivePanel = 'settings' | 'camera' | 'todo' | 'reflectionHistory' | 'cognitiveStatus' | null;
+// FIX: Add 'Thought' type to handle cognitive thought updates for the UI.
+type Thought = { text: string; type: 'symbolic_log' | 'error' };
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AssistantStatus>('IDLE');
@@ -30,7 +32,8 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isStarted, setIsStarted] = useState(false);
-  const [thought, setThought] = useState<string | null>(null);
+  // FIX: Update 'thought' state to be an object to match the component prop type.
+  const [thought, setThought] = useState<Thought | null>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [emotion, setEmotion] = useState<Emotion>('CALM');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -44,6 +47,8 @@ const App: React.FC = () => {
 
   const orchestratorRef = useRef<CognitiveOrchestrator | null>(null);
   const isChatVisibleRef = useRef(isChatVisible);
+  // FIX: Add a timer ref for managing the visibility of the 'thought' bubble.
+  const thoughtTimer = useRef<number | null>(null);
 
   // Switch user function for demonstration
   const switchUser = (userId: string) => {
@@ -79,6 +84,20 @@ const App: React.FC = () => {
         setHasNewMessage(true);
     }
   }, [currentUserId]);
+
+  // FIX: Add an effect to listen for and display cognitive thoughts from the Nexus core.
+  useEffect(() => {
+    const handleThought = (event: CustomEvent<Thought>) => {
+        setThought(event.detail);
+        if (thoughtTimer.current) clearTimeout(thoughtTimer.current);
+        thoughtTimer.current = window.setTimeout(() => setThought(null), 5000);
+    };
+    window.addEventListener('nexus-thought-update', handleThought as EventListener);
+    return () => {
+        window.removeEventListener('nexus-thought-update', handleThought as EventListener);
+        if (thoughtTimer.current) clearTimeout(thoughtTimer.current);
+    };
+  }, []);
   
   // App Initialization for the current user
   useEffect(() => {
@@ -209,6 +228,8 @@ const App: React.FC = () => {
                   status={status}
                   intensity={settings?.cognitive?.emotionalIntensity ?? 1.0}
                   emotion={emotion}
+                  // FIX: Pass the 'thought' state to the AvatarLayer component.
+                  thought={thought}
               />
 
               <AnimatePresence>

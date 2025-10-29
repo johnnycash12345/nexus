@@ -29,7 +29,8 @@ class SelfReflection {
                     detail: { type: 'symbolic_log', text: `Refletindo sobre a baixa eficácia... buscando auto-aperfeiçoamento.` },
                 }));
 
-                const proposal = await selfProgrammingService.proposeCodeModification(goal, targetLogicArea, simulatedCodeContext);
+                // FIX: Pass the userId from the cognitive frame as the first argument.
+                const proposal = await selfProgrammingService.proposeCodeModification(frame.userContext.userId, goal, targetLogicArea, simulatedCodeContext);
 
                 if (proposal) {
                     presentCodeProposal(proposal, goal);
@@ -41,6 +42,44 @@ class SelfReflection {
             }
         }
     }
+    
+    public async runProactiveAnalysis(userId: string, generateResponse: GenerateResponseFn): Promise<string | null> {
+        const history = await db.getChatHistory(userId, 20);
+        const interactionsWithContext = history.filter(m => m.role === 'model' && m.learningContext);
+        if (interactionsWithContext.length < 5) return null;
+
+        const lowPerfInteractions = interactionsWithContext
+            .filter(m => (m.learningContext?.responseEffectiveness ?? 1.0) < 0.6)
+            .map(m => `Intent: ${m.learningContext?.inputIntent}, Effectiveness: ${m.learningContext?.responseEffectiveness}`);
+        
+        if (lowPerfInteractions.length < 3) return null; // Only act on a pattern
+
+        const prompt = `
+            As an AI, analyze these records of your own low-performance interactions. Identify a single, actionable pattern or root cause for the low effectiveness scores.
+            Based on this pattern, formulate a clear goal for self-improvement.
+
+            Low-Performance Records:
+            - ${lowPerfInteractions.join('\n- ')}
+
+            Example Goal: "Improve context understanding for 'complex_reasoning' intents by better utilizing historical reflections."
+
+            Return only the goal as a single string.
+        `;
+
+        try {
+            const response = await generateResponse(prompt, [], { useThinking: true, forcePlainText: true });
+            const goal = response.text?.trim();
+            if (goal) {
+                console.log(`[SelfReflection] Proactive analysis generated improvement goal: ${goal}`);
+                return goal;
+            }
+            return null;
+        } catch (error) {
+            console.error('[SelfReflection] Proactive analysis failed:', error);
+            return null;
+        }
+    }
+
 
     public async reflectOnSystemRole(generateResponse: GenerateResponseFn, userId: string): Promise<string | null> {
         try {

@@ -1,9 +1,12 @@
 import { db, cognitiveLogger } from '../indexedDBService';
-import { CognitiveFrame, VisualState, CodeModificationProposal } from '@/types';
+import { CognitiveFrame, VisualState, CodeModificationProposal, UserContext } from '@/types';
 import { neuralMemory } from '../neuralMemory';
 import { selfReflection } from '../selfReflection';
 import { EmotionalAgent } from '../agents/emotionalAgent';
 import { analyzeAndStoreConcepts } from '../conceptEngine';
+import { autonomousLearningService } from '../autonomousLearningService';
+// FIX: Added missing import for adaptiveMemory.
+import { adaptiveMemory } from '../adaptiveMemory';
 
 type PresentProposalFn = (proposal: CodeModificationProposal, goal: string) => void;
 
@@ -31,7 +34,8 @@ export async function updateCognitiveState(frame: CognitiveFrame, presentCodePro
     const postInteractionPromises = [
         neuralMemory.registerInteraction(userContext.userId, frame.userInput, text, learningContext),
         emotionalAgent.processInteraction(frame),
-        analyzeAndStoreConcepts(userContext.userId, text) // New: Learn concepts from own response
+        analyzeAndStoreConcepts(userContext.userId, text), // Learn concepts from own response
+        analyzeAndStoreConcepts(userContext.userId, frame.userInput) // Learn concepts from user input
     ];
 
     await Promise.all(postInteractionPromises).catch(error => {
@@ -56,5 +60,24 @@ export async function updateCognitiveState(frame: CognitiveFrame, presentCodePro
         selfReflection.reflectOnInteraction(frame, presentCodeProposal).catch(err => {
             console.warn("[CognitiveUpdater] Self-reflection process failed:", err);
         });
+    }
+
+    // Trigger autonomous learning cycle in the background
+    // This runs after the main response flow and does not block the UI
+    autonomousLearningService.runLearningCycle(frame).catch(err => {
+        console.warn('[CognitiveUpdater] Autonomous learning cycle failed in background:', err);
+    });
+}
+
+// FIX: Added missing `runCognitiveMaintenance` function.
+export async function runCognitiveMaintenance(userId: string): Promise<void> {
+    try {
+        await Promise.all([
+            adaptiveMemory.decayUnusedConcepts(userId),
+            neuralMemory.decayAndConsolidateSynapses(userId)
+        ]);
+        console.log(`[CognitiveUpdater] Performed cognitive maintenance for user ${userId}.`);
+    } catch (error) {
+        console.error(`[CognitiveUpdater] Error during cognitive maintenance for user ${userId}:`, error);
     }
 }

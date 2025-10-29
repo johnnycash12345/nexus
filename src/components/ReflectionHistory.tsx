@@ -3,31 +3,13 @@ import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { db } from '@/services/indexedDBService';
 import { Thought, CognitiveLog, AppSettings } from '@/types';
 
+// FIX: Removed modal-related props (onClose, isVisible) as component is now tab content.
 interface CognitiveMonitorProps {
-  onClose: () => void;
-  isVisible: boolean;
   settings: AppSettings | null;
   userId: string;
 }
 
 type LogItem = (Thought & { logType: 'thought' }) | (CognitiveLog & { logType: 'action' });
-
-const backdropVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1 },
-};
-
-const panelVariants: Variants = {
-  hidden: { x: "-100%" },
-  visible: { 
-    x: "0%",
-    transition: { type: 'spring', stiffness: 120, damping: 20 }
-  },
-  exit: {
-    x: "-100%",
-    transition: { duration: 0.2 }
-  }
-};
 
 const itemVariants: Variants = { 
     hidden: { opacity: 0, y: 20 },
@@ -158,7 +140,7 @@ const TimelineItem: React.FC<{ item: LogItem, isExpanded: boolean, onToggle: () 
 };
 
 
-export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, isVisible, settings, userId }) => {
+export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ settings, userId }) => {
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -210,12 +192,19 @@ export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, is
   }, [userId]);
   
   useEffect(() => {
-    if (isVisible) {
-      loadLogs();
-      const interval = setInterval(loadLogs, 30000); // Auto-refresh every 30s
-      return () => clearInterval(interval);
-    }
-  }, [isVisible, loadLogs]);
+    loadLogs();
+    const interval = setInterval(loadLogs, 30000); // Auto-refresh every 30s
+    
+    const handleNewLog = () => {
+        loadLogs();
+    };
+    window.addEventListener('nexus-cognitive-log-added', handleNewLog);
+    
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener('nexus-cognitive-log-added', handleNewLog);
+    };
+  }, [loadLogs]);
   
   const logsByDay = logs.reduce((acc, log) => {
     const dateKey = new Date(log.timestamp).toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -230,68 +219,44 @@ export const ReflectionHistory: React.FC<CognitiveMonitorProps> = ({ onClose, is
   };
 
   return (
-    <AnimatePresence>
-      {isVisible && (
-        <motion.div 
-          className="fixed inset-0 bg-black/60 z-30 flex justify-start backdrop-blur-sm" 
-          onClick={onClose}
-          variants={backdropVariants} initial="hidden" animate="visible" exit="hidden"
-        >
-          <motion.div 
-            className="bg-gray-800/95 shadow-2xl w-full max-w-md h-full flex flex-col" 
-            onClick={e => e.stopPropagation()}
-            variants={panelVariants}
-          >
-            <header className="flex-shrink-0 p-4 border-b border-gray-700/80 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 00-4-4H3V9h2a4 4 0 004-4V3l4 4-4 4zm6 0v-2a4 4 0 014-4h2V9h-2a4 4 0 01-4-4V3l-4 4 4 4z" /></svg>
-                <h2 className="text-xl font-bold text-white">Monitor Cognitivo</h2>
-              </div>
-              <button onClick={onClose} className="text-gray-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
-            </header>
-            
-            <main className="flex-grow p-4 overflow-y-auto space-y-6">
-              {isLoading ? (
-                <div className="flex items-center justify-center h-full text-gray-400">Acessando memórias...</div>
-              ) : (
-                <>
-                    <motion.section initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
-                        <div className="grid grid-cols-2 gap-3">
-                            <motion.div variants={itemVariants}><StatCard icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg>} label="Pensamentos" value={stats.thoughts} colorClass="bg-blue-500/30 text-blue-300" /></motion.div>
-                            <motion.div variants={itemVariants}><StatCard icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>} label="Ações" value={stats.actions} colorClass="bg-yellow-500/30 text-yellow-300" /></motion.div>
-                            <motion.div variants={itemVariants} className="col-span-2"><StatCard icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>} label="Carga Cognitiva (24h)" value={stats.cognitiveLoad} colorClass="bg-purple-500/30 text-purple-300" /></motion.div>
-                        </div>
-                    </motion.section>
+    <>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full text-gray-400">Acessando memórias...</div>
+      ) : (
+        <div className="space-y-6">
+            <motion.section initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }}>
+                <div className="grid grid-cols-2 gap-3">
+                    <motion.div variants={itemVariants}><StatCard icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg>} label="Pensamentos" value={stats.thoughts} colorClass="bg-blue-500/30 text-blue-300" /></motion.div>
+                    <motion.div variants={itemVariants}><StatCard icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>} label="Ações" value={stats.actions} colorClass="bg-yellow-500/30 text-yellow-300" /></motion.div>
+                    <motion.div variants={itemVariants} className="col-span-2"><StatCard icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>} label="Carga Cognitiva (24h)" value={stats.cognitiveLoad} colorClass="bg-purple-500/30 text-purple-300" /></motion.div>
+                </div>
+            </motion.section>
 
-                    <motion.section initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay: 0.2}}>
-                        <ActivityChart data={chartData} />
-                    </motion.section>
+            <motion.section initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay: 0.2}}>
+                <ActivityChart data={chartData} />
+            </motion.section>
 
-                    <motion.section initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay: 0.4}}>
-                        <h3 className="text-lg font-semibold text-cyan-300 mb-3">Linha do Tempo</h3>
-                        {Object.entries(logsByDay).map(([date, dailyLogs]: [string, LogItem[]]) => (
-                            <div key={date} className="relative mt-4">
-                                <h4 className="font-bold text-gray-400 mb-2 pl-8 relative"><div className="absolute left-0 top-1/2 w-3 h-0.5 bg-gray-600"></div>{date}</h4>
-                                <div className="absolute left-[6px] top-0 h-full w-0.5 bg-gray-700/50"></div>
-                                <motion.ul variants={{ visible: { transition: { staggerChildren: 0.05 } } }}>
-                                    {dailyLogs.map(log => (
-                                        <TimelineItem 
-                                            key={`${log.logType}-${log.id}`} 
-                                            item={log}
-                                            isExpanded={expandedId === `${log.logType}-${log.id}`}
-                                            onToggle={() => handleToggle(`${log.logType}-${log.id}`)}
-                                        />
-                                    ))}
-                                </motion.ul>
-                            </div>
-                        ))}
-                    </motion.section>
-                </>
-              )}
-            </main>
-          </motion.div>
-        </motion.div>
+            <motion.section initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay: 0.4}}>
+                <h3 className="text-lg font-semibold text-cyan-300 mb-3">Linha do Tempo</h3>
+                {Object.entries(logsByDay).map(([date, dailyLogs]: [string, LogItem[]]) => (
+                    <div key={date} className="relative mt-4">
+                        <h4 className="font-bold text-gray-400 mb-2 pl-8 relative"><div className="absolute left-0 top-1/2 w-3 h-0.5 bg-gray-600"></div>{date}</h4>
+                        <div className="absolute left-[6px] top-0 h-full w-0.5 bg-gray-700/50"></div>
+                        <motion.ul variants={{ visible: { transition: { staggerChildren: 0.05 } } }}>
+                            {dailyLogs.map(log => (
+                                <TimelineItem 
+                                    key={`${log.logType}-${log.id}`} 
+                                    item={log}
+                                    isExpanded={expandedId === `${log.logType}-${log.id}`}
+                                    onToggle={() => handleToggle(`${log.logType}-${log.id}`)}
+                                />
+                            ))}
+                        </motion.ul>
+                    </div>
+                ))}
+            </motion.section>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   );
 };

@@ -4,9 +4,8 @@ import { db } from '../services/indexedDBService';
 import { SystemMemory, EvolutionLog, EvolutionCyclePhase } from '../types';
 import { systemMonitor } from '../services/systemMonitor';
 
+// FIX: Remove modal-related props as this component is now used as tab content.
 interface CognitiveStatusProps {
-  onClose: () => void;
-  isVisible: boolean;
   userId: string;
 }
 
@@ -17,19 +16,6 @@ interface ModuleData {
     metric?: string;
     value?: string | number;
 }
-
-const backdropVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1 },
-};
-
-const panelVariants: Variants = {
-  hidden: { x: "-100%" },
-  visible: { 
-    x: "0%",
-    transition: { type: 'spring', stiffness: 120, damping: 20 }
-  },
-};
 
 const listVariants: Variants = {
   hidden: {},
@@ -99,7 +85,7 @@ const EvolutionLogItem: React.FC<{ log: EvolutionLog }> = ({ log }) => {
     )
 }
 
-export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVisible, userId }) => {
+export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ userId }) => {
   const [systemMemory, setSystemMemory] = useState<SystemMemory | null>(null);
   const [evolutionLogs, setEvolutionLogs] = useState<EvolutionLog[]>([]);
   const [conceptCount, setConceptCount] = useState(0);
@@ -114,33 +100,31 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVis
 
 
   useEffect(() => {
-    if (isVisible) {
-      setIsLoading(true);
-      Promise.all([
-        db.getSystemMemory(userId),
-        db.getAllConcepts(userId),
-        db.getLatestEvolutionLogs(userId, 5),
-      ]).then(([memory, concepts, logs]) => {
-        setSystemMemory(memory);
-        setConceptCount(concepts.length);
-        setEvolutionLogs(logs);
+    setIsLoading(true);
+    Promise.all([
+      db.getSystemMemory(userId),
+      db.getAllConcepts(userId),
+      db.getLatestEvolutionLogs(userId, 5),
+    ]).then(([memory, concepts, logs]) => {
+      setSystemMemory(memory);
+      setConceptCount(concepts.length);
+      setEvolutionLogs(logs);
 
-        const now = Date.now();
-        const oneDay = 24 * 60 * 60 * 1000;
-        
-        const synapses = memory.synapses || [];
-        const newSynapses = synapses.filter(s => s.createdAt && (now - s.createdAt < oneDay));
-        const factor = newSynapses.length / 24;
-        setCognitiveExpansionFactor(factor);
+      const now = Date.now();
+      const oneDay = 24 * 60 * 60 * 1000;
+      
+      const synapses = memory.synapses || [];
+      const newSynapses = synapses.filter(s => s.createdAt && (now - s.createdAt < oneDay));
+      const factor = newSynapses.length / 24;
+      setCognitiveExpansionFactor(factor);
 
-        const newConcepts = concepts.filter(c => now - c.createdAt < oneDay).length;
-        const newReflections = 0; // The 'reflections' array now contains strings without timestamps, so this calculation is no longer possible.
-        const rate = ((newConcepts + newReflections) / 24).toFixed(1);
-        setEvolutionRate(rate);
+      const newConcepts = concepts.filter(c => now - c.createdAt < oneDay).length;
+      const newReflections = 0; // The 'reflections' array now contains strings without timestamps, so this calculation is no longer possible.
+      const rate = ((newConcepts + newReflections) / 24).toFixed(1);
+      setEvolutionRate(rate);
 
-        setIsLoading(false);
-      });
-    }
+      setIsLoading(false);
+    });
     
     const handleEvolutionStatus = (event: CustomEvent) => {
         setCurrentPhase(event.detail.phase);
@@ -157,7 +141,7 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVis
         window.removeEventListener('nexus-performance-update', handlePerfUpdate as EventListener);
     };
 
-  }, [isVisible, userId]);
+  }, [userId]);
   
   const phaseText: Record<EvolutionCyclePhase, string> = {
     IDLE: 'Ocioso',
@@ -215,85 +199,59 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ onClose, isVis
   ];
 
   return (
-    <motion.div 
-      className="fixed inset-0 bg-black/60 z-30 flex justify-start backdrop-blur-sm" 
-      onClick={onClose}
-      variants={backdropVariants}
-      initial="hidden"
-      animate="visible"
-      exit="hidden"
-      transition={{ duration: 0.3 }}
-    >
-      <motion.div 
-        className="bg-gray-800/90 shadow-2xl w-full max-w-sm h-full flex flex-col" 
-        onClick={e => e.stopPropagation()}
-        variants={panelVariants}
-      >
-        <header className="flex-shrink-0 p-4 border-b border-gray-700/80 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg>
-            <h2 className="text-xl font-bold text-white">Arquitetura Cognitiva</h2>
+      <>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full text-gray-400">
+            Carregando estado interno...
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </header>
-
-        <main className="flex-grow p-4 overflow-y-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              Carregando estado interno...
-            </div>
-          ) : (
-            <div className="space-y-4">
-                <motion.div
-                    initial={{opacity: 0}} animate={{opacity: 1}}
-                    className={`p-3 rounded-lg text-sm transition-colors ${
-                        performanceStatus.isUnderStrain
-                            ? 'bg-yellow-800/50 border border-yellow-600/50 text-yellow-300'
-                            : 'bg-green-800/30 border border-green-600/30 text-green-300'
-                    }`}
-                >
-                    <p className="font-bold">Status do Dispositivo: <span className="font-normal">{performanceStatus.reason}</span></p>
-                    {performanceStatus.isUnderStrain && <p className="text-xs mt-1">Funções de fundo (reflexão, evolução) estão em modo de economia para preservar recursos.</p>}
-                </motion.div>
-
-                <motion.div className="space-y-4" variants={listVariants} initial="hidden" animate="visible">
-                    {modules.map((mod, i) => (
-                        <ModuleCard key={i} {...mod} />
-                    ))}
-                </motion.div>
-                
-                <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-cyan-300 mb-2">Heurísticas Comportamentais</h3>
-                    <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
-                        {systemMemory?.behavioralHeuristics && systemMemory.behavioralHeuristics.length > 0 ? (
-                            systemMemory.behavioralHeuristics.map((heuristic, index) => (
-                                <motion.div key={index} variants={itemVariants} className="bg-gray-700/50 p-3 rounded-lg text-sm text-gray-300 flex items-start gap-2">
-                                    <span className="text-cyan-400 font-bold">§</span>
-                                    <p>{heuristic}</p>
-                                </motion.div>
-                            ))
-                        ) : (
-                             <p className="text-sm text-gray-500 italic">Nenhuma heurística definida.</p>
-                        )}
-                    </motion.div>
-                </div>
-                
-                <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-cyan-300 mb-2">Histórico de Evolução Recente</h3>
-                    {evolutionLogs.length === 0 ? (
-                        <p className="text-sm text-gray-500 italic">Nenhuma evolução registrada ainda.</p>
-                    ) : (
-                        <motion.div className="space-y-3" variants={listVariants} initial="hidden" animate="visible">
-                           {evolutionLogs.map(log => <EvolutionLogItem key={log.id} log={log} />)}
-                        </motion.div>
-                    )}
-                </div>
-            </div>
-          )}
-        </main>
-      </motion.div>
-    </motion.div>
+        ) : (
+          <div className="space-y-4">
+              <motion.div
+                  initial={{opacity: 0}} animate={{opacity: 1}}
+                  className={`p-3 rounded-lg text-sm transition-colors ${
+                      performanceStatus.isUnderStrain
+                          ? 'bg-yellow-800/50 border border-yellow-600/50 text-yellow-300'
+                          : 'bg-green-800/30 border border-green-600/30 text-green-300'
+                  }`}
+              >
+                  <p className="font-bold">Status do Dispositivo: <span className="font-normal">{performanceStatus.reason}</span></p>
+                  {performanceStatus.isUnderStrain && <p className="text-xs mt-1">Funções de fundo (reflexão, evolução) estão em modo de economia para preservar recursos.</p>}
+              </motion.div>
+  
+              <motion.div className="space-y-4" variants={listVariants} initial="hidden" animate="visible">
+                  {modules.map((mod, i) => (
+                      <ModuleCard key={i} {...mod} />
+                  ))}
+              </motion.div>
+              
+              <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-cyan-300 mb-2">Heurísticas Comportamentais</h3>
+                  <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
+                      {systemMemory?.behavioralHeuristics && systemMemory.behavioralHeuristics.length > 0 ? (
+                          systemMemory.behavioralHeuristics.map((heuristic, index) => (
+                              <motion.div key={index} variants={itemVariants} className="bg-gray-700/50 p-3 rounded-lg text-sm text-gray-300 flex items-start gap-2">
+                                  <span className="text-cyan-400 font-bold">§</span>
+                                  <p>{heuristic}</p>
+                              </motion.div>
+                          ))
+                      ) : (
+                           <p className="text-sm text-gray-500 italic">Nenhuma heurística definida.</p>
+                      )}
+                  </motion.div>
+              </div>
+              
+              <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-cyan-300 mb-2">Histórico de Evolução Recente</h3>
+                  {evolutionLogs.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic">Nenhuma evolução registrada ainda.</p>
+                  ) : (
+                      <motion.div className="space-y-3" variants={listVariants} initial="hidden" animate="visible">
+                         {evolutionLogs.map(log => <EvolutionLogItem key={log.id} log={log} />)}
+                      </motion.div>
+                  )}
+              </div>
+          </div>
+        )}
+      </>
   );
 };

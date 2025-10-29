@@ -26,6 +26,7 @@ export async function retrieveRelevantMemories(userInput: string, intent: Intent
     const conceptMap = new Map<string, Concept>();
     [...validConceptsFromKeywords, ...mostConfidentConcepts].forEach(c => conceptMap.set(c.name, c));
     
+    // FIX: reflections array contains strings, so no need to map over .text property.
     const reflections = systemMemory?.reflections?.slice(-3) || [];
     
     return {

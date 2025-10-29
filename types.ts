@@ -90,8 +90,10 @@ export interface AppSettings {
     enableProactive: boolean;
     enableCuriosity: boolean;
     enableDiary: boolean;
-    // FIX: Add missing 'enableReflection' property to align with its usage in the default settings.
+// FIX: Added missing properties `enableAutonomousLearning` and `enableBackgroundMaintenance`.
     enableReflection: boolean;
+    enableAutonomousLearning: boolean;
+    enableBackgroundMaintenance: boolean;
     permissions: Permissions;
   };
   apiKeys: {
@@ -106,7 +108,7 @@ export interface AppSettings {
     evolutionCycleHours: number;
     evolutionConfidenceThreshold: number;
     memoryDecayHalfLifeDays: number;
-    // FIX: Add missing 'reflectionFrequencyMinutes' and 'learningModel' properties to align with their usage in default settings and services.
+// FIX: Added missing properties `reflectionFrequencyMinutes` and `learningModel`.
     reflectionFrequencyMinutes: number;
     learningModel: 'gemini-2.5-flash' | 'gemini-2.5-pro';
   };
@@ -204,8 +206,8 @@ export interface IdentityManifest {
     creator: string;
     purpose: string;
     cannotOverride: string[];
-    // FIX: Add missing property `system_role` to align with its usage in various services.
-    system_role?: string;
+// FIX: Added missing property `system_role`.
+    system_role: string;
 }
 
 export interface IdentityOverride {
@@ -319,7 +321,7 @@ export interface LlmCognitiveResponse {
   sources?: Source[];
 }
 
-// FIX: Add missing `web_search` intent to handle web search delegation.
+// FIX: Added missing `web_search` intent.
 export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'project_start' | 'web_search' | 'unknown';
 
 export interface CognitiveFrame {

@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
-import { AppSettings, Concept } from '@/types';
+import { AppSettings, UserRole } from '@/types';
 import { db } from '@/services/indexedDBService';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { BrainSettings } from './settings/BrainSettings';
 import { IntegrationsSettings } from './settings/IntegrationsSettings';
 import { MemorySettings } from './settings/MemorySettings';
+
+const CreatorPanel = lazy(() => import('./settings/CreatorPanel').then(m => ({ default: m.CreatorPanel })));
+const CognitiveStatus = lazy(() => import('@/components/CognitiveStatus').then(m => ({ default: m.CognitiveStatus })));
+const ReflectionHistory = lazy(() => import('@/components/ReflectionHistory').then(m => ({ default: m.ReflectionHistory })));
+
 
 interface SettingsPanelProps {
   isVisible: boolean;
@@ -15,9 +20,11 @@ interface SettingsPanelProps {
   token: string | null;
   onLogout: () => void;
   userId: string;
+  initialTab?: Tab;
 }
 
-type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória';
+// FIX: Export Tab type for use in App.tsx.
+export type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória' | 'gerenciamento' | 'arquitetura' | 'monitor';
 
 const backdropVariants: Variants = {
   hidden: { opacity: 0 },
@@ -43,19 +50,36 @@ const contentVariants: Variants = {
     visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
-const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
+const baseNavItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'geral', label: 'Geral', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg> },
     { id: 'cérebro', label: 'Cérebro', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg> },
     { id: 'integrações', label: 'Integrações', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg> },
     { id: 'memória', label: 'Dados', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7a8 8 0 0116 0" /></svg> },
+    { id: 'arquitetura', label: 'Arquitetura', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5m-11.25-2.25L4.5 13.5m0 0l-1.5-1.5M4.5 13.5V15m15-1.5L19.5 13.5m0 0l-1.5-1.5m1.5 1.5V15M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg> },
+    { id: 'monitor', label: 'Monitor', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 00-4-4H3V9h2a4 4 0 004-4V3l4 4-4 4zm6 0v-2a4 4 0 014-4h2V9h-2a4 4 0 01-4-4V3l-4 4 4 4z" /></svg> },
 ];
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, settings, onSettingsChange, onClose, token, onLogout, userId }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('geral');
+const creatorNavItem: { id: Tab; label: string; icon: React.ReactNode } = { id: 'gerenciamento', label: 'Gerenciamento', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> };
+
+
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, settings, onSettingsChange, onClose, token, onLogout, userId, initialTab = 'geral' }) => {
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [userRole, setUserRole] = useState<UserRole>('Standard');
 
-  useEffect(() => setLocalSettings(settings), [settings]);
+  useEffect(() => {
+    setLocalSettings(settings);
+    db.getUserProfile(userId).then(profile => {
+      if (profile) setUserRole(profile.role);
+    });
+  }, [settings, userId]);
+  
+  useEffect(() => {
+    if (isVisible) {
+      setActiveTab(initialTab);
+    }
+  }, [isVisible, initialTab]);
   
   const handleSave = () => {
     setSaveStatus('saving');
@@ -75,9 +99,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, setting
       case 'cérebro': return <BrainSettings settings={localSettings} setSettings={setLocalSettings} />;
       case 'integrações': return <IntegrationsSettings settings={localSettings} setSettings={setLocalSettings} />;
       case 'memória': return <MemorySettings userId={userId} token={token} onLogout={onLogout} />;
+      case 'arquitetura': return <CognitiveStatus userId={userId} />;
+      case 'monitor': return <ReflectionHistory settings={localSettings} userId={userId} />;
+      case 'gerenciamento': return userRole === 'Creator' ? <CreatorPanel settings={localSettings} setSettings={setLocalSettings} userId={userId} /> : null;
       default: return null;
     }
   };
+
+  const navItems = userRole === 'Creator' ? [...baseNavItems, creatorNavItem] : baseNavItems;
 
   return (
     <AnimatePresence>
@@ -131,7 +160,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, setting
               <main className="flex-grow p-6 overflow-y-auto">
                 <AnimatePresence mode="wait">
                     <motion.div key={activeTab} variants={contentVariants} initial="hidden" animate="visible" exit="hidden">
-                        {renderTabContent()}
+                         <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400">Carregando painel...</div>}>
+                            {renderTabContent()}
+                        </Suspense>
                     </motion.div>
                 </AnimatePresence>
               </main>

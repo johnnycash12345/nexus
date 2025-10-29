@@ -3,6 +3,8 @@ import { generateGeminiResponse } from './geminiService';
 import { Type } from '@google/genai';
 import { ChatMessage, GenerateResponseFn, AppSettings } from '@/types';
 import { systemMonitor } from './systemMonitor';
+import { adaptiveMemory } from './adaptiveMemory';
+import { neuralMemory } from './neuralMemory';
 
 const reflectionSchema = {
     type: Type.OBJECT,
@@ -36,6 +38,15 @@ class ReflectionEngine {
         console.info('[ReflectionEngine] Starting background reflection cycle...');
 
         try {
+            // Run daily maintenance
+            console.info('[ReflectionEngine] Running daily memory maintenance...');
+            await Promise.all([
+                adaptiveMemory.decayUnusedConcepts(userId),
+                neuralMemory.decayAndConsolidateSynapses(userId)
+            ]).catch(err => {
+                console.warn('[ReflectionEngine] Daily maintenance failed:', err);
+            });
+
             const history = await db.getChatHistory(userId, 30);
             if (history.length < 5) {
                 console.info('[ReflectionEngine] Not enough conversation history to reflect.');

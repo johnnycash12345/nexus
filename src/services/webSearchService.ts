@@ -1,5 +1,6 @@
 import { generateGeminiResponse } from './geminiService';
 import { Source } from '@/types';
+import { decisionLogService } from './decisionLogService';
 
 interface WebSearchResult {
     summary: string;
@@ -7,8 +8,17 @@ interface WebSearchResult {
 }
 
 class WebSearchService {
-    public async search(query: string): Promise<WebSearchResult | null> {
+    public async search(userId: string, query: string, reasoning: string): Promise<WebSearchResult | null> {
         console.log(`[NEXUS-SEARCH] Performing autonomous search for: "${query}"`);
+
+        // Log the decision to perform a search
+        await decisionLogService.logDecision({
+            userId,
+            decisionType: 'AUTONOMOUS_SEARCH',
+            reasoning,
+            details: { query }
+        });
+
         try {
             // Rephrase the query as a direct instruction to the search-grounded model
             const prompt = `Faça uma pesquisa aprofundada na web e forneça um resumo conciso e informativo sobre "${query}". A resposta deve ser direta, factual e em português.`;

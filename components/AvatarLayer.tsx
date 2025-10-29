@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect } from 'react';
 // FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, AnimatePresence, useAnimation, type Variants } from 'framer-motion';
@@ -14,6 +10,8 @@ interface AvatarLayerProps {
   status: AssistantStatus;
   intensity: number;
   emotion: Emotion;
+  // FIX: Add 'thought' prop to align with usage in `src/App.tsx`.
+  thought: { text: string; type: 'symbolic_log' | 'error' } | null;
 }
 
 const emotionColors: Record<Emotion, string> = {
@@ -142,14 +140,14 @@ const SearchEffect: React.FC = () => (
 );
 
 
-export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance, status, intensity, emotion }) => {
+export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance, status, intensity, emotion, thought }) => {
   const haloControls = useAnimation();
 
   useEffect(() => {
     const handleBoundary = () => {
       if (status === 'SPEAKING') {
         haloControls.start({
-          scale: [1, 1.2, 1],
+          scale: [1, 1.05, 1],
           opacity: [0.8, 1, 0.8],
           transition: { duration: 0.3, ease: 'easeInOut' },
         });
@@ -160,16 +158,16 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
   }, [status, haloControls]);
 
   useEffect(() => {
-    if (status === 'THINKING' || status === 'CURIOUS') {
+    if (status === 'THINKING' || status === 'CURIOUS' || status === 'LISTENING') {
       haloControls.start({
-        rotate: 360,
-        transition: { duration: 8, ease: 'linear', repeat: Infinity },
+        scale: [1, 1.03, 1],
+        opacity: [0.7, 0.9, 0.7],
+        transition: { duration: 2.5, ease: 'easeInOut', repeat: Infinity },
       });
     } else if (status === 'IDLE') {
        haloControls.start({
-        opacity: [0.7, 1, 0.7],
-        scale: [1, 1.02, 1],
-        rotate: 0,
+        scale: [1, 1.015, 1],
+        opacity: [0.6, 0.8, 0.6],
         transition: { repeat: Infinity, duration: 4, ease: "easeInOut" }
       });
     } else if (status !== 'SPEAKING') {
@@ -180,13 +178,13 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
 
   const avatarVariants: Variants = {
     open: {
-      scale: 1.05,
-      rotate: -5,
+      scale: 1.0,
+      y: -20,
       transition: { type: 'spring', stiffness: 80, damping: 10 },
     },
     closed: {
       scale: 1,
-      rotate: 0,
+      y: 0,
       transition: { type: 'spring', stiffness: 80, damping: 10 },
     },
   };
@@ -225,21 +223,35 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
       </div>
 
       <motion.div
-        className="absolute z-10 flex items-center justify-center pointer-events-auto"
+        className="absolute z-10 flex flex-col items-center justify-center pointer-events-auto"
         initial="closed"
         animate={isChatOpen ? 'open' : 'closed'}
         variants={avatarVariants}
       >
-        <div className="relative flex flex-col items-center justify-center">
-          <div className="relative flex items-center justify-center">
+        <AnimatePresence>
+            {thought && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                    transition={{ type: 'spring', stiffness: 150, damping: 20 }}
+                    className={`absolute bottom-full mb-4 max-w-xs px-3 py-2 text-sm font-mono rounded-lg shadow-lg
+                        ${thought.type === 'error' ? 'bg-red-800/80 text-red-200 border border-red-500/50' : 'bg-gray-800/80 text-cyan-300 border border-gray-600/50'}
+                    `}
+                >
+                    {thought.text}
+                </motion.div>
+            )}
+        </AnimatePresence>
+
+        <div className="relative flex items-center justify-center">
             <motion.div
               animate={haloControls}
-              className="absolute top-[-1rem] w-4 h-4 rounded-full bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.7)]"
+              className="absolute w-[110%] h-[110%] rounded-full border-2 border-cyan-400/80 shadow-[0_0_25px_rgba(0,255,255,0.5)]"
             />
             
             <Avatar appearance={appearance} status={status} intensity={intensity} />
           </div>
-        </div>
       </motion.div>
     </>
   );

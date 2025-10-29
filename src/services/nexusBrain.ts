@@ -355,7 +355,7 @@ export class NexusBrain implements INexusBrain {
     
     const system = await db.getSystemMemory(userId);
     
-// FIX: Added missing 'timestamp' property to the log object to match the Thought type.
+    // FIX: Added missing 'timestamp' property to the log object to match the Thought type.
     cognitiveLogger.logThought(userId, {
         timestamp: Date.now(),
         category: 'decision-making',

@@ -1,5 +1,3 @@
-
-
 import { AssistantStatus, ChatMessage, AppSettings, UserProfile, Emotion, EmotionState, VisualState, LearningContext, SystemMemory, Concept, AddMessageFn } from '../types';
 import { db, cognitiveLogger } from './indexedDBService';
 import { LlmCognitiveResponse } from '../types';

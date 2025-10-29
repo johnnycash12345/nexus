@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, AnimatePresence, type Variants } from 'framer-motion';

@@ -1,7 +1,3 @@
-
-
-
-
 import React from 'react';
 // FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, type Variants } from 'framer-motion';

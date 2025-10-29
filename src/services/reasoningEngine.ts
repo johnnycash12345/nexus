@@ -40,7 +40,7 @@ class ReasoningEngine {
     return null;
   }
 
-  private async performIntrospection(generateResponse: GenerateResponseFn, userId: string): Promise<string | null> {
+  public async performIntrospection(generateResponse: GenerateResponseFn, userId: string): Promise<string | null> {
     const diaryEntries = Object.values(await db.getDiary(userId)).slice(-7);
     const recentConcepts = (await db.getAllConcepts(userId)).sort((a, b) => b.updatedAt - a.updatedAt);
 
@@ -103,6 +103,34 @@ class ReasoningEngine {
         console.error('[NEXUS-REASONING] Associative reasoning LLM call failed.', e);
     }
     return null;
+  }
+
+  public async generateResearchTopic(userId: string, generateResponse: GenerateResponseFn): Promise<string | null> {
+    const activeProject = await db.getActiveProject(userId);
+    if (activeProject) {
+        return `How to advance the project: "${activeProject.goal}"`;
+    }
+
+    const allConcepts = await db.getAllConcepts(userId);
+    const highConfidenceConcepts = allConcepts
+        .filter(c => c.confidence > 0.6)
+        .sort(() => 0.5 - Math.random()) // Randomize to get different combinations
+        .slice(0, 3);
+    
+    if (highConfidenceConcepts.length < 2) {
+        return "latest advancements in artificial intelligence"; // A generic fallback
+    }
+
+    const conceptNames = highConfidenceConcepts.map(c => c.name).join(', ');
+    const prompt = `Based on the following user interests (concepts): ${conceptNames}, generate a single, specific, and interesting research topic or question for an AI to learn about. The topic should be something that might lead to new insights. Return only the topic string.`;
+
+    try {
+        const response = await generateResponse(prompt, [], { useThinking: true, forcePlainText: true });
+        return response.text?.trim() || null;
+    } catch(e) {
+        console.error('[ReasoningEngine] Failed to generate research topic:', e);
+        return null;
+    }
   }
 }
 

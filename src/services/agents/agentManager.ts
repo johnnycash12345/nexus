@@ -5,6 +5,7 @@ import { CodeAgent } from './codeAgent';
 import * as memoryRetriever from '../cognitiveModules/memoryRetriever';
 import * as contextBuilder from '../cognitiveModules/contextBuilder';
 import { db } from '../indexedDBService';
+import { cognitiveMonitor } from '../cognitiveMonitor';
 
 export class AgentManager {
     private researchAgent: ResearchAgent;
@@ -20,11 +21,16 @@ export class AgentManager {
     async delegateTask(frame: CognitiveFrame): Promise<Omit<ChatMessage, 'userId' | 'timestamp'> | null> {
         const { intent, userInput, userContext } = frame;
 
-        // Retrieve memories needed for context building
-        const { concepts, reflections } = await memoryRetriever.retrieveRelevantMemories(userInput, intent, userContext);
+        // Retrieve memories needed for context building, now including reasoning depth
+        const { concepts, reflections, reasoningDepth } = await memoryRetriever.retrieveRelevantMemories(userInput, intent, userContext);
         frame.retrievedConcepts = concepts;
         frame.retrievedReflections = reflections;
         
+        // Log the reasoning depth
+        if (reasoningDepth > 0) {
+            cognitiveMonitor.logThought(`Utilizei ${reasoningDepth} saltos de sinapse para contextualizar a resposta.`);
+        }
+
         // Let specific agents handle their tasks
         if (intent === 'command_news') {
             return this.researchAgent.handleNewsRequest(userInput);
