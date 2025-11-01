@@ -12,16 +12,45 @@ interface TodoListProps {
 }
 
 // --- Variantes de Animação ---
-// (Sem alterações aqui)
-const backdropVariants: Variants = { /* ... */ };
-const panelVariants: Variants = { /* ... */ };
-const listVariants: Variants = { /* ... */ };
-const itemVariants: Variants = { /* ... */ };
-const checkVariants: Variants = { /* ... */ };
+const backdropVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+};
+
+const panelVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.9, y: 50 },
+  visible: { 
+    opacity: 1, 
+    scale: 1, 
+    y: 0,
+    transition: { type: 'spring', stiffness: 120, damping: 15 }
+  },
+};
+
+const listVariants: Variants = {
+  hidden: { transition: { staggerChildren: 0.05, staggerDirection: -1 } },
+  visible: { transition: { staggerChildren: 0.07 } },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: { opacity: 1, x: 0 },
+};
+
+const checkVariants: Variants = {
+  unchecked: { pathLength: 0 },
+  checked: { pathLength: 1 },
+};
 
 // --- Função Utilitária de Ordenação ---
-// (Sem alterações aqui)
-const sortTasks = (tasks: Task[]): Task[] => { /* ... */ };
+const sortTasks = (tasks: Task[]): Task[] => {
+  return tasks.sort((a, b) => {
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+    return b.createdAt - a.createdAt;
+  });
+};
 
 // --- Componente Filho: TaskItem (Memoizado) ---
 
@@ -33,35 +62,23 @@ interface TaskItemProps {
 
 const TaskItem = memo(({ task, onToggle, onDelete }: TaskItemProps) => {
   const [isUpdating, setIsUpdating] = useState(false);
-  
-  // [CORREÇÃO] Adiciona um ref para rastrear a montagem deste item específico
   const isMountedRef = useRef(true);
 
   useEffect(() => {
     isMountedRef.current = true;
-    // Função de limpeza que é chamada quando o TaskItem é desmontado
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []); // Array vazio, roda apenas ao montar e desmontar
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const handleToggle = async () => {
     setIsUpdating(true);
     await onToggle(task);
-    // [CORREÇÃO] Verifica se o item ainda está montado antes de atualizar o estado
-    if (isMountedRef.current) {
-      setIsUpdating(false);
-    }
+    if (isMountedRef.current) setIsUpdating(false);
   };
 
   const handleDelete = async () => {
     setIsUpdating(true);
     await onDelete(task.id!);
-    // [CORREÇÃO] Verifica se o item ainda está montado (embora seja raro,
-    // se o onDelete falhar, precisamos resetar o estado)
-    if (isMountedRef.current) {
-      setIsUpdating(false);
-    }
+    if (isMountedRef.current) setIsUpdating(false);
   };
 
   return (
@@ -112,7 +129,6 @@ export const TodoList = ({ onClose, isVisible, userId }: TodoListProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // [CORREÇÃO] Adiciona um ref para rastrear a montagem do modal
   const isMountedRef = useRef(false);
 
   // Carregamento inicial
@@ -120,47 +136,30 @@ export const TodoList = ({ onClose, isVisible, userId }: TodoListProps) => {
     setIsLoading(true);
     try {
       const allTasks = await db.getAllTasks(userId);
-      // [CORREÇÃO] Verifica se o componente ainda está montado
-      if (isMountedRef.current) {
-        setTasks(sortTasks(allTasks));
-      }
+      if (isMountedRef.current) setTasks(sortTasks(allTasks));
     } catch (error) {
       console.error("Failed to load tasks:", error);
-      if (isMountedRef.current) {
-        alert("Erro ao carregar tarefas.");
-      }
+      if (isMountedRef.current) alert("Erro ao carregar tarefas.");
     } finally {
-      // [CORREÇÃO] Verifica se o componente ainda está montado
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
+      if (isMountedRef.current) setIsLoading(false);
     }
   }, [userId]);
 
   useEffect(() => {
     if (isVisible) {
-      // [CORREÇÃO] Define como montado quando fica visível
       isMountedRef.current = true;
       loadTasks();
       setTimeout(() => inputRef.current?.focus(), 300);
     }
-    
-    // [CORREÇÃO] Função de limpeza que roda quando `isVisible` muda para `false`
-    return () => {
-      isMountedRef.current = false;
-    };
+    return () => { isMountedRef.current = false; };
   }, [isVisible, loadTasks]);
 
   // Fechar com "Escape"
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
+      if (event.key === 'Escape') onClose();
     };
-    if (isVisible) {
-      window.addEventListener('keydown', handleEsc);
-    }
+    if (isVisible) window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
   }, [isVisible, onClose]);
 
@@ -173,22 +172,16 @@ export const TodoList = ({ onClose, isVisible, userId }: TodoListProps) => {
 
     setIsSubmitting(true);
     try {
-      const newTask = await db.addTask(userId, { text });
-      // [CORREÇÃO] Verifica se o componente ainda está montado
+      const newTaskWithId = await db.addTask(userId, { text });
       if (isMountedRef.current) {
-        setTasks(prevTasks => sortTasks([newTask, ...prevTasks]));
+        setTasks(prevTasks => sortTasks([newTaskWithId, ...prevTasks]));
         setNewTaskText('');
       }
     } catch (error) {
       console.error("Failed to add task:", error);
-      if (isMountedRef.current) {
-        alert("Erro ao adicionar tarefa.");
-      }
+      if (isMountedRef.current) alert("Erro ao adicionar tarefa.");
     } finally {
-      // [CORREÇÃO] Verifica se o componente ainda está montado
-      if (isMountedRef.current) {
-        setIsSubmitting(false);
-      }
+      if (isMountedRef.current) setIsSubmitting(false);
     }
   }, [newTaskText, userId]);
 
@@ -197,15 +190,12 @@ export const TodoList = ({ onClose, isVisible, userId }: TodoListProps) => {
     const updatedTask = { ...task, completed: !task.completed };
     try {
       await db.updateTask(userId, updatedTask);
-      // [CORREÇÃO] Verifica se o componente ainda está montado
       if (isMountedRef.current) {
         setTasks(prevTasks => sortTasks(prevTasks.map(t => t.id === task.id ? updatedTask : t)));
       }
     } catch (error) {
       console.error("Failed to toggle task:", error);
-      if (isMountedRef.current) {
-        alert("Erro ao atualizar tarefa.");
-      }
+      if (isMountedRef.current) alert("Erro ao atualizar tarefa.");
     }
   }, [userId]);
 
@@ -213,43 +203,81 @@ export const TodoList = ({ onClose, isVisible, userId }: TodoListProps) => {
     if (!id) return;
     try {
       await db.deleteTask(userId, id);
-      // [CORREÇÃO] Verifica se o componente ainda está montado
       if (isMountedRef.current) {
         setTasks(prevTasks => prevTasks.filter(t => t.id !== id));
       }
     } catch (error) {
       console.error("Failed to delete task:", error);
-      if (isMountedRef.current) {
-        alert("Erro ao excluir tarefa.");
-      }
+      if (isMountedRef.current) alert("Erro ao excluir tarefa.");
     }
   }, [userId]);
 
-  // ... (Restante do código, renderContent, return, e ícones permanecem os mesmos) ...
-  // ... (Omitido por brevidade, pois não há alterações) ...
-
-  const renderContent = () => { /* ... */ };
+  const renderContent = () => {
+    if (isLoading) return <div className="flex items-center justify-center h-full text-gray-400">Carregando tarefas...</div>;
+    if (tasks.length === 0) return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-500">
+        <IconEmpty />
+        <p className="font-semibold">Nenhuma tarefa.</p>
+        <p className="text-sm">Adicione uma tarefa abaixo para começar.</p>
+      </div>
+    );
+    return (
+      <motion.ul variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
+        <AnimatePresence>
+          {tasks.map(task => (
+            <TaskItem key={task.id} task={task} onToggle={handleToggleTask} onDelete={handleDeleteTask} />
+          ))}
+        </AnimatePresence>
+      </motion.ul>
+    );
+  };
 
   return (
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          /* ... */
+          className="fixed inset-0 bg-black/60 z-30 flex items-center justify-center p-4 backdrop-blur-sm"
+          onClick={onClose}
+          variants={backdropVariants}
+          initial="hidden"
+          animate="visible"
+          exit="hidden"
         >
           <motion.div
-            /* ... */
+            className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-md flex flex-col h-[70vh] max-h-[500px]"
+            onClick={e => e.stopPropagation()}
+            variants={panelVariants}
           >
-            <header /* ... */ >
-              {/* ... */}
+            <header className="flex-shrink-0 p-4 border-b border-gray-700/80 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <IconClipboardList />
+                <h2 className="text-xl font-bold text-white">Lista de Tarefas</h2>
+              </div>
+              <button onClick={onClose} className="text-gray-400 hover:text-white"><IconClose /></button>
             </header>
 
             <main className="flex-grow p-4 overflow-y-auto">
               {renderContent()}
             </main>
 
-            <footer /* ... */ >
-              <form /* ... */ >
-                {/* ... */}
+            <footer className="flex-shrink-0 p-3 border-t border-gray-700/80">
+              <form onSubmit={handleAddTask} className="flex items-center gap-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                  placeholder="Adicionar nova tarefa..."
+                  disabled={isSubmitting}
+                  className="flex-grow bg-gray-700 rounded-full px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !newTaskText.trim()}
+                  className="w-10 h-10 rounded-full flex-shrink-0 bg-cyan-600 hover:bg-cyan-500 flex items-center justify-center disabled:bg-gray-600 disabled:cursor-not-allowed"
+                >
+                  <IconPlus />
+                </button>
               </form>
             </footer>
           </motion.div>
@@ -264,4 +292,4 @@ const IconClipboardList = () => <svg xmlns="http://www.w3.org/2000/svg" classNam
 const IconClose = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
 const IconEmpty = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>;
 const IconDelete = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
-const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110 2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>;><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110 2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>;
+const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110 2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>;

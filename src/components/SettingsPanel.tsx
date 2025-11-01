@@ -7,6 +7,7 @@ import { BrainSettings } from './settings/BrainSettings';
 import { IntegrationsSettings } from './settings/IntegrationsSettings';
 import { MemorySettings } from './settings/MemorySettings';
 
+// FIX: Corrected lazy import to properly handle the named export of CreatorPanel.
 const CreatorPanel = lazy(() => import('./settings/CreatorPanel').then(m => ({ default: m.CreatorPanel })));
 const CognitiveStatus = lazy(() => import('@/components/CognitiveStatus').then(m => ({ default: m.CognitiveStatus })));
 const ReflectionHistory = lazy(() => import('@/components/ReflectionHistory').then(m => ({ default: m.ReflectionHistory })));
@@ -20,9 +21,11 @@ interface SettingsPanelProps {
   token: string | null;
   onLogout: () => void;
   userId: string;
+  // FIX: Add 'initialTab' prop to allow setting the initial tab from App.tsx.
   initialTab?: Tab;
 }
 
+// FIX: Export the Tab type so it can be used in other components like App.tsx
 export type Tab = 'geral' | 'cérebro' | 'integrações' | 'memória' | 'gerenciamento' | 'arquitetura' | 'monitor';
 
 const backdropVariants: Variants = {
@@ -98,7 +101,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ isVisible, setting
       case 'cérebro': return <BrainSettings settings={localSettings} setSettings={setLocalSettings} />;
       case 'integrações': return <IntegrationsSettings settings={localSettings} setSettings={setLocalSettings} />;
       case 'memória': return <MemorySettings userId={userId} token={token} onLogout={onLogout} />;
+      // FIX: The CognitiveStatus component is now rendered as a tab content, so it no longer needs panel-specific props like 'onClose' or 'isVisible'.
       case 'arquitetura': return <CognitiveStatus userId={userId} />;
+      // FIX: The ReflectionHistory component is now rendered as a tab content, so it no longer needs panel-specific props like 'onClose' or 'isVisible'.
       case 'monitor': return <ReflectionHistory settings={localSettings} userId={userId} />;
       case 'gerenciamento': return userRole === 'Creator' ? <CreatorPanel settings={localSettings} setSettings={setLocalSettings} userId={userId} /> : null;
       default: return null;

@@ -1,5 +1,5 @@
 import { db } from './indexedDBService';
-import { DecisionLogEntry, DecisionLogType } from '@/types';
+import { DecisionLogEntry, DecisionLogType } from '../types';
 
 class DecisionLogService {
     /**
@@ -14,7 +14,7 @@ class DecisionLogService {
             };
             await db.addDecisionLog(fullEntry);
             
-            // Optional: Dispatch an event to notify UI components of new logs
+            // Dispatch an event to notify UI components of new logs
             window.dispatchEvent(new CustomEvent('nexus-decision-log-updated'));
 
         } catch (error) {

@@ -1,124 +1,257 @@
-/* --- Body Motion --- */
-@keyframes motion-idle-keyframes { 0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);} }
-.motion-idle { animation: motion-idle-keyframes 4s ease-in-out infinite; }
+/* --- Variáveis Globais de Animação (Para Consistência) --- */
+:root {
+    /* Tempos padrão de animação */
+    --motion-duration-idle: 4s;
+    --motion-duration-slow: 5s;
+    --motion-duration-medium: 2.5s;
+    --motion-duration-fast: 0.5s;
+    --motion-timing-loop: ease-in-out infinite;
 
-@keyframes motion-listening-keyframes { 0%,100%{transform:scale(1);}50%{transform:scale(1.02);} }
-.motion-listening { animation: motion-listening-keyframes 2.5s ease-in-out infinite; }
+    /* Cores padrão para antenas/luzes (Tailwind Palette) */
+    --color-cyan: #22d3ee;
+    --color-blue: #38bdf8;
+    --color-yellow: #facc15;
+    --color-green: #4ade80;
+    --color-red: #f87171;
+    --color-slate: #94a3b8;
+}
 
-@keyframes motion-curious-keyframes { 0%,100%{transform:rotate(0);}50%{transform:rotate(8deg);} }
-.motion-curious { animation: motion-curious-keyframes 3s ease-in-out infinite; }
+/* --- 1. Movimentos do Corpo (Body Motion) --- */
 
-@keyframes motion-sleepy-keyframes { 0%,100%{transform:translateY(0);}50%{transform:translateY(4px);} }
-.motion-sleepy { animation: motion-sleepy-keyframes 5s ease-in-out infinite; }
+/* Movimento Padrão (Flutuar suavemente) */
+@keyframes motion-idle-keyframes { 
+    0%,100%{transform:translateY(0);}
+    50%{transform:translateY(-6px);} 
+}
+.motion-idle { 
+    animation: motion-idle-keyframes var(--motion-duration-idle) var(--motion-timing-loop); 
+}
 
-@keyframes motion-surprised-keyframes { 0%{transform:scale(0.8);}60%{transform:scale(1.2);}100%{transform:scale(1);} }
-.motion-surprised { animation: motion-surprised-keyframes 0.6s ease-out; }
+/* Estado de Escuta (Respiração sutil de escala) */
+@keyframes motion-listening-keyframes { 
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.015);} /* Reduzido para ser mais sutil */
+}
+.motion-listening { 
+    animation: motion-listening-keyframes var(--motion-duration-medium) var(--motion-timing-loop); 
+}
 
-@keyframes motion-success-keyframes { 0%,100%{transform:translateY(0);}50%{transform:translateY(-8px) scale(1.05);} }
-.motion-success { animation: motion-success-keyframes 0.8s ease-in-out; }
+/* Curiosidade (Inclinação da cabeça mais pronunciada) */
+@keyframes motion-curious-keyframes { 
+    0%,100%{transform:rotate(0);}
+    50%{transform:rotate(10deg);} /* Aumentado para impacto */
+}
+.motion-curious { 
+    animation: motion-curious-keyframes 2s var(--motion-timing-loop); 
+}
 
+/* Sonolento (Movimento lento e descendente) */
+@keyframes motion-sleepy-keyframes { 
+    0%,100%{transform:translateY(0) scale(1);}
+    50%{transform:translateY(4px) scale(0.98);} /* Adicionando compressão sutil */
+}
+.motion-sleepy { 
+    animation: motion-sleepy-keyframes var(--motion-duration-slow) var(--motion-timing-loop); 
+}
+
+/* Surpresa (Rápida expansão e retorno) */
+@keyframes motion-surprised-keyframes { 
+    0%{transform:scale(0.8);}
+    60%{transform:scale(1.15);} /* Ajuste para menos overshoot */
+    100%{transform:scale(1);} 
+}
+.motion-surprised { 
+    animation: motion-surprised-keyframes var(--motion-duration-fast) cubic-bezier(0.175, 0.885, 0.32, 1.27) both; /* Usando bounce timing */
+}
+
+/* Sucesso/Conclusão (Pequeno "salto" de satisfação) */
+@keyframes motion-success-keyframes { 
+    0%{transform:translateY(0) scale(1);}
+    50%{transform:translateY(-12px) scale(1.08);} /* Salto maior */
+    100%{transform:translateY(0) scale(1);} 
+}
+.motion-success { 
+    animation: motion-success-keyframes 0.7s ease-in-out; /* Tempo ligeiramente maior para o salto */
+}
+
+/* Erro/Nervoso (Shake horizontal rápido) */
 @keyframes motion-error-keyframes {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-6px) rotate(-2deg); }
-  40%, 80% { transform: translateX(6px) rotate(2deg); }
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-8px) rotate(-3deg); } /* Aumento da intensidade */
+    40%, 80% { transform: translateX(8px) rotate(3deg); }
 }
-.motion-error { animation: motion-error-keyframes 0.5s ease-in-out; }
-
-
-/* --- Thinking / Speaking Indicators --- */
-@keyframes think-pulse-keyframes { 0%,100%{r:6;opacity:.8;}50%{r:10;opacity:.4;} }
-.think-pulse { animation: think-pulse-keyframes 1.2s ease-in-out infinite; }
-
-@keyframes speak-wave-path1 {
-  0%, 100% { d: "M -15 0 Q -7.5 -5 0 0 T 15 0"; }
-  50% { d: "M -15 0 Q -7.5 5 0 0 T 15 0"; }
+.motion-error { 
+    animation: motion-error-keyframes var(--motion-duration-fast) ease-in-out; /* Velocidade mantida */
 }
-@keyframes speak-wave-path2 {
-  0%, 100% { d: "M -15 0 Q -7.5 5 0 0 T 15 0"; }
-  50% { d: "M -15 0 Q -7.5 -5 0 0 T 15 0"; }
+
+
+/* --- 2. Indicadores de Estado (Thinking / Speaking) --- */
+
+/* Pensando: Pulso central (Melhorado para ser mais suave) */
+@keyframes think-pulse-keyframes { 
+    0%,100%{r:6;opacity:.8;}
+    50%{r:12;opacity:.2;} /* Pulso mais transparente e maior */
 }
-.speak-wave .path1 { animation: speak-wave-path1 0.4s ease-in-out infinite; }
-.speak-wave .path2 { animation: speak-wave-path2 0.45s ease-in-out infinite; }
+.think-pulse { 
+    animation: think-pulse-keyframes 1.5s var(--motion-timing-loop); 
+}
 
-
-@keyframes motion-speaking-keyframes { 0%,100%{filter:drop-shadow(0 0 5px #22d3ee);}50%{filter:drop-shadow(0 0 20px #22d3ee);} }
-.motion-speaking { animation: motion-speaking-keyframes 1s ease-in-out infinite; }
-
-
-/* --- Eyes --- */
-@keyframes blink-keyframes { 0%,90%,100%{transform:scaleY(1);}95%{transform:scaleY(.1);} }
-.eye-reflect { animation: blink-keyframes 6s ease-in-out infinite; transform-origin: center; }
-
-@keyframes listen-pulse-keyframes { 0%,100%{r:5;opacity:1;}50%{r:8;opacity:.5;} }
-.listen-pulse { animation: listen-pulse-keyframes 1.5s ease-in-out infinite; }
-
-/* --- New Thinking Waves Animation --- */
+/* Pensando: Ondas de expansão */
 @keyframes thinking-wave-keyframes {
-  0% {
-    transform: scale(0.8);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(2.5);
-    opacity: 0;
-  }
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(3); opacity: 0; } /* Escala maior */
 }
 
 .thinking-wave {
-  transform-origin: center;
-  animation: thinking-wave-keyframes 2.5s ease-out infinite;
+    transform-origin: center;
+    animation: thinking-wave-keyframes 2s ease-out infinite; /* Tempo reduzido para ser mais ativo */
 }
 
-.wave-2 {
-  animation-delay: 0.8s;
+/* Adicionando variações baseadas em variáveis */
+.wave-2 { animation-delay: 0.66s; }
+.wave-3 { animation-delay: 1.32s; }
+
+
+/* Falando: Ondas de caminho SVG (Consistente e Rítmico) */
+@keyframes speak-wave-path1 {
+    0%, 100% { d: "M -15 0 Q -7.5 -5 0 0 T 15 0"; }
+    50% { d: "M -15 0 Q -7.5 5 0 0 T 15 0"; }
+}
+@keyframes speak-wave-path2 {
+    0%, 100% { d: "M -15 0 Q -7.5 5 0 0 T 15 0"; }
+    50% { d: "M -15 0 Q -7.5 -5 0 0 T 15 0"; }
+}
+/* Os tempos são ajustados para simular a fala */
+.speak-wave .path1 { animation: speak-wave-path1 0.35s ease-in-out infinite; } 
+.speak-wave .path2 { animation: speak-wave-path2 0.4s ease-in-out infinite; }
+
+
+/* Falando: Efeito de Brilho no Corpo/Contorno */
+@keyframes motion-speaking-keyframes { 
+    0%,100%{filter:drop-shadow(0 0 5px var(--color-cyan));}
+    50%{filter:drop-shadow(0 0 25px var(--color-cyan));} /* Brilho mais intenso */
+}
+.motion-speaking { 
+    animation: motion-speaking-keyframes 0.8s var(--motion-timing-loop); /* Mais rápido para maior energia */
 }
 
-.wave-3 {
-  animation-delay: 1.6s;
+
+/* --- 3. Olhos (Eyes) --- */
+
+/* Piscar (Mais rápido e menos frequente) */
+@keyframes blink-keyframes { 
+    0%,93%,100%{transform:scaleY(1);}
+    96%{transform:scaleY(.05);} /* Piscar mais fechado */
+}
+.eye-reflect { 
+    animation: blink-keyframes 8s ease-in-out infinite; /* Aumentado o ciclo para menos distração */
+    transform-origin: center; 
+}
+
+/* Pulso de Escuta nos olhos (Mais sutil) */
+@keyframes listen-pulse-keyframes { 
+    0%,100%{r:5;opacity:1;}
+    50%{r:6;opacity:.6;} /* Pulso menor */
+}
+.listen-pulse { 
+    animation: listen-pulse-keyframes 1.8s var(--motion-timing-loop); 
 }
 
 
-/* --- Antenna --- */
+/* --- 4. Antena (Antenna) --- */
+
+/* Keyframes de Pulso Genérico (Mantido, mas usando variáveis) */
 @keyframes antenna-pulse-keyframes { 
-  0%,100%{fill:var(--c1);filter:drop-shadow(0 0 2px var(--c1));}
-  50%{fill:var(--c2);filter:drop-shadow(0 0 4px var(--c2));} 
+    0%,100%{fill:var(--c1);filter:drop-shadow(0 0 2px var(--c1));}
+    50%{fill:var(--c2);filter:drop-shadow(0 0 5px var(--c2));} /* Brilho mais forte */
 }
-.antenna-idle { --c1:#7dd3fc;--c2:#bae6fd; animation: antenna-pulse-keyframes 3s ease-in-out infinite; }
-.antenna-listening { --c1:#38bdf8;--c2:#7dd3fc; animation: antenna-pulse-keyframes 1.5s ease-in-out infinite; }
-.antenna-speaking { --c1:#22d3ee;--c2:#67e8f9; animation: antenna-pulse-keyframes .5s ease-in-out infinite; }
-.antenna-thinking { --c1:#facc15;--c2:#fde68a; animation: antenna-pulse-keyframes 1.2s ease-in-out infinite; }
-.antenna-success { --c1:#4ade80;--c2:#bbf7d0; animation: antenna-pulse-keyframes .8s ease-in-out infinite; }
-.antenna-error { --c1:#f87171;--c2:#fca5a5; animation: antenna-pulse-keyframes .4s ease-in-out infinite; }
-.antenna-curious { --c1:#facc15;--c2:#fde68a; animation: antenna-pulse-keyframes 2s ease-in-out infinite; }
-.antenna-sleepy { --c1:#94a3b8;--c2:#cbd5e1; animation: antenna-pulse-keyframes 5s ease-in-out infinite; }
-.antenna-surprised { --c1:#38bdf8;--c2:#7dd3fc; animation: antenna-pulse-keyframes .6s ease-in-out infinite; }
 
-/* --- Cognitive Effects Animations --- */
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* Consolidação e Uso de Variáveis para Cores/Tempo */
+.antenna-base {
+    animation: antenna-pulse-keyframes 3s var(--motion-timing-loop);
+}
+
+.antenna-idle { 
+    --c1:var(--color-blue);
+    --c2:#bae6fd;
+    animation-duration: 3s; 
+}
+.antenna-listening { 
+    --c1:var(--color-blue);
+    --c2:#7dd3fc;
+    animation-duration: 1.5s; 
+}
+.antenna-speaking { 
+    --c1:var(--color-cyan);
+    --c2:#67e8f9; 
+    animation-duration: 0.4s; /* Muito rápido para simular voz */
+}
+.antenna-thinking { 
+    --c1:var(--color-yellow);
+    --c2:#fde68a; 
+    animation-duration: 1.2s; 
+}
+.antenna-success { 
+    --c1:var(--color-green);
+    --c2:#bbf7d0; 
+    animation-duration: 0.8s; 
+}
+.antenna-error { 
+    --c1:var(--color-red);
+    --c2:#fca5a5; 
+    animation-duration: 0.4s; 
+}
+.antenna-curious { 
+    --c1:var(--color-yellow);
+    --c2:#fde68a; 
+    animation-duration: 2s; 
+}
+.antenna-sleepy { 
+    --c1:var(--color-slate);
+    --c2:#cbd5e1; 
+    animation-duration: 5s; 
+}
+.antenna-surprised { 
+    --c1:var(--color-blue);
+    --c2:#7dd3fc; 
+    animation-duration: 0.6s; 
+}
+
+/* Nota: Para aplicar as classes, você usaria `.antenna-base.antenna-thinking` ou apenas a classe específica.
+   Simplifiquei a definição de cores diretamente nas classes específicas. */
+
+
+/* --- 5. Efeitos Cognitivos (Melhorias de Leitura) --- */
+
+/* Rotação Lenta */
+@keyframes spin-slow-keyframes {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 .animate-spin-slow {
-  animation: spin-slow 10s linear infinite;
+    animation: spin-slow-keyframes 15s linear infinite; /* Rotação ainda mais lenta para um efeito de fundo */
 }
-.animation-delay-[-5s] {
-    animation-delay: -5s;
+/* Renomeada para melhor clareza */
+.animation-delay-half-cycle {
+    animation-delay: calc(15s / -2); /* Uso de calc() para reusabilidade com o tempo de rotação */
 }
 
-@keyframes float-slow {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-  100% { transform: translateY(0px); }
+/* Flutuação Lenta */
+@keyframes float-slow-keyframes {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-12px); } /* Flutuação mais alta */
+    100% { transform: translateY(0px); }
 }
 .animate-float-slow {
-  animation: float-slow 4s ease-in-out infinite;
+    animation: float-slow-keyframes 4.5s ease-in-out infinite;
 }
 
-@keyframes scan-glow {
-  0% { transform: scale(1); opacity: 0.2; }
-  50% { transform: scale(1.3); opacity: 0.8; }
-  100% { transform: scale(1); opacity: 0.2; }
+/* Brilho de Scan (Melhorado para ser mais dramático) */
+@keyframes scan-glow-keyframes {
+    0% { transform: scale(1); opacity: 0.1; }
+    50% { transform: scale(1.5); opacity: 0.9; } /* Escala e opacidade mais alta */
+    100% { transform: scale(1); opacity: 0.1; }
 }
 .animate-scan-glow {
-  animation: scan-glow 3s ease-in-out infinite;
+    animation: scan-glow-keyframes 3s ease-in-out infinite;
 }

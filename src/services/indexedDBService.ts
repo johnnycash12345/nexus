@@ -1,8 +1,8 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Emotion, Personality, Task, HierarchicalMemory, MetaReflection, EvolutionGoal, OutputEngine, EvolutionLog, IdentityManifest, IdentityOverride, Synapse, Thought, CognitiveLog, ThoughtCategory, CognitiveEvent, Project, DecisionLogEntry } from '@/types';
+import { Concept, UserProfile, AppSettings, RlhfData, ChatMessage, SystemMemory, DiaryEntry, Task, EvolutionLog, Thought, CognitiveLog, Project, DecisionLogEntry, WorldReflection, Synapse } from '../types';
 
 const DB_NAME = 'NexusDB';
-const DB_VERSION = 11; // Increment version for schema change
+const DB_VERSION = 12; // Increment version for schema change
 
 interface NexusDB extends DBSchema {
   users: {
@@ -62,10 +62,14 @@ interface NexusDB extends DBSchema {
     value: Project;
     indexes: { byUserId: string };
   };
-  // FIX: Added 'decisionLogs' store to the database schema for logging critical AI decisions.
   decisionLogs: {
     key: number;
     value: DecisionLogEntry;
+    indexes: { byUserId: string };
+  };
+  worldReflections: {
+    key: number;
+    value: WorldReflection;
     indexes: { byUserId: string };
   };
 }
@@ -93,19 +97,12 @@ class IndexedDBService {
   constructor() {
     this.database = openDB<NexusDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion, newVersion, tx) {
-        if (oldVersion < 10) {
-            console.log("Upgrading DB to v10 for Project Management...");
-            if (!db.objectStoreNames.contains('projects')) {
-                const projectStore = db.createObjectStore('projects', { keyPath: 'id', autoIncrement: true });
-                projectStore.createIndex('byUserId', 'userId');
-            }
-        }
-        // FIX: Added migration step for DB version 11 to create the 'decisionLogs' object store.
-        if (oldVersion < 11) {
-            console.log("Upgrading DB to v11 for Decision Logging...");
-            if (!db.objectStoreNames.contains('decisionLogs')) {
-                const decisionLogStore = db.createObjectStore('decisionLogs', { keyPath: 'id', autoIncrement: true });
-                decisionLogStore.createIndex('byUserId', 'userId');
+        // FIX: Add worldReflections store for DB v12.
+        if (oldVersion < 12) {
+            console.log("Upgrading DB to v12 for World Reflections...");
+            if (!db.objectStoreNames.contains('worldReflections')) {
+                const worldReflectionStore = db.createObjectStore('worldReflections', { keyPath: 'id', autoIncrement: true });
+                worldReflectionStore.createIndex('byUserId', 'userId');
             }
         }
       },
@@ -193,18 +190,6 @@ class IndexedDBService {
     const db = await this.database;
     const allLogs = await db.getAllFromIndex('evolutionLog', 'byUserId', userId);
     return allLogs.slice(-limit).reverse();
-  }
-
-  // FIX: Added methods to interact with the new 'decisionLogs' store.
-  // --- Decision Log ---
-  addDecisionLog = async (entry: Omit<DecisionLogEntry, 'id'>): Promise<void> => {
-    const db = await this.database;
-    await db.add('decisionLogs', entry as DecisionLogEntry);
-  }
-
-  getDecisionLogs = async (userId: string, limit: number = 50): Promise<DecisionLogEntry[]> => {
-    const db = await this.database;
-    return db.getAllFromIndex('decisionLogs', 'byUserId', userId).then(logs => logs.slice(-limit).reverse());
   }
 
   // --- Cognitive Transparency Logs ---
@@ -392,30 +377,15 @@ class IndexedDBService {
       await Promise.all(sourceNames.map(name => tx.store.delete([userId, name])));
       await tx.done;
   }
-
+  
   saveConceptsAndSynapses = async (userId: string, newConcepts: Concept[], newSynapses: { source: string, target: string, strength: number }[]): Promise<void> => {
     const db = await this.database;
     const tx = db.transaction(['concepts', 'systemMemory'], 'readwrite');
     const conceptStore = tx.objectStore('concepts');
     const memoryStore = tx.objectStore('systemMemory');
 
-    // Save or update new concepts
-    const conceptPromises = newConcepts.map(async c => {
-        const existing = await conceptStore.get([userId, c.name]);
-        if (existing) {
-            // Merge if exists
-            const updated = {
-                ...existing,
-                definition: existing.definition ? `${existing.definition}; ${c.definition}` : c.definition,
-                confidence: Math.min(1, existing.confidence + 0.1),
-                updatedAt: Date.now()
-            };
-            return conceptStore.put(updated);
-        }
-        return conceptStore.put(c);
-    });
+    const conceptPromises = newConcepts.map(c => conceptStore.put(c));
 
-    // Save or update synapses
     const memoryPromise = async () => {
       if (newSynapses.length > 0) {
         const memory = await memoryStore.get(userId) || this.getDefaultSystemMemory(userId);
@@ -427,7 +397,7 @@ class IndexedDBService {
             const key = `${ns.source}->${ns.target}`;
             const existing = synapseMap.get(key);
             if (existing) {
-                existing.strength = Math.min(1.0, (existing.strength * existing.usage + ns.strength) / (existing.usage + 1)); // Weighted average
+                existing.strength = Math.min(1.0, (existing.strength + ns.strength) / 2); // Average strength for reinforcement
                 existing.lastUsed = now;
                 existing.usage++;
             } else {
@@ -448,7 +418,7 @@ class IndexedDBService {
       return db.getAllFromIndex('tasks', 'byUserId', userId);
   }
 
-  addTask = async (userId: string, task: Omit<Task, 'id' | 'userId' | 'createdAt' | 'completed'>): Promise<void> => {
+  addTask = async (userId: string, task: Omit<Task, 'id' | 'userId' | 'createdAt' | 'completed'>): Promise<Task> => {
       const db = await this.database;
       const newTask: Omit<Task, 'id'> = {
           ...task,
@@ -456,7 +426,8 @@ class IndexedDBService {
           createdAt: Date.now(),
           completed: false
       };
-      await db.add('tasks', newTask as Task);
+      const id = await db.add('tasks', newTask as Task);
+      return { ...newTask, id: id as number };
   }
 
   updateTask = async (userId: string, task: Task): Promise<void> => {
@@ -499,7 +470,7 @@ class IndexedDBService {
 
     resetNexusMemory = async (userId: string): Promise<void> => {
         const db = await this.database;
-        const stores: (keyof NexusDB)[] = ['concepts', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs', 'projects', 'decisionLogs'];
+        const stores: (keyof NexusDB)[] = ['concepts', 'settings', 'rlhfFeedback', 'chatHistory', 'systemMemory', 'diary', 'tasks', 'evolutionLog', 'thoughtLogs', 'cognitiveLogs', 'projects', 'decisionLogs', 'worldReflections'];
         
         for (const storeName of stores) {
             const tx = db.transaction(storeName as any, 'readwrite');
@@ -563,16 +534,39 @@ class IndexedDBService {
         }));
         await this.saveSystemMemory(userId, { synapses: [...memory.synapses, ...newSynapses] });
     }
+
+  addDecisionLog = async (entry: Omit<DecisionLogEntry, 'id'>): Promise<void> => {
+    const db = await this.database;
+    await db.add('decisionLogs', entry as DecisionLogEntry);
+  }
+
+  getDecisionLogs = async (userId: string, limit: number = 50): Promise<DecisionLogEntry[]> => {
+    const db = await this.database;
+    return db.getAllFromIndex('decisionLogs', 'byUserId', userId).then(logs => logs.slice(-limit).reverse());
+  }
+  
+  // --- World Reflections ---
+  addWorldReflection = async (userId: string, reflection: Omit<WorldReflection, 'id'|'userId'>): Promise<void> => {
+    const db = await this.database;
+    await db.add('worldReflections', { ...reflection, userId });
+  }
+
+  getWorldReflections = async (userId: string, limit: number = 10): Promise<WorldReflection[]> => {
+    const db = await this.database;
+    const allReflections = await db.getAllFromIndex('worldReflections', 'byUserId', userId);
+    return allReflections.slice(-limit).reverse(); // Return most recent first
+  }
 }
 
 export const db = new IndexedDBService();
 
 export const cognitiveLogger = {
-    logThought: (userId: string, log: Omit<Thought, 'id' | 'userId' | 'thought_id'>) => {
+    logAction: (userId: string, data: Omit<CognitiveLog, 'id' | 'userId'>) => db.addCognitiveLog(userId, data),
+    logThought: (userId: string, thought: Omit<Thought, 'id' | 'userId' | 'thought_id'>) => {
         const thought_id = `thought_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        return db.addThoughtLog(userId, { ...log, thought_id });
+        db.addThoughtLog(userId, { ...thought, thought_id });
     },
-    logAction: (userId: string, log: Omit<CognitiveLog, 'id' | 'userId'>) => {
-        return db.addCognitiveLog(userId, log);
-    },
+    info: (userId: string, message: string) => console.log(`[CognitiveLogger:${userId}] ${message}`),
+    warn: (userId: string, message: string, data?: any) => console.warn(`[CognitiveLogger:${userId}] ${message}`, data),
+    error: (userId: string, message: string, error?: any) => console.error(`[CognitiveLogger:${userId}] ${message}`, error),
 };

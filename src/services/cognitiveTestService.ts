@@ -1,5 +1,5 @@
-import { db } from '@/services/indexedDBService';
-import { analyzeAndStoreConcepts } from '@/services/conceptEngine';
+import { db } from './indexedDBService';
+import { analyzeAndStoreConcepts } from './conceptEngine';
 
 interface TestResult {
     success: boolean;

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+// FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, AnimatePresence, useAnimation, type Variants } from 'framer-motion';
 import { Avatar } from './Avatar';
-import { AssistantStatus, Emotion } from '@/types';
+import { AssistantStatus, Emotion } from '../types';
 
 interface AvatarLayerProps {
   isChatOpen: boolean;
@@ -9,7 +10,9 @@ interface AvatarLayerProps {
   status: AssistantStatus;
   intensity: number;
   emotion: Emotion;
+  // FIX: Add 'thought' prop to align with usage in `src/App.tsx`.
   thought: { text: string; type: 'symbolic_log' | 'error' } | null;
+  className?: string;
 }
 
 const emotionColors: Record<Emotion, string> = {
@@ -138,7 +141,7 @@ const SearchEffect: React.FC = () => (
 );
 
 
-export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance, status, intensity, emotion, thought }) => {
+export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance, status, intensity, emotion, thought, className }) => {
   const haloControls = useAnimation();
 
   useEffect(() => {
@@ -191,40 +194,42 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
       'REWRITING_CODE': emotionColors['FOCUSED'],
       'SELF_ANALYSIS': emotionColors['FOCUSED'],
       'SEARCHING_WEB': emotionColors['CURIOUS'],
+      // FIX: Corrected typo from 'THINK' to 'THINKING'.
       'THINKING': emotionColors['CURIOUS'],
       'ROLLBACK': emotionColors['AFRAID'],
   };
 
-  const fromColor = cognitiveStateColors[status] || emotionColors[emotion] || emotionColors.CALM;
+  const haloColor = cognitiveStateColors[status] || emotionColors[emotion] || emotionColors.CALM;
 
   return (
-    <>
+    <div className={className}>
       <AnimatePresence>
         {status === 'REWRITING_CODE' && <MatrixBackground />}
       </AnimatePresence>
       
       <motion.div 
-        className={`absolute w-96 h-96 bg-gradient-radial rounded-full blur-3xl pointer-events-none to-transparent`} 
-        animate={{ 
-            '--tw-gradient-from': fromColor,
-        } as any}
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        animate={{
+          backgroundColor: haloColor,
+        }}
         transition={{ duration: 1.5, ease: "easeInOut" }}
-      />
+      >
+          <div className="absolute w-96 h-96 bg-gradient-radial from-transparent via-transparent to-gray-900 blur-xl" />
+      </motion.div>
       
-      <div className="absolute z-0 pointer-events-none flex items-center justify-center">
-        <AnimatePresence>
-            {status === 'THINKING' && <ThinkingEffect />}
-            {status === 'SELF_ANALYSIS' && <SelfAnalysisEffect />}
-            {status === 'SEARCHING_WEB' && <SearchEffect />}
-            {status === 'ROLLBACK' && <RollbackEffect />}
-        </AnimatePresence>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+          <AnimatePresence>
+              {status === 'THINKING' && <ThinkingEffect />}
+              {status === 'SELF_ANALYSIS' && <SelfAnalysisEffect />}
+              {status === 'SEARCHING_WEB' && <SearchEffect />}
+              {status === 'ROLLBACK' && <RollbackEffect />}
+          </AnimatePresence>
       </div>
 
       <motion.div
-        className="absolute z-10 flex flex-col items-center justify-center pointer-events-auto"
-        initial="closed"
-        animate={isChatOpen ? 'open' : 'closed'}
+        className="absolute inset-0 flex flex-col items-center justify-center pointer-events-auto"
         variants={avatarVariants}
+        animate={isChatOpen ? 'open' : 'closed'}
       >
         <AnimatePresence>
             {thought && (
@@ -233,24 +238,17 @@ export const AvatarLayer: React.FC<AvatarLayerProps> = ({ isChatOpen, appearance
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.9 }}
                     transition={{ type: 'spring', stiffness: 150, damping: 20 }}
-                    className={`absolute bottom-full mb-4 max-w-xs px-3 py-2 text-sm font-mono rounded-lg shadow-lg
-                        ${thought.type === 'error' ? 'bg-red-800/80 text-red-200 border border-red-500/50' : 'bg-gray-800/80 text-cyan-300 border border-gray-600/50'}
-                    `}
+                    className={`absolute bottom-full mb-4 max-w-xs px-3 py-2 text-sm font-mono rounded-lg shadow-lg ${thought.type === 'error' ? 'bg-red-800/80 text-red-200 border border-red-500/50' : 'bg-gray-800/80 text-cyan-300 border border-gray-600/50'}`}
                 >
                     {thought.text}
                 </motion.div>
             )}
         </AnimatePresence>
-
-        <div className="relative flex items-center justify-center">
-            <motion.div
-              animate={haloControls}
-              className="absolute w-[110%] h-[110%] rounded-full border-2 border-cyan-400/80 shadow-[0_0_25px_rgba(0,255,255,0.5)]"
-            />
-            
+        
+        <div className="relative">
             <Avatar appearance={appearance} status={status} intensity={intensity} />
-          </div>
+        </div>
       </motion.div>
-    </>
+    </div>
   );
 };

@@ -1,4 +1,4 @@
-import { CognitiveFrame } from '@/types';
+import { CognitiveFrame } from '../types';
 import { webSearchService } from './webSearchService';
 import { integrateWebKnowledge } from './cognitiveModules/knowledgeIntegrator';
 import { db } from './indexedDBService';
@@ -12,7 +12,7 @@ class AutonomousLearningService {
         const { learningContext } = frame.llmResponse;
         const { responseEffectiveness, inputIntent, contextTags } = learningContext;
 
-        const shouldResearch = responseEffectiveness < 0.7 || inputIntent === 'complex_reasoning' || inputIntent === 'research_query';
+        const shouldResearch = responseEffectiveness < 0.7 || inputIntent === 'complex_reasoning' || inputIntent === 'web_search';
         
         const settings = await db.getSettings(frame.userContext.userId);
         if (!shouldResearch || !settings.behavior.enableAutonomousLearning || !settings.behavior.permissions.allowApiAccess) {
@@ -31,7 +31,6 @@ class AutonomousLearningService {
             }));
             
             const reasoning = `Autonomous learning triggered due to low response effectiveness (${responseEffectiveness}) or complex intent (${inputIntent}).`;
-            // FIX: Pass the required userId and reasoning string to the search method.
             const searchResult = await webSearchService.search(frame.userContext.userId, query, reasoning);
 
             if (searchResult) {

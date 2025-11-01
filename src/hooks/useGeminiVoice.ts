@@ -44,6 +44,7 @@ export const useGeminiVoice = (
         if (message.toolCall) {
             for (const fc of message.toolCall.functionCalls) {
                 console.log("[NEXUS-VOICE] Received function call:", fc);
+                // FIX: Cast fc to SimpleFunctionCall to match the expected type.
                 onFunctionCall(fc as SimpleFunctionCall).then(result => {
                     voiceServiceRef.current?.sendToolResponse(fc.id, fc.name, result);
                 });

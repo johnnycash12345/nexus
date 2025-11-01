@@ -1,11 +1,11 @@
-import { db } from '@/services/indexedDBService';
-import * as cognitiveUpdater from '@/services/cognitiveModules/cognitiveUpdater';
-import { selfReflection } from '@/services/selfReflection';
-import { reasoningEngine } from '@/services/reasoningEngine';
-import { webSearchService } from '@/services/webSearchService';
-import { integrateWebKnowledge } from '@/services/cognitiveModules/knowledgeIntegrator';
-import { selfProgrammingService } from '@/services/selfProgrammingService';
-import type { OrchestratorOptions, CodeModificationProposal, AssistantStatus } from '@/types';
+import { db } from '../indexedDBService';
+import * as cognitiveUpdater from '../cognitiveModules/cognitiveUpdater';
+import { selfReflection } from '../selfReflection';
+import { reasoningEngine } from '../reasoningEngine';
+import { webSearchService } from '../webSearchService';
+import { integrateWebKnowledge } from '../cognitiveModules/knowledgeIntegrator';
+import { selfProgrammingService } from '../selfProgrammingService';
+import type { OrchestratorOptions, CodeModificationProposal, AssistantStatus } from '../../types';
 
 type PresentProposalFn = (proposal: CodeModificationProposal, goal: string) => void;
 
@@ -46,6 +46,7 @@ export class MaintenanceAgent {
         try {
             // 1. Manutenção Cognitiva
             console.log('[MaintenanceAgent] Running cognitive maintenance...');
+            // FIX: Correctly call the 'runCognitiveMaintenance' function which now exists in the cognitiveUpdater module.
             await cognitiveUpdater.runCognitiveMaintenance(this.opts.userId);
 
             // 2. Auto-Reflexão para Otimização de Código
@@ -54,6 +55,7 @@ export class MaintenanceAgent {
                 const improvementGoal = await selfReflection.runProactiveAnalysis(this.opts.userId, this.opts.generateResponse);
                 if (improvementGoal) {
                     this.setAgentStatus('REWRITING_CODE');
+                    // FIX: Correctly call 'proposeCodeModification' with four arguments as per its updated definition.
                     const proposal = await selfProgrammingService.proposeCodeModification(this.opts.userId, improvementGoal, 'nexusCore.ts', '/* Conceptual code for handling user turns and cognitive pipeline */');
                     if (proposal) {
                         presentProposalFn(proposal, improvementGoal);
@@ -69,6 +71,7 @@ export class MaintenanceAgent {
                 if (researchTopic) {
                     this.setAgentStatus('SEARCHING_WEB');
                     console.log(`[MaintenanceAgent] Researching topic: "${researchTopic}"`);
+                    // FIX: Correctly call 'search' with three arguments (userId, query, reasoning) as per its updated definition.
                     const searchResult = await webSearchService.search(this.opts.userId, researchTopic, "Proactive research during maintenance cycle.");
                     if (searchResult) {
                         await integrateWebKnowledge(this.opts.userId, researchTopic, searchResult.summary, searchResult.sources);

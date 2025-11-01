@@ -50,8 +50,9 @@ export class EmotionalAgent {
             if (result.status === 'rejected') {
                 // Se uma tarefa falhou, registra o erro no console E no monitor cognitivo
                 console.error(`[EmotionalAgent] Falha na tarefa: ${taskName}`, result.reason);
+                // FIX: Correctly access the error message from the rejected promise.
                 cognitiveMonitor.logThought(
-                    `[EmotionalAgent] Falha na tarefa de ${taskName}. Erro: ${result.reason?.message || result.reason}`, 
+                    `[EmotionalAgent] Falha na tarefa de ${taskName}. Erro: ${(result.reason as Error)?.message || result.reason}`, 
                     'error'
                 );
             }

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// FIX: Imported the 'DecisionLogEntry' type to correctly type the decision log data.
 import { AppSettings, AssistantStatus, DecisionLogEntry } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '@/services/indexedDBService';
@@ -75,6 +74,7 @@ const DecisionLogItem: React.FC<{ log: DecisionLogEntry }> = ({ log }) => {
     );
 };
 
+// FIX: Add named export for lazy loading compatibility.
 export const CreatorPanel: React.FC<CreatorPanelProps> = ({ settings, setSettings, userId }) => {
     const [isForcingCycle, setIsForcingCycle] = useState(false);
     const [fec, setFec] = useState('0.00');
@@ -102,10 +102,14 @@ export const CreatorPanel: React.FC<CreatorPanelProps> = ({ settings, setSetting
         fetchLogs();
 
         const handleStatusUpdate = (event: CustomEvent<{ status: AssistantStatus }>) => setAgentStatus(event.detail.status);
+        const handleLogUpdate = () => fetchLogs();
         
         window.addEventListener('nexus-agent-status-update', handleStatusUpdate as EventListener);
+        window.addEventListener('nexus-decision-log-updated', handleLogUpdate);
+
         return () => {
             window.removeEventListener('nexus-agent-status-update', handleStatusUpdate as EventListener);
+            window.removeEventListener('nexus-decision-log-updated', handleLogUpdate);
         };
     }, [userId]);
 
@@ -129,6 +133,7 @@ export const CreatorPanel: React.FC<CreatorPanelProps> = ({ settings, setSetting
     const handleForceEvolution = () => {
         setIsForcingCycle(true);
         window.dispatchEvent(new CustomEvent('nexus-force-evolution'));
+        // The agent will set its own status, this timeout is a fallback
         setTimeout(() => setIsForcingCycle(false), 10000); 
     };
 
@@ -202,3 +207,5 @@ export const CreatorPanel: React.FC<CreatorPanelProps> = ({ settings, setSetting
         </div>
     );
 };
+
+export default CreatorPanel;

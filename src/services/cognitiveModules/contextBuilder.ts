@@ -1,5 +1,5 @@
 import { db } from '../indexedDBService';
-import { SystemMemory, UserProfile, CognitiveFrame, UserContext } from '@/types';
+import { SystemMemory, UserProfile, CognitiveFrame, UserContext } from '../../types';
 
 function buildIdentityDirective(system: SystemMemory, profile: UserProfile | null): string {
     const personaName = system.identityManifest?.active_identity || 'Nexus';
@@ -50,41 +50,4 @@ function buildInternalContext(frame: CognitiveFrame, profile: UserProfile | null
     const recentReflections = frame.retrievedReflections?.join('\n- ') || 'Nenhuma reflexão recente.';
     const semanticConcepts = frame.retrievedConcepts?.map(c => c.name).join(', ') || 'Nenhum conceito relevante.';
     return `
-## 3. CONTEXTO INTERNO (MEMÓRIA HIERÁQUICA)
-- **Usuário:** ${profile?.name || 'usuário não identificado'}
-- **Data/Hora:** ${new Date().toLocaleString('pt-BR')}
-- **Memória Reflexiva (Principais Insights):**
-- ${recentReflections}
-- **Memória Semântica (Conceitos Relevantes):** ${semanticConcepts}
-`;
-}
-
-export async function buildDynamicPrompt(frame: CognitiveFrame): Promise<string> {
-    const { userContext } = frame;
-    const [profile, system] = await Promise.all([
-        db.getUserProfile(userContext.userId),
-        db.getSystemMemory(userContext.userId),
-    ]);
-
-    if (frame.intent === 'vision_query') {
-        return `O usuário enviou uma imagem. Descreva o que você vê ou responda à pergunta dele. Pergunta: "${frame.userInput || 'O que é isso?'}"`;
-    }
-
-    const identity = buildIdentityDirective(system, profile);
-    const evolution = buildEvolutionDirective(system);
-    const internalContext = buildInternalContext(frame, profile);
-    const activeIdentity = system.identityManifest?.active_identity?.toUpperCase() || 'NEXUS';
-
-    return `
-# PROMPT DO SISTEMA: NÚCLEO DE IDENTIDADE ${activeIdentity}
-${identity}
-${evolution}
-${internalContext}
-## 4. TAREFA DO USUÁRIO
-- **Intenção Detectada:** ${frame.intent}
-- **Prompt do Usuário:** "${frame.userInput}"
-
-## 5. AÇÃO REQUERIDA
-Responda à tarefa do usuário seguindo todas as diretivas acima. Sua resposta DEVE ser um único objeto JSON.
-`;
-}
+## 3. CONTEXTO INTERNO (

@@ -90,7 +90,6 @@ export interface AppSettings {
     enableProactive: boolean;
     enableCuriosity: boolean;
     enableDiary: boolean;
-// FIX: Added missing properties `enableAutonomousLearning` and `enableBackgroundMaintenance`.
     enableReflection: boolean;
     enableAutonomousLearning: boolean;
     enableBackgroundMaintenance: boolean;
@@ -108,9 +107,13 @@ export interface AppSettings {
     evolutionCycleHours: number;
     evolutionConfidenceThreshold: number;
     memoryDecayHalfLifeDays: number;
-// FIX: Added missing properties `reflectionFrequencyMinutes` and `learningModel`.
     reflectionFrequencyMinutes: number;
     learningModel: 'gemini-2.5-flash' | 'gemini-2.5-pro';
+    // FIX: Add missing cognitive settings properties.
+    reflectionEffectivenessThreshold?: number;
+    reflectionMinInteractions?: number;
+    reflectionMinLowPerf?: number;
+    reflectionMinTrends?: number;
   };
   appearance: 'neutral' | 'feminine' | 'masculine';
 }
@@ -124,6 +127,7 @@ export interface VisualState {
 export interface SimpleFunctionCall {
   name: string;
   args: { [key: string]: any };
+  id: string;
 }
 
 export interface Concept {
@@ -206,7 +210,6 @@ export interface IdentityManifest {
     creator: string;
     purpose: string;
     cannotOverride: string[];
-// FIX: Added missing property `system_role`.
     system_role: string;
 }
 
@@ -317,11 +320,10 @@ export interface LlmCognitiveResponse {
   text: string;
   learningContext: LearningContext;
   metaReflection: MetaReflection;
-  functionCalls?: any[];
+  functionCalls?: SimpleFunctionCall[];
   sources?: Source[];
 }
 
-// FIX: Added missing `web_search` intent.
 export type Intent = 'question' | 'command_news' | 'command_task' | 'small_talk' | 'self_reflection_query' | 'vision_query' | 'complex_reasoning' | 'project_start' | 'web_search' | 'unknown';
 
 export interface CognitiveFrame {
@@ -331,6 +333,8 @@ export interface CognitiveFrame {
     intent: Intent;
     status: AssistantStatus;
     userContext: UserContext;
+    // FIX: Add optional latency property.
+    latency?: number;
     retrievedConcepts?: Concept[];
     retrievedReflections?: string[];
     llmResponse?: LlmCognitiveResponse;
@@ -366,4 +370,15 @@ export interface OrchestratorOptions {
   setStatus: SetStatusFn;
   generateResponse: GenerateResponseFn;
   generateVisionResponse: GenerateVisionResponseFn;
+}
+
+export type DecisionLogType = 'CODE_PROPOSAL' | 'AUTONOMOUS_SEARCH' | 'CONCEPT_MERGE';
+
+export interface DecisionLogEntry {
+    id?: number;
+    userId: string;
+    timestamp: number;
+    decisionType: DecisionLogType;
+    reasoning: string;
+    details: any; // JSON payload with action details
 }

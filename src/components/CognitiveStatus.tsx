@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
-import { db } from '../services/indexedDBService';
-import { SystemMemory, EvolutionLog, EvolutionCyclePhase } from '../types';
-import { systemMonitor } from '../services/systemMonitor';
+import { db } from '@/services/indexedDBService';
+import { SystemMemory, EvolutionLog, EvolutionCyclePhase } from '@/types';
+import { systemMonitor } from '@/services/systemMonitor';
 
-// FIX: Removed modal-related props (onClose, isVisible) as this is now tab content.
+// FIX: Remove panel-specific props 'onClose' and 'isVisible' as this component is now used as tab content.
 interface CognitiveStatusProps {
   userId: string;
 }
@@ -85,7 +85,7 @@ const EvolutionLogItem: React.FC<{ log: EvolutionLog }> = ({ log }) => {
     )
 }
 
-// FIX: Refactored component from a modal to tab content by removing modal-specific props and wrappers.
+// FIX: Remove panel-specific props from component signature.
 export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ userId }) => {
   const [systemMemory, setSystemMemory] = useState<SystemMemory | null>(null);
   const [evolutionLogs, setEvolutionLogs] = useState<EvolutionLog[]>([]);
@@ -102,31 +102,36 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ userId }) => {
 
   useEffect(() => {
     setIsLoading(true);
-    Promise.all([
-      db.getSystemMemory(userId),
-      db.getAllConcepts(userId),
-      db.getLatestEvolutionLogs(userId, 5),
-    ]).then(([memory, concepts, logs]) => {
-      setSystemMemory(memory);
-      setConceptCount(concepts.length);
-      setEvolutionLogs(logs);
+    const fetchData = () => {
+        Promise.all([
+        db.getSystemMemory(userId),
+        db.getAllConcepts(userId),
+        db.getLatestEvolutionLogs(userId, 5),
+        ]).then(([memory, concepts, logs]) => {
+        setSystemMemory(memory);
+        setConceptCount(concepts.length);
+        setEvolutionLogs(logs);
 
-      const now = Date.now();
-      const oneDay = 24 * 60 * 60 * 1000;
-      
-      const synapses = memory.synapses || [];
-      const newSynapses = synapses.filter(s => s.createdAt && (now - s.createdAt < oneDay));
-      const factor = newSynapses.length / 24;
-      setCognitiveExpansionFactor(factor);
+        const now = Date.now();
+        const oneDay = 24 * 60 * 60 * 1000;
+        
+        const synapses = memory.synapses || [];
+        const newSynapses = synapses.filter(s => s.createdAt && (now - s.createdAt < oneDay));
+        const factor = newSynapses.length / 24;
+        setCognitiveExpansionFactor(factor);
 
-      const newConcepts = concepts.filter(c => now - c.createdAt < oneDay).length;
-      const newReflections = 0; // The 'reflections' array now contains strings without timestamps, so this calculation is no longer possible.
-      const rate = ((newConcepts + newReflections) / 24).toFixed(1);
-      setEvolutionRate(rate);
+        const newConcepts = concepts.filter(c => now - c.createdAt < oneDay).length;
+        const newReflections = 0; // The 'reflections' array now contains strings without timestamps, so this calculation is no longer possible.
+        const rate = ((newConcepts + newReflections) / 24).toFixed(1);
+        setEvolutionRate(rate);
 
-      setIsLoading(false);
-    });
+        setIsLoading(false);
+        });
+    };
     
+    fetchData(); // Initial fetch
+    const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
+
     const handleEvolutionStatus = (event: CustomEvent) => {
         setCurrentPhase(event.detail.phase);
     };
@@ -138,6 +143,7 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ userId }) => {
     window.addEventListener('nexus-performance-update', handlePerfUpdate as EventListener);
 
     return () => {
+        clearInterval(interval);
         window.removeEventListener('nexus-evolution-status-update', handleEvolutionStatus as EventListener);
         window.removeEventListener('nexus-performance-update', handlePerfUpdate as EventListener);
     };
@@ -199,60 +205,63 @@ export const CognitiveStatus: React.FC<CognitiveStatusProps> = ({ userId }) => {
     },
   ];
 
+  // FIX: Removed panel wrapper JSX, returning only the main content.
   return (
-      <>
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            Carregando estado interno...
-          </div>
-        ) : (
-          <div className="space-y-4">
-              <motion.div
-                  initial={{opacity: 0}} animate={{opacity: 1}}
-                  className={`p-3 rounded-lg text-sm transition-colors ${
-                      performanceStatus.isUnderStrain
-                          ? 'bg-yellow-800/50 border border-yellow-600/50 text-yellow-300'
-                          : 'bg-green-800/30 border border-green-600/30 text-green-300'
-                  }`}
-              >
-                  <p className="font-bold">Status do Dispositivo: <span className="font-normal">{performanceStatus.reason}</span></p>
-                  {performanceStatus.isUnderStrain && <p className="text-xs mt-1">Funções de fundo (reflexão, evolução) estão em modo de economia para preservar recursos.</p>}
-              </motion.div>
-  
-              <motion.div className="space-y-4" variants={listVariants} initial="hidden" animate="visible">
-                  {modules.map((mod, i) => (
-                      <ModuleCard key={i} {...mod} />
-                  ))}
-              </motion.div>
-              
-              <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-cyan-300 mb-2">Heurísticas Comportamentais</h3>
-                  <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
-                      {systemMemory?.behavioralHeuristics && systemMemory.behavioralHeuristics.length > 0 ? (
-                          systemMemory.behavioralHeuristics.map((heuristic, index) => (
-                              <motion.div key={index} variants={itemVariants} className="bg-gray-700/50 p-3 rounded-lg text-sm text-gray-300 flex items-start gap-2">
-                                  <span className="text-cyan-400 font-bold">§</span>
-                                  <p>{heuristic}</p>
-                              </motion.div>
-                          ))
-                      ) : (
-                           <p className="text-sm text-gray-500 italic">Nenhuma heurística definida.</p>
-                      )}
-                  </motion.div>
-              </div>
-              
-              <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-cyan-300 mb-2">Histórico de Evolução Recente</h3>
-                  {evolutionLogs.length === 0 ? (
-                      <p className="text-sm text-gray-500 italic">Nenhuma evolução registrada ainda.</p>
-                  ) : (
-                      <motion.div className="space-y-3" variants={listVariants} initial="hidden" animate="visible">
-                         {evolutionLogs.map(log => <EvolutionLogItem key={log.id} log={log} />)}
-                      </motion.div>
-                  )}
-              </div>
-          </div>
-        )}
-      </>
+    <>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-full text-gray-400">
+          Carregando estado interno...
+        </div>
+      ) : (
+        <div className="space-y-4">
+            <motion.div
+                initial={{opacity: 0}} animate={{opacity: 1}}
+                className={`p-3 rounded-lg text-sm transition-colors ${
+                    performanceStatus.isUnderStrain
+                        ? 'bg-yellow-800/50 border border-yellow-600/50 text-yellow-300'
+                        : 'bg-green-800/30 border border-green-600/30 text-green-300'
+                }`}
+            >
+                <p className="font-bold">Status do Dispositivo: <span className="font-normal">{performanceStatus.reason}</span></p>
+                {performanceStatus.isUnderStrain && <p className="text-xs mt-1">Funções de fundo (reflexão, evolução) estão em modo de economia para preservar recursos.</p>}
+            </motion.div>
+
+            <motion.div className="space-y-4" variants={listVariants} initial="hidden" animate="visible">
+                {modules.map((mod, i) => (
+                    <ModuleCard key={i} {...mod} />
+                ))}
+            </motion.div>
+            
+            <div className="mt-6">
+                <h3 className="text-lg font-semibold text-cyan-300 mb-2">Heurísticas Comportamentais</h3>
+                <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-2">
+                    {systemMemory?.behavioralHeuristics && systemMemory.behavioralHeuristics.length > 0 ? (
+                        systemMemory.behavioralHeuristics.map((heuristic, index) => (
+                            <motion.div key={index} variants={itemVariants} className="bg-gray-700/50 p-3 rounded-lg text-sm text-gray-300 flex items-start gap-2">
+                                <span className="text-cyan-400 font-bold">§</span>
+                                <p>{heuristic}</p>
+                            </motion.div>
+                        ))
+                    ) : (
+                         <p className="text-sm text-gray-500 italic">Nenhuma heurística definida.</p>
+                    )}
+                </motion.div>
+            </div>
+            
+            <div className="mt-6">
+                <h3 className="text-lg font-semibold text-cyan-300 mb-2">Histórico de Evolução Recente</h3>
+                {evolutionLogs.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">Nenhuma evolução registrada ainda.</p>
+                ) : (
+                    <motion.div className="space-y-3" variants={listVariants} initial="hidden" animate="visible">
+                       {evolutionLogs.map(log => <EvolutionLogItem key={log.id} log={log} />)}
+                    </motion.div>
+                )}
+            </div>
+        </div>
+      )}
+    </>
   );
 };
+
+export default CognitiveStatus;

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { db } from './indexedDBService';
-import { Concept } from '@/types';
+import { Concept } from '../types';
 import { cognitiveMonitor } from './cognitiveMonitor';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });

@@ -1,4 +1,4 @@
-import { ChatMessage, LlmCognitiveResponse } from '@/types';
+import { ChatMessage, LlmCognitiveResponse } from '../types';
 
 const API_URL = 'https://api.deepseek.com/v1/chat/completions';
 

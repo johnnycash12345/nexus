@@ -1,7 +1,7 @@
 import React from 'react';
 // FIX: Import `Variants` type from framer-motion to correctly type animation variants.
 import { motion, type Variants } from 'framer-motion';
-import { ChatMessage, Concept, NewsArticle } from '@/types';
+import { ChatMessage, Concept, NewsArticle } from '../types';
 
 interface MessageProps extends ChatMessage {
   onAction?: (action: string, payload: any) => void;
@@ -59,7 +59,7 @@ const formatText = (text: string) => {
 export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', imageUrl, consolidationOptions, onAction, sources, articles, codeProposal }) => {
   const isUser = role === 'user';
   
-  if (type === 'status') {
+  if (type === 'status' || type === 'decision') {
     return (
       <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-center">
         <p className="text-sm text-gray-400 italic">{text}</p>
@@ -171,7 +171,8 @@ export const Message: React.FC<MessageProps> = ({ role, text, type = 'message', 
         {imageUrl && (
             <img src={imageUrl} alt="User upload" className="rounded-lg mb-2 max-h-48 w-full object-cover" />
         )}
-        <div className="text-white" dangerouslySetInnerHTML={isUser ? {__html: text.replace(/(\r\n|\n|\r)/gm, '<br />')} : formatText(text)} />
+        {/* FIX: Apply markdown formatting to user messages as well for consistency */}
+        <div className="text-white" dangerouslySetInnerHTML={formatText(text)} />
         {sources && sources.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-600/50">
                 <h4 className="text-xs font-bold text-gray-300 mb-2">Fontes:</h4>

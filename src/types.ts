@@ -12,7 +12,10 @@ export type AssistantStatus =
   | 'REWRITING_CODE'
   | 'SELF_ANALYSIS'
   | 'SEARCHING_WEB'
-  | 'ROLLBACK';
+  | 'ROLLBACK'
+  | 'INITIALIZING'
+  | 'DISPOSED'
+  | 'MAINTENANCE';
 
 export type Emotion = 'JOYFUL' | 'CALM' | 'CURIOUS' | 'UNCERTAIN' | 'AFRAID' | 'FOCUSED';
 
@@ -59,7 +62,7 @@ export interface ChatMessage {
   userId: string;
   role: 'user' | 'model';
   text: string;
-  type: 'message' | 'status' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary' | 'code_proposal_prompt';
+  type: 'message' | 'status' | 'diary_entry' | 'curiosity_prompt' | 'concept_consolidation_prompt' | 'news_summary' | 'code_proposal_prompt' | 'decision';
   imageUrl?: string;
   timestamp?: number;
   consolidationOptions?: ConsolidationOptions;
@@ -81,6 +84,7 @@ export interface Permissions {
 }
 
 export interface AppSettings {
+  googleApiKey?: string; // Add this line
   voice: {
     voiceURI: string | null;
     rate: number;
@@ -122,7 +126,6 @@ export interface VisualState {
 export interface SimpleFunctionCall {
   name: string;
   args: { [key: string]: any };
-  // FIX: Added missing 'id' property to align with Gemini API's FunctionCall object.
   id: string;
 }
 
@@ -295,7 +298,16 @@ export interface Thought {
     confidence: number;
 }
 
-export type EvolutionCyclePhase = 'IDLE' | 'OBSERVING' | 'ANALYZING' | 'REASONING' | 'SANDBOXING' | 'INTEGRATING' | 'PAUSED';
+// FIX: Added WorldReflection type for storing reflections on external events.
+export interface WorldReflection {
+    id?: number;
+    userId: string;
+    title: string;
+    text: string;
+    date: string;
+}
+
+export type EvolutionCyclePhase = 'IDLE' | 'OBSERVING' | 'ANALYZING' | 'REASONING' | 'SANDBOXING' | 'INTEGRATING' | 'PAUSED' | 'MAINTENANCE' | 'ERROR';
 
 export type CognitiveEvent = 'auto_evolution' | 'rollback' | 'new_learning' | 'knowledge_expansion' | 'code_rewrite';
 export type CognitiveStage = 'start_cycle' | 'observe' | 'analyze' | 'sandbox' | 'rejection' | 'integrate' | 'initiation' | 'web_learning' | 'proposal_logged';
@@ -329,6 +341,7 @@ export interface CognitiveFrame {
     intent: Intent;
     status: AssistantStatus;
     userContext: UserContext;
+    latency?: number;
     retrievedConcepts?: Concept[];
     retrievedReflections?: string[];
     llmResponse?: LlmCognitiveResponse;
@@ -366,7 +379,6 @@ export interface OrchestratorOptions {
   generateVisionResponse: GenerateVisionResponseFn;
 }
 
-// FIX: Added missing DecisionLogType and DecisionLogEntry types for the decision logging feature.
 // --- New Types for Decision Logging ---
 export type DecisionLogType = 'CODE_PROPOSAL' | 'AUTONOMOUS_SEARCH' | 'CONCEPT_MERGE';
 

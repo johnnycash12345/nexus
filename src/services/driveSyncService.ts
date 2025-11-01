@@ -1,6 +1,6 @@
 // services/driveSyncService.ts
 import { db } from "./indexedDBService";
-import type { DiaryEntry, Concept, UserProfile, SystemMemory } from '@/types';
+import type { DiaryEntry, Concept, UserProfile, SystemMemory } from '../types';
 
 const BACKUP_FILENAME = "NexusBrainBackup.nexusbrain.json";
 

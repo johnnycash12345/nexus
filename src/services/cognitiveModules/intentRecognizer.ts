@@ -1,6 +1,7 @@
 import { Type } from '@google/genai';
-import { Intent } from '@/types';
-import { GenerateResponseFn } from '@/types';
+import { Intent } from '../../types';
+// FIX: Changed import path for GenerateResponseFn to the correct types file.
+import { GenerateResponseFn } from '../../types';
 
 const IntentValues: Intent[] = ['question', 'command_news', 'command_task', 'small_talk', 'self_reflection_query', 'vision_query', 'complex_reasoning', 'project_start', 'web_search', 'unknown'];
 

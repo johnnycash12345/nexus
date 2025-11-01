@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import './Avatar.css';
-import { AssistantStatus } from '@/types';
+import { AssistantStatus } from '../types';
 
 interface AvatarProps {
   status: AssistantStatus;
@@ -47,6 +47,7 @@ export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 
       animationDuration: `${4 / Math.max(0.5, intensity)}s`
   } : {};
 
+  // FIX: Add missing status descriptions to satisfy the Record type.
   const statusDescriptions: Record<AssistantStatus, string> = {
     IDLE: "Nexus está ocioso.",
     LISTENING: "Nexus está ouvindo.",
@@ -61,6 +62,9 @@ export const Avatar: React.FC<AvatarProps> = ({ status, className, appearance = 
     SELF_ANALYSIS: "Nexus está em auto-análise.",
     SEARCHING_WEB: "Nexus está pesquisando na web.",
     ROLLBACK: "Nexus está revertendo para um estado anterior.",
+    INITIALIZING: "Nexus está inicializando.",
+    DISPOSED: "Nexus está desligado.",
+    MAINTENANCE: "Nexus está em manutenção.",
   };
 
   return (

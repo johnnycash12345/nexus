@@ -64,7 +64,6 @@ class AssociativeReasoner {
                 );
 
                 if (validConnections.length > 0) {
-// FIX: Pass the userId from the cognitive frame to the addSynapses method.
                     await neuralMemory.addSynapses(frame.userContext.userId, validConnections);
                 }
             }

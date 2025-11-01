@@ -1,5 +1,5 @@
 import { generateGeminiResponse } from './geminiService';
-import { Source } from '@/types';
+import { Source } from '../types';
 import { decisionLogService } from './decisionLogService';
 
 interface WebSearchResult {
@@ -8,7 +8,7 @@ interface WebSearchResult {
 }
 
 class WebSearchService {
-    // FIX: Updated method signature to accept userId and reasoning for autonomous operation and logging.
+    // FIX: Updated search signature to accept userId and reasoning for logging purposes.
     public async search(userId: string, query: string, reasoning: string): Promise<WebSearchResult | null> {
         console.log(`[NEXUS-SEARCH] Performing autonomous search for: "${query}"`);
 

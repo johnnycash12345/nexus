@@ -4,6 +4,11 @@ import { LlmCognitiveResponse } from '../types';
 import { neuralMemory } from './neuralMemory';
 import { fetchNews } from './newsService';
 import { analyzeAndEvolveEmotion } from './emotionalEngine';
+import { selfReflection } from './selfReflection';
+import { webSearchService } from './webSearchService';
+import { integrateWebKnowledge } from './cognitiveModules/knowledgeIntegrator';
+import { autonomousLearningService } from './autonomousLearningService';
+
 
 export type SpeakFn = (text: string, onend?: () => void) => void;
 export type SetStatusFn = (s: AssistantStatus) => void;
@@ -284,34 +289,38 @@ export class NexusBrain implements INexusBrain {
     }
   }
 
-  private async _handleNewsRequest(query: string): Promise<void> {
-    const { addMessage, speak, setStatus, getSettings } = this.opts;
+  private async _handleNewsRequest(userInput: string): Promise<void> {
+    const { addMessage, speak, setStatus, getSettings, userId } = this.opts;
     const settings = await getSettings();
-
+  
     if (!settings.behavior?.permissions?.allowApiAccess) {
-        const msg = "A busca por notícias está desativada. Você pode habilitá-la nas configurações de Cérebro > Permissões.";
-        addMessage({ role: 'model', text: msg, type: 'status' });
-        speak(msg, () => setStatus('IDLE'));
-        return;
+      const msg = "A busca por notícias está desativada. Você pode habilitá-la nas configurações.";
+      addMessage({ role: 'model', text: msg, type: 'status' });
+      speak(msg, () => setStatus('IDLE'));
+      return;
     }
     if (!settings.apiKeys?.newsApiKey) {
-        const msg = "Minha conexão com o serviço de notícias não está configurada. Por favor, adicione uma chave da NewsAPI nas configurações de Integrações.";
-        addMessage({ role: 'model', text: msg, type: 'status' });
-        speak(msg, () => setStatus('IDLE'));
-        return;
+      const msg = "Minha conexão com o serviço de notícias não está configurada.";
+      addMessage({ role: 'model', text: msg, type: 'status' });
+      speak(msg, () => setStatus('IDLE'));
+      return;
     }
-
+  
     setStatus('SEARCHING_WEB');
+    // Extract query from user input
+    const queryMatch = userInput.match(/(?:notícias|novidades|manchetes) (?:sobre|de) (.*)/i);
+    const query = queryMatch ? queryMatch[1].trim() : userInput;
+  
     const articles = await fetchNews(settings.apiKeys.newsApiKey, query);
-
+  
     if (articles && articles.length > 0) {
-        const summaryText = `Encontrei as seguintes manchetes sobre "${query}":`;
-        addMessage({ role: 'model', text: summaryText, type: 'news_summary', articles });
-        speak(`Claro, buscando notícias sobre ${query}.`, () => setStatus('IDLE'));
+      const summaryText = `Encontrei as seguintes manchetes sobre "${query}":`;
+      addMessage({ role: 'model', text: summaryText, type: 'news_summary', articles });
+      speak(`Claro, buscando notícias sobre ${query}.`, () => setStatus('IDLE'));
     } else {
-        const notFoundText = `Desculpe, não encontrei nenhuma notícia recente sobre "${query}".`;
-        addMessage({ role: 'model', text: notFoundText, type: 'message' });
-        speak(notFoundText, () => setStatus('IDLE'));
+      const notFoundText = `Desculpe, não encontrei nenhuma notícia recente sobre "${query}".`;
+      addMessage({ role: 'model', text: notFoundText, type: 'message' });
+      speak(notFoundText, () => setStatus('IDLE'));
     }
   }
 
@@ -355,7 +364,6 @@ export class NexusBrain implements INexusBrain {
     
     const system = await db.getSystemMemory(userId);
     
-// FIX: Added missing 'timestamp' property to the log object to match the Thought type.
     cognitiveLogger.logThought(userId, {
         timestamp: Date.now(),
         category: 'decision-making',
@@ -409,10 +417,9 @@ export class NexusBrain implements INexusBrain {
 
     try {
       const newsMatch = userText.match(/(?:notícias|novidades|manchetes) (?:sobre|de) (.*)/i);
-      const newsQuery = newsMatch ? newsMatch[1].trim() : null;
-
-      if (newsQuery) {
-          return await this._handleNewsRequest(newsQuery);
+      
+      if (newsMatch) {
+          return await this._handleNewsRequest(userText);
       }
       if (imageUrl) {
           return await this._handleVisionRequest(userText, imageUrl);

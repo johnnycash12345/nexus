@@ -35,6 +35,7 @@ export interface CodeModificationProposal {
 
 class SelfProgrammingService {
     
+    // FIX: Added userId parameter to support multi-user logging.
     public async proposeCodeModification(userId: string, analysis: string, targetFile: string, currentCode: string): Promise<CodeModificationProposal | null> {
         
         const prompt = `

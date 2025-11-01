@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { ChatMessage, LearningContext, MetaReflection, LlmCognitiveResponse } from "@/types";
+import { ChatMessage, LearningContext, MetaReflection, LlmCognitiveResponse } from "../types";
 import { db } from "./indexedDBService";
 import { cognitiveMonitor } from "./cognitiveMonitor";
 import { telemetryService } from './telemetryService';
